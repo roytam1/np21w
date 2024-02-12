@@ -47,6 +47,7 @@
 
 static int req_enter_criticalsection = 0;
 
+extern bool scrnmng_create_pending; // グラフィックレンダラ生成保留中
 extern bool scrnmng_restore_pending;
 
 extern WINLOCEX np2_winlocexallwin(HWND base);
@@ -83,8 +84,8 @@ typedef struct {
 	PALETTEENTRY		pal[256];
 } DDRAW;
 
-static	DDRAW		ddraw;
-static	SCRNSURF	scrnsurf;
+static	DDRAW		ddraw = { 0 };
+static	SCRNSURF	scrnsurf = { 0 };
 
 #ifdef SUPPORT_WAB
 static	int mt_wabdrawing = 0;
@@ -524,6 +525,7 @@ BRESULT scrnmngDD_create(UINT8 scrnmode) {
 	}
 	
 	dd_enter_criticalsection();
+	scrnmng_create_pending = false;
 	ZeroMemory(&scrnmng, sizeof(scrnmng));
 	winstyle = GetWindowLong(g_hWndMain, GWL_STYLE);
 	winstyleex = GetWindowLong(g_hWndMain, GWL_EXSTYLE);
@@ -1010,7 +1012,10 @@ void scrnmngDD_topwinui(void) {
 	dd_enter_criticalsection();
 	if (!ddraw.cliping++) {											// ver0.28
 		if (scrnmng.flag & SCRNFLAG_FULLSCREEN) {
-			ddraw.primsurf->SetClipper(ddraw.clipper);
+			if (ddraw.primsurf)
+			{
+				ddraw.primsurf->SetClipper(ddraw.clipper);
+			}
 		}
 #ifndef __GNUC__
 		WINNLSEnableIME(g_hWndMain, TRUE);
@@ -1027,7 +1032,10 @@ void scrnmngDD_clearwinui(void) {
 		WINNLSEnableIME(g_hWndMain, FALSE);
 #endif
 		if (scrnmng.flag & SCRNFLAG_FULLSCREEN) {
-			ddraw.primsurf->SetClipper(0);
+			if (ddraw.primsurf)
+			{
+				ddraw.primsurf->SetClipper(0);
+			}
 		}
 	}
 	if (scrnmng.flag & SCRNFLAG_FULLSCREEN) {
@@ -1048,8 +1056,9 @@ void scrnmngDD_clearwinui(void) {
 		if (scrnmng_create(g_scrnmode) != SUCCESS) {
 			g_scrnmode &= ~SCRNMODE_FULLSCREEN;
 			if (scrnmng_create(g_scrnmode) != SUCCESS) {
+				scrnmng_create_pending = true;
 				dd_leave_criticalsection();
-				PostQuitMessage(0);
+				//PostQuitMessage(0);
 				return;
 			}
 		}
@@ -1098,6 +1107,10 @@ const SCRNSURF *scrnmngDD_surflock(void) {
 		return(NULL);
 	}
 	dd_enter_criticalsection();
+	if (!ddraw.backsurf){
+		dd_leave_criticalsection();
+		return(NULL);
+	}
 	r = ddraw.backsurf->Lock(NULL, &destscrn, DDLOCK_WAIT, NULL);
 	if (r == DDERR_SURFACELOST) {
 		scrnmng_restore_pending = true;
@@ -1132,6 +1145,11 @@ const SCRNSURF *scrnmngDD_surflock(void) {
 
 void scrnmngDD_surfunlock(const SCRNSURF *surf) {
 
+	if (ddraw.backsurf == NULL)
+	{
+		dd_leave_criticalsection();
+		return;
+	}
 	ddraw.backsurf->Unlock(NULL);
 	scrnmngDD_update();
 	recvideo_update();
@@ -1451,7 +1469,8 @@ void scrnmngDD_updatefsres(void) {
 			}
 			else {
 				if (scrnmngDD_create(g_scrnmode) != SUCCESS) {
-					PostQuitMessage(0);
+					scrnmng_create_pending = true;
+					//PostQuitMessage(0);
 					dd_leave_criticalsection();
 					return;
 				}
@@ -1460,7 +1479,8 @@ void scrnmngDD_updatefsres(void) {
 			scrnmngDD_destroy();
 			if (scrnmngDD_create(g_scrnmode) != SUCCESS) {
 				if (scrnmngDD_create(g_scrnmode | SCRNMODE_FULLSCREEN) != SUCCESS) { // フルスクリーンでリトライ
-					PostQuitMessage(0);
+					scrnmng_create_pending = true;
+					//PostQuitMessage(0);
 					dd_leave_criticalsection();
 					return;
 				}
@@ -1485,39 +1505,41 @@ void scrnmngDD_blthdc(HDC hdc) {
 	if (mt_wabpausedrawing) return;
 	if (np2wab.wndWidth < 32 || np2wab.wndHeight < 32) return;
 	if (ddraw.wabsurf != NULL) {
-		while(req_enter_criticalsection){
-			Sleep(1);
-		}
 		dd_enter_criticalsection();
-		mt_wabdrawing = 1;
-		r = ddraw.wabsurf->GetDC(&hDCDD);
-		if (r == DD_OK){
-			POINT pt[3];
-			switch(ddraw.scrnmode & SCRNMODE_ROTATEMASK){
-			case SCRNMODE_ROTATELEFT:
-				pt[0].x = 0;
-				pt[0].y = scrnstat.width;
-				pt[1].x = 0;
-				pt[1].y = 0;
-				pt[2].x = scrnstat.height;
-				pt[2].y = scrnstat.width;
-				r = PlgBlt(hDCDD, pt, hdc, 0, 0, np2wab.realWidth, np2wab.realHeight, NULL, 0, 0);
-				break;
-			case SCRNMODE_ROTATERIGHT:
-				pt[0].x = scrnstat.height;
-				pt[0].y = 0;
-				pt[1].x = scrnstat.height;
-				pt[1].y = scrnstat.width;
-				pt[2].x = 0;
-				pt[2].y = 0;
-				r = PlgBlt(hDCDD, pt, hdc, 0, 0, np2wab.realWidth, np2wab.realHeight, NULL, 0, 0);
-				break;
-			default:
-				r = BitBlt(hDCDD, 0, 0, scrnstat.width, scrnstat.height, hdc, 0, 0, SRCCOPY);
+		if (ddraw.wabsurf != NULL)
+		{
+			mt_wabdrawing = 1;
+			r = ddraw.wabsurf->GetDC(&hDCDD);
+			if (r == DD_OK)
+			{
+				POINT pt[3];
+				switch (ddraw.scrnmode & SCRNMODE_ROTATEMASK)
+				{
+				case SCRNMODE_ROTATELEFT:
+					pt[0].x = 0;
+					pt[0].y = scrnstat.width;
+					pt[1].x = 0;
+					pt[1].y = 0;
+					pt[2].x = scrnstat.height;
+					pt[2].y = scrnstat.width;
+					r = PlgBlt(hDCDD, pt, hdc, 0, 0, np2wab.realWidth, np2wab.realHeight, NULL, 0, 0);
+					break;
+				case SCRNMODE_ROTATERIGHT:
+					pt[0].x = scrnstat.height;
+					pt[0].y = 0;
+					pt[1].x = scrnstat.height;
+					pt[1].y = scrnstat.width;
+					pt[2].x = 0;
+					pt[2].y = 0;
+					r = PlgBlt(hDCDD, pt, hdc, 0, 0, np2wab.realWidth, np2wab.realHeight, NULL, 0, 0);
+					break;
+				default:
+					r = BitBlt(hDCDD, 0, 0, scrnstat.width, scrnstat.height, hdc, 0, 0, SRCCOPY);
+				}
+				ddraw.wabsurf->ReleaseDC(hDCDD);
 			}
-			ddraw.wabsurf->ReleaseDC(hDCDD);
+			mt_wabdrawing = 0;
 		}
-		mt_wabdrawing = 0;
 		dd_leave_criticalsection();
 	}
 #endif
@@ -1559,9 +1581,13 @@ void scrnmngDD_bltwab() {
 			dstmp.right = dstmp.left + scrnstat.height;
 		}
 		dd_enter_criticalsection();
-		r = ddraw.backsurf->Blt(&dstmp, ddraw.wabsurf, &src, DDBLT_WAIT, NULL);
-		if (r == DDERR_SURFACELOST) {
-			scrnmng_restore_pending = true;
+		if (ddraw.backsurf != NULL)
+		{
+			r = ddraw.backsurf->Blt(&dstmp, ddraw.wabsurf, &src, DDBLT_WAIT, NULL);
+			if (r == DDERR_SURFACELOST)
+			{
+				scrnmng_restore_pending = true;
+			}
 		}
 		dd_leave_criticalsection();
 	}

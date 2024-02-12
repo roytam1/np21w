@@ -86,8 +86,8 @@ typedef struct {
 	int					backsurf2mul;
 } D3D;
 
-static	D3D			d3d;
-static	SCRNSURF	scrnsurf;
+static	D3D			d3d = { 0 };
+static	SCRNSURF	scrnsurf = { 0 };
 
 #ifdef SUPPORT_WAB
 static	int mt_wabdrawing = 0;
@@ -749,6 +749,7 @@ BRESULT scrnmngD3D_create(UINT8 scrnmode) {
 	}
 
 	d3d_enter_criticalsection();
+	scrnmng_create_pending = false;
 
 	current_d3d_imode = FSCRNCFG_d3d_imode;
 
@@ -1168,7 +1169,13 @@ void scrnmngD3D_topwinui(void) {
 	mousemng_disable(MOUSEPROC_WINUI);
 	d3d_enter_criticalsection();
 	if (!d3d.cliping++) {
-		if(np2oscfg.d3d_exclusive) d3d.d3ddev->SetDialogBoxMode(TRUE);
+		if (np2oscfg.d3d_exclusive)
+		{
+			if (d3d.d3ddev)
+			{
+				d3d.d3ddev->SetDialogBoxMode(TRUE);
+			}
+		}
 #ifndef __GNUC__
 		WINNLSEnableIME(g_hWndMain, TRUE);
 #endif
@@ -1186,7 +1193,13 @@ void scrnmngD3D_clearwinui(void) {
 #ifndef __GNUC__
 		WINNLSEnableIME(g_hWndMain, FALSE);
 #endif
-		if(np2oscfg.d3d_exclusive) d3d.d3ddev->SetDialogBoxMode(FALSE);
+		if (np2oscfg.d3d_exclusive)
+		{
+			if (d3d.d3ddev)
+			{
+				d3d.d3ddev->SetDialogBoxMode(FALSE);
+			}
+		}
 	}
 	if (scrnmng.flag & SCRNFLAG_FULLSCREEN) {
 		np2class_enablemenu(g_hWndMain, FALSE);
@@ -1207,7 +1220,8 @@ void scrnmngD3D_clearwinui(void) {
 			g_scrnmode &= ~SCRNMODE_FULLSCREEN;
 			if (scrnmng_create(g_scrnmode) != SUCCESS) {
 				d3d_leave_criticalsection();
-				PostQuitMessage(0);
+				//PostQuitMessage(0);
+				scrnmng_create_pending = true;
 				return;
 			}
 		}
@@ -1375,6 +1389,11 @@ const SCRNSURF *scrnmngD3D_surflock(void) {
 		return(NULL);
 	}
 	d3d_enter_criticalsection();
+	if (d3d.backsurf == NULL)
+	{
+		d3d_leave_criticalsection();
+		return(NULL);
+	}
 	r = d3d.backsurf->LockRect(&destrect, NULL, 0);
 	if (r != D3D_OK) {
 		d3d_leave_criticalsection();
@@ -1403,7 +1422,11 @@ const SCRNSURF *scrnmngD3D_surflock(void) {
 
 void scrnmngD3D_surfunlock(const SCRNSURF *surf) {
 	
-	if(d3d.backsurf == NULL) return;
+	if (d3d.backsurf == NULL)
+	{
+		d3d_leave_criticalsection();
+		return;
+	}
 	d3d.backsurf->UnlockRect();
 	scrnmngD3D_update();
 	recvideo_update();
@@ -1893,9 +1916,12 @@ void scrnmngD3D_updatefsres(void) {
 
 	if(((FSCRNCFG_fscrnmod & FSCRNMOD_SAMERES) || !np2oscfg.d3d_exclusive || np2_multithread_Enabled()) && (g_scrnmode & SCRNMODE_FULLSCREEN)){
 		d3d_enter_criticalsection();
-		d3d.d3ddev->ColorFill(d3d.wabsurf, NULL, D3DCOLOR_XRGB(0, 0, 0));
-		d3d.d3ddev->ColorFill(d3d.backsurf, NULL, D3DCOLOR_XRGB(0, 0, 0));
-		clearoutscreen();
+		if (d3d.d3ddev)
+		{
+			d3d.d3ddev->ColorFill(d3d.wabsurf, NULL, D3DCOLOR_XRGB(0, 0, 0));
+			d3d.d3ddev->ColorFill(d3d.backsurf, NULL, D3DCOLOR_XRGB(0, 0, 0));
+			clearoutscreen();
+		}
 		d3d_leave_criticalsection();
 		np2wab.lastWidth = 0;
 		np2wab.lastHeight = 0;
@@ -1903,9 +1929,12 @@ void scrnmngD3D_updatefsres(void) {
 	}
 	if(scrnstat.width<100 || scrnstat.height<100){
 		d3d_enter_criticalsection();
-		d3d.d3ddev->ColorFill(d3d.wabsurf, NULL, D3DCOLOR_XRGB(0, 0, 0));
-		d3d.d3ddev->ColorFill(d3d.backsurf, NULL, D3DCOLOR_XRGB(0, 0, 0));
-		clearoutscreen();
+		if (d3d.d3ddev)
+		{
+			d3d.d3ddev->ColorFill(d3d.wabsurf, NULL, D3DCOLOR_XRGB(0, 0, 0));
+			d3d.d3ddev->ColorFill(d3d.backsurf, NULL, D3DCOLOR_XRGB(0, 0, 0));
+			clearoutscreen();
+		}
 		d3d_leave_criticalsection();
 		return;
 	}
@@ -1923,7 +1952,8 @@ void scrnmngD3D_updatefsres(void) {
 			else {
 				// ウィンドウでリトライ
 				if (scrnmngD3D_create(g_scrnmode) != SUCCESS) {
-					PostQuitMessage(0);
+					//PostQuitMessage(0);
+					scrnmng_create_pending = true;
 					d3d_leave_criticalsection();
 					return;
 				}
@@ -1932,7 +1962,8 @@ void scrnmngD3D_updatefsres(void) {
 			scrnmngD3D_destroy();
 			if (scrnmngD3D_create(g_scrnmode) != SUCCESS) {
 				//if (scrnmngD3D_create(g_scrnmode | SCRNMODE_FULLSCREEN) != SUCCESS) { // フルスクリーンでリトライ
-					PostQuitMessage(0);
+					//PostQuitMessage(0);
+					scrnmng_create_pending = true;
 					d3d_leave_criticalsection();
 					return;
 				//}
@@ -1965,35 +1996,40 @@ void scrnmngD3D_blthdc(HDC hdc) {
 		//	Sleep(1);
 		//}
 		d3d_enter_criticalsection();
-		mt_wabdrawing = 1;
-		r = d3d.wabsurf->GetDC(&hDCDD);
-		if (r == D3D_OK){
-			POINT pt[3];
-			switch(d3d.scrnmode & SCRNMODE_ROTATEMASK){
-			case SCRNMODE_ROTATELEFT:
-				pt[0].x = 0;
-				pt[0].y = scrnstat.width;
-				pt[1].x = 0;
-				pt[1].y = 0;
-				pt[2].x = scrnstat.height;
-				pt[2].y = scrnstat.width;
-				r = PlgBlt(hDCDD, pt, hdc, 0, 0, np2wab.realWidth, np2wab.realHeight, NULL, 0, 0);
-				break;
-			case SCRNMODE_ROTATERIGHT:
-				pt[0].x = scrnstat.height;
-				pt[0].y = 0;
-				pt[1].x = scrnstat.height;
-				pt[1].y = scrnstat.width;
-				pt[2].x = 0;
-				pt[2].y = 0;
-				r = PlgBlt(hDCDD, pt, hdc, 0, 0, np2wab.realWidth, np2wab.realHeight, NULL, 0, 0);
-				break;
-			default:
-				r = BitBlt(hDCDD, 0, 0, scrnstat.width, scrnstat.height, hdc, 0, 0, SRCCOPY);
+		if (d3d.wabsurf)
+		{
+			mt_wabdrawing = 1;
+			r = d3d.wabsurf->GetDC(&hDCDD);
+			if (r == D3D_OK)
+			{
+				POINT pt[3];
+				switch (d3d.scrnmode & SCRNMODE_ROTATEMASK)
+				{
+				case SCRNMODE_ROTATELEFT:
+					pt[0].x = 0;
+					pt[0].y = scrnstat.width;
+					pt[1].x = 0;
+					pt[1].y = 0;
+					pt[2].x = scrnstat.height;
+					pt[2].y = scrnstat.width;
+					r = PlgBlt(hDCDD, pt, hdc, 0, 0, np2wab.realWidth, np2wab.realHeight, NULL, 0, 0);
+					break;
+				case SCRNMODE_ROTATERIGHT:
+					pt[0].x = scrnstat.height;
+					pt[0].y = 0;
+					pt[1].x = scrnstat.height;
+					pt[1].y = scrnstat.width;
+					pt[2].x = 0;
+					pt[2].y = 0;
+					r = PlgBlt(hDCDD, pt, hdc, 0, 0, np2wab.realWidth, np2wab.realHeight, NULL, 0, 0);
+					break;
+				default:
+					r = BitBlt(hDCDD, 0, 0, scrnstat.width, scrnstat.height, hdc, 0, 0, SRCCOPY);
+				}
+				d3d.wabsurf->ReleaseDC(hDCDD);
 			}
-			d3d.wabsurf->ReleaseDC(hDCDD);
+			mt_wabdrawing = 0;
 		}
-		mt_wabdrawing = 0;
 		d3d_leave_criticalsection();
 	}else{
 		if(!d3d.d3dbacksurf){
@@ -2039,7 +2075,10 @@ void scrnmngD3D_bltwab() {
 			dstmp.right = dstmp.left + scrnstat.height;
 		}
 		d3d_enter_criticalsection();
-		d3d.d3ddev->StretchRect(d3d.wabsurf, &src, d3d.backsurf, &dstmp, D3DTEXF_POINT);
+		if (d3d.d3ddev)
+		{
+			d3d.d3ddev->StretchRect(d3d.wabsurf, &src, d3d.backsurf, &dstmp, D3DTEXF_POINT);
+		}
 		d3d_leave_criticalsection();
 	}else{
 		if(!d3d.d3dbacksurf){

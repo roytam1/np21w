@@ -232,6 +232,7 @@ BRESULT scrnmng_create(UINT8 scrnmode) {
 	}
 	if(scrnmng_current_drawtype==DRAWTYPE_DIRECT3D){
 		BRESULT r = scrnmngD3D_create(scrnmode);
+		np2wab_forceupdate();
 		return  r;
 	}else
 #else
@@ -239,6 +240,7 @@ BRESULT scrnmng_create(UINT8 scrnmode) {
 #endif
 	{
 		BRESULT r = scrnmngDD_create(scrnmode);
+		np2wab_forceupdate();
 		return r;
 	}
 }
@@ -306,10 +308,12 @@ void scrnmng_fullscrnmenu(int y) {
 	if(scrnmng_current_drawtype==DRAWTYPE_INVALID) {return;}
 	if(scrnmng_current_drawtype==DRAWTYPE_DIRECT3D){
 		scrnmngD3D_fullscrnmenu(y);
+		np2wab_forceupdate();
 	}else
 #endif
 	{
 		scrnmngDD_fullscrnmenu(y);
+		np2wab_forceupdate();
 	}
 }
 
@@ -321,10 +325,12 @@ void scrnmng_topwinui(void) {
 	if(scrnmng_current_drawtype==DRAWTYPE_INVALID) {return;}
 	if(scrnmng_current_drawtype==DRAWTYPE_DIRECT3D){
 		scrnmngD3D_topwinui();
+		np2wab_forceupdate();
 	}else
 #endif
 	{
 		scrnmngDD_topwinui();
+		np2wab_forceupdate();
 	}
 }
 
@@ -336,10 +342,12 @@ void scrnmng_clearwinui(void) {
 	if(scrnmng_current_drawtype==DRAWTYPE_INVALID) {return;}
 	if(scrnmng_current_drawtype==DRAWTYPE_DIRECT3D){
 		scrnmngD3D_clearwinui();
+		np2wab_forceupdate();
 	}else
 #endif
 	{
 		scrnmngDD_clearwinui();
+		np2wab_forceupdate();
 	}
 }
 
@@ -363,10 +371,12 @@ void scrnmng_setwidth(int posx, int width) {
 	if(scrnmng_current_drawtype==DRAWTYPE_INVALID) {return;}
 	if(scrnmng_current_drawtype==DRAWTYPE_DIRECT3D){
 		scrnmngD3D_setwidth(posx, width);
+		np2wab_forceupdate();
 	}else
 #endif
 	{
 		scrnmngDD_setwidth(posx, width);
+		np2wab_forceupdate();
 	}
 }
 
@@ -384,10 +394,12 @@ void scrnmng_setextend(int extend) {
 	if(scrnmng_current_drawtype==DRAWTYPE_INVALID) { return;}
 	if(scrnmng_current_drawtype==DRAWTYPE_DIRECT3D){
 		scrnmngD3D_setextend(extend);
+		np2wab_forceupdate();
 	}else
 #endif
 	{
 		scrnmngDD_setextend(extend);
+		np2wab_forceupdate();
 	}
 }
 
@@ -411,10 +423,12 @@ void scrnmng_setheight(int posy, int height) {
 	if(scrnmng_current_drawtype==DRAWTYPE_INVALID) {return;}
 	if(scrnmng_current_drawtype==DRAWTYPE_DIRECT3D){
 		scrnmngD3D_setheight(posy, height);
+		np2wab_forceupdate();
 	}else
 #endif
 	{
 		scrnmngDD_setheight(posy, height);
+		np2wab_forceupdate();
 	}
 }
 
@@ -440,10 +454,12 @@ void scrnmng_setsize(int posx, int posy, int width, int height) {
 	if(scrnmng_current_drawtype==DRAWTYPE_INVALID) {return;}
 	if(scrnmng_current_drawtype==DRAWTYPE_DIRECT3D){
 		scrnmngD3D_setsize(posx, posy, width, height);
+		np2wab_forceupdate();
 	}else
 #endif
 	{
 		scrnmngDD_setsize(posx, posy, width, height);
+		np2wab_forceupdate();
 	}
 }
 
@@ -513,10 +529,12 @@ void scrnmng_setmultiple(int multiple)
 	if(scrnmng_current_drawtype==DRAWTYPE_INVALID) {return;}
 	if(scrnmng_current_drawtype==DRAWTYPE_DIRECT3D){
 		scrnmngD3D_setmultiple(multiple);
+		np2wab_forceupdate();
 	}else
 #endif
 	{
 		scrnmngDD_setmultiple(multiple);
+		np2wab_forceupdate();
 	}
 }
 
@@ -580,10 +598,12 @@ void scrnmng_entersizing(void) {
 #ifdef SUPPORT_SCRN_DIRECT3D
 	if(scrnmng_current_drawtype==DRAWTYPE_DIRECT3D){
 		scrnmngD3D_entersizing();
+		np2wab_forceupdate();
 	}else
 #endif
 	{
 		scrnmngDD_entersizing();
+		np2wab_forceupdate();
 	}
 }
 
@@ -594,10 +614,12 @@ void scrnmng_sizing(UINT side, RECT *rect) {
 #ifdef SUPPORT_SCRN_DIRECT3D
 	if(scrnmng_current_drawtype==DRAWTYPE_DIRECT3D){
 		scrnmngD3D_sizing(side, rect);
+		np2wab_forceupdate();
 	}else
 #endif
 	{
 		scrnmngDD_sizing(side, rect);
+		np2wab_forceupdate();
 	}
 }
 
@@ -608,10 +630,12 @@ void scrnmng_exitsizing(void)
 #ifdef SUPPORT_SCRN_DIRECT3D
 	if(scrnmng_current_drawtype==DRAWTYPE_DIRECT3D){
 		scrnmngD3D_exitsizing();		// ugh
+		np2wab_forceupdate();
 	}else
 #endif
 	{
 		scrnmngDD_exitsizing();		// ugh
+		np2wab_forceupdate();
 	}
 }
 
@@ -628,10 +652,12 @@ void scrnmng_updatefsres(void) {
 #ifdef SUPPORT_SCRN_DIRECT3D
 	if(scrnmng_current_drawtype==DRAWTYPE_DIRECT3D){
 		scrnmngD3D_updatefsres();
+		np2wab_forceupdate();
 	}else
 #endif
 	{
 		scrnmngDD_updatefsres();
+		np2wab_forceupdate();
 	}
 }
 
@@ -709,13 +735,14 @@ void scrnmng_delaychangemode(void){
 		scrnmng_cs_LeaveModeChangeCriticalSection();
 
 		scrndraw_redraw();
+		np2wab_forceupdate();
 		InvalidateRect(g_hWndMain, NULL, TRUE);		// ugh
 	}
 }
 
 void scrnmng_UIThreadProc(void)
 {
-	if (scrnmng_restore_pending)
+	if (scrnmng_restore_pending && !IsIconic(g_hWndMain))
 	{
 		scrnmng_cs_EnterModeChangeCriticalSection();
 		scrnmng_restore_pending = false;
@@ -729,23 +756,25 @@ void scrnmng_UIThreadProc(void)
 			else
 			{
 				scrnmngDD_restoresurfaces();
+			}
 		}
-	}
 #else
 		scrnmngDD_restoresurfaces();
 #endif
 		scrnmng_cs_LeaveModeChangeCriticalSection();
 
-}
-	if (scrnmng_create_pending)
+	}
+	if (scrnmng_create_pending && !IsIconic(g_hWndMain))
 	{
 		if (IsIconic(g_hWndMain)) return;
 		scrnmng_cs_EnterModeChangeCriticalSection();
+		scrnmng_destroy();
 		scrnmng_create(g_scrnmode);
 		scrnmng_create_pending = false;
 		scrnmng_cs_LeaveModeChangeCriticalSection();
 
 		scrndraw_redraw();
+		np2wab_forceupdate();
 		InvalidateRect(g_hWndMain, NULL, TRUE);		// ugh
 	}
 }

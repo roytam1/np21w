@@ -688,10 +688,24 @@ void bios0x18_42(REG8 mode) {
 //#endif
 	}
 	if (!(mode & 0x20)) {
+		gdc.mode1 &= ~0x02;
 		gdc.mode2 &= ~0x04;
+#if defined(BIOS_IO_EMULATION) && defined(CPUCORE_IA32)
+		if (CPU_STAT_PM && CPU_STAT_VM86 && biosioemu.enable)
+		{
+			biosioemu_enq8(0x68, 0x02);
+		}
+#endif
 	}
 	else {
+		gdc.mode1 |= 0x02;
 		gdc.mode2 |= 0x04;
+#if defined(BIOS_IO_EMULATION) && defined(CPUCORE_IA32)
+		if (CPU_STAT_PM && CPU_STAT_VM86 && biosioemu.enable)
+		{
+			biosioemu_enq8(0x68, 0x03);
+		}
+#endif
 	}
 	gdcs.mode2 = gdc.mode2;
 	gdcs.grphdisp |= GDCSCRN_ALLDRAW2;

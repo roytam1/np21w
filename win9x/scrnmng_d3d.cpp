@@ -496,12 +496,17 @@ void scrnmngD3D_restoresurfaces() {
 	HRESULT r;
 
 	d3d_enter_criticalsection();
-	if(d3d.d3ddev->TestCooperativeLevel()==D3DERR_DEVICENOTRESET){
+	r = d3d.d3ddev->TestCooperativeLevel();
+	if (r == D3DERR_DRIVERINTERNALERROR)
+	{
+		devicelostflag = 2;
+	}
+	if(d3d.d3ddev==NULL || r==D3DERR_DEVICENOTRESET || r==D3DERR_DRIVERINTERNALERROR){
 		static UINT  bufwidth, bufheight;
 		static UINT  wabwidth, wabheight;
 		D3DSURFACE_DESC d3dsdesc;
 
-		if(devicelostflag==2 || devicelostflag==3){
+		if(devicelostflag==2 || devicelostflag==3 || d3d.d3ddev==NULL){
 			// ã≠êßçƒçÏê¨
 			if(devicelostflag==2){
 				devicelostflag = 0;
@@ -588,8 +593,19 @@ void scrnmngD3D_restoresurfaces() {
 			d3d_leave_criticalsection();
 		}
 	}else{
-		if(!devicelostflag) devicelostflag = 1;
+		if (r == S_OK)
+		{
+			devicelostflag = 0;
+		}
+		else
+		{
+			if (!devicelostflag) devicelostflag = 1;
+		}
 		d3d_leave_criticalsection();
+	}
+	if (devicelostflag)
+	{
+		scrnmng_restore_pending = true;
 	}
 }
 

@@ -316,6 +316,24 @@
     <Filter Include="ヘッダー ファイル\i386hax">
       <UniqueIdentifier>{180393b3-ead6-4f49-a004-d8d3f11d9f1b}</UniqueIdentifier>
     </Filter>
+    <Filter Include="ソース ファイル\i386c\ia32\instructions\sse4">
+      <UniqueIdentifier>{a198e5d6-2483-4ded-a98c-27d93ba2ede5}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ソース ファイル\i386c\ia32\instructions\ssse3">
+      <UniqueIdentifier>{d30a5b8b-f751-41a4-9b8a-38c81074c8e1}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ヘッダー ファイル\i386c\ia32\instructions\ssse3">
+      <UniqueIdentifier>{6f4b6a70-bf44-454a-b256-283de7ac10e0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ヘッダー ファイル\i386c\ia32\instructions\sse4">
+      <UniqueIdentifier>{c1f2c29c-3bbb-405d-882b-6f508c3e9d73}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ソース ファイル\i386c\ia32\instructions\sse4a">
+      <UniqueIdentifier>{c4b605d7-727e-4033-9569-ecb2d1516721}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ヘッダー ファイル\i386c\ia32\instructions\sse4a">
+      <UniqueIdentifier>{d0823f91-9c87-4061-ac19-a36c4ecced83}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\calendar.c">
@@ -1377,6 +1395,18 @@
     <ClCompile Include="..\codecnv\sjisucs2.c">
       <Filter>ソース ファイル\codecnv</Filter>
     </ClCompile>
+    <ClCompile Include="..\i386c\ia32\instructions\ssse3\ssse3.c">
+      <Filter>ソース ファイル\i386c\ia32\instructions\ssse3</Filter>
+    </ClCompile>
+    <ClCompile Include="..\i386c\ia32\instructions\sse4\sse4_1.c">
+      <Filter>ソース ファイル\i386c\ia32\instructions\sse4</Filter>
+    </ClCompile>
+    <ClCompile Include="..\i386c\ia32\instructions\sse4\sse4_2.c">
+      <Filter>ソース ファイル\i386c\ia32\instructions\sse4</Filter>
+    </ClCompile>
+    <ClCompile Include="..\i386c\ia32\instructions\sse4a\sse4a.c">
+      <Filter>ソース ファイル\i386c\ia32\instructions\sse4a</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\calendar.h">
@@ -2431,6 +2461,18 @@
     </ClInclude>
     <ClInclude Include="np2mt.h">
       <Filter>ヘッダー ファイル\win9x</Filter>
+    </ClInclude>
+    <ClInclude Include="..\i386c\ia32\instructions\sse4\sse4_1.h">
+      <Filter>ヘッダー ファイル\i386c\ia32\instructions\sse4</Filter>
+    </ClInclude>
+    <ClInclude Include="..\i386c\ia32\instructions\sse4\sse4_2.h">
+      <Filter>ヘッダー ファイル\i386c\ia32\instructions\sse4</Filter>
+    </ClInclude>
+    <ClInclude Include="..\i386c\ia32\instructions\ssse3\ssse3.h">
+      <Filter>ヘッダー ファイル\i386c\ia32\instructions\ssse3</Filter>
+    </ClInclude>
+    <ClInclude Include="..\i386c\ia32\instructions\sse4a\sse4a.h">
+      <Filter>ヘッダー ファイル\i386c\ia32\instructions\sse4a</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

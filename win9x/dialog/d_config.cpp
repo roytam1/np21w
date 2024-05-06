@@ -77,6 +77,9 @@ static const CComboData::Entry s_cputype[] =
 	{MAKEINTRESOURCE(IDS_CPU_PENTIUMIII),	8},
 	{MAKEINTRESOURCE(IDS_CPU_PENTIUMM),		9},
 	{MAKEINTRESOURCE(IDS_CPU_PENTIUM4),		10},
+	{MAKEINTRESOURCE(IDS_CPU_CORE_2_DUO),	11},
+	{MAKEINTRESOURCE(IDS_CPU_CORE_2_DUOW),	12},
+	{MAKEINTRESOURCE(IDS_CPU_CORE_I),		13},
 	{MAKEINTRESOURCE(IDS_CPU_AMD_K6_2),		15},
 	{MAKEINTRESOURCE(IDS_CPU_AMD_K6_III),	16},
 	{MAKEINTRESOURCE(IDS_CPU_AMD_K7_ATHLON),	17},
@@ -412,6 +415,39 @@ int CConfigureDlg::GetCpuTypeIndex(){
 	   np2cfg.cpu_eflags_mask == CPU_EFLAGS_MASK_PENTIUM_4){
 		return 10;
 	}
+	if ((CPU_FEATURES_ALL & CPU_FEATURES_CORE_2_DUO) != CPU_FEATURES_CORE_2_DUO) goto AMDCPUCheck;
+	if (np2cfg.cpu_family == CPU_CORE_2_DUO_FAMILY &&
+		np2cfg.cpu_model == CPU_CORE_2_DUO_MODEL &&
+		np2cfg.cpu_stepping == CPU_CORE_2_DUO_STEPPING &&
+		(np2cfg.cpu_feature & CPU_FEATURES_ALL) == CPU_FEATURES_CORE_2_DUO &&
+		(np2cfg.cpu_feature_ecx & CPU_FEATURES_ECX_ALL) == CPU_FEATURES_ECX_CORE_2_DUO &&
+		(np2cfg.cpu_feature_ex & CPU_FEATURES_EX_ALL) == CPU_FEATURES_EX_CORE_2_DUO &&
+		np2cfg.cpu_eflags_mask == CPU_EFLAGS_MASK_CORE_2_DUO)
+	{
+		return 11;
+	}
+	if ((CPU_FEATURES_ALL & CPU_FEATURES_CORE_2_DUOW) != CPU_FEATURES_CORE_2_DUOW) goto AMDCPUCheck;
+	if (np2cfg.cpu_family == CPU_CORE_2_DUOW_FAMILY &&
+		np2cfg.cpu_model == CPU_CORE_2_DUOW_MODEL &&
+		np2cfg.cpu_stepping == CPU_CORE_2_DUOW_STEPPING &&
+		(np2cfg.cpu_feature & CPU_FEATURES_ALL) == CPU_FEATURES_CORE_2_DUOW &&
+		(np2cfg.cpu_feature_ecx & CPU_FEATURES_ECX_ALL) == CPU_FEATURES_ECX_CORE_2_DUOW &&
+		(np2cfg.cpu_feature_ex & CPU_FEATURES_EX_ALL) == CPU_FEATURES_EX_CORE_2_DUOW &&
+		np2cfg.cpu_eflags_mask == CPU_EFLAGS_MASK_CORE_2_DUOW)
+	{
+		return 12;
+	}
+	if ((CPU_FEATURES_ALL & CPU_FEATURES_CORE_I) != CPU_FEATURES_CORE_I) goto AMDCPUCheck;
+	if (np2cfg.cpu_family == CPU_CORE_I_FAMILY &&
+		np2cfg.cpu_model == CPU_CORE_I_MODEL &&
+		np2cfg.cpu_stepping == CPU_CORE_I_STEPPING &&
+		(np2cfg.cpu_feature & CPU_FEATURES_ALL) == CPU_FEATURES_CORE_I &&
+		(np2cfg.cpu_feature_ecx & CPU_FEATURES_ECX_ALL) == CPU_FEATURES_ECX_CORE_I &&
+		(np2cfg.cpu_feature_ex & CPU_FEATURES_EX_ALL) == CPU_FEATURES_EX_CORE_I &&
+		np2cfg.cpu_eflags_mask == CPU_EFLAGS_MASK_CORE_I)
+	{
+		return 13;
+	}
 
 AMDCPUCheck:
 	if((CPU_FEATURES_ALL & CPU_FEATURES_AMD_K6_2) != CPU_FEATURES_AMD_K6_2 ||
@@ -593,6 +629,42 @@ int CConfigureDlg::SetCpuTypeIndex(UINT index){
 		strcpy(np2cfg.cpu_vendor, CPU_VENDOR_INTEL);
 		strcpy(np2cfg.cpu_brandstring, CPU_BRAND_STRING_PENTIUM_4);
 		np2cfg.cpu_brandid = CPU_BRAND_ID_PENTIUM_4;
+		break;
+	case 11:
+		np2cfg.cpu_family = CPU_CORE_2_DUO_FAMILY;
+		np2cfg.cpu_model = CPU_CORE_2_DUO_MODEL;
+		np2cfg.cpu_stepping = CPU_CORE_2_DUO_STEPPING;
+		np2cfg.cpu_feature = CPU_FEATURES_CORE_2_DUO;
+		np2cfg.cpu_feature_ecx = CPU_FEATURES_ECX_CORE_2_DUO;
+		np2cfg.cpu_feature_ex = CPU_FEATURES_EX_CORE_2_DUO;
+		np2cfg.cpu_eflags_mask = CPU_EFLAGS_MASK_CORE_2_DUO;
+		strcpy(np2cfg.cpu_vendor, CPU_VENDOR_INTEL);
+		strcpy(np2cfg.cpu_brandstring, CPU_BRAND_STRING_CORE_2_DUO);
+		np2cfg.cpu_brandid = CPU_BRAND_ID_CORE_2_DUO;
+		break;
+	case 12:
+		np2cfg.cpu_family = CPU_CORE_2_DUOW_FAMILY;
+		np2cfg.cpu_model = CPU_CORE_2_DUOW_MODEL;
+		np2cfg.cpu_stepping = CPU_CORE_2_DUOW_STEPPING;
+		np2cfg.cpu_feature = CPU_FEATURES_CORE_2_DUOW;
+		np2cfg.cpu_feature_ecx = CPU_FEATURES_ECX_CORE_2_DUOW;
+		np2cfg.cpu_feature_ex = CPU_FEATURES_EX_CORE_2_DUOW;
+		np2cfg.cpu_eflags_mask = CPU_EFLAGS_MASK_CORE_2_DUOW;
+		strcpy(np2cfg.cpu_vendor, CPU_VENDOR_INTEL);
+		strcpy(np2cfg.cpu_brandstring, CPU_BRAND_STRING_CORE_2_DUOW);
+		np2cfg.cpu_brandid = CPU_BRAND_ID_CORE_2_DUOW;
+		break;
+	case 13:
+		np2cfg.cpu_family = CPU_CORE_I_FAMILY;
+		np2cfg.cpu_model = CPU_CORE_I_MODEL;
+		np2cfg.cpu_stepping = CPU_CORE_I_STEPPING;
+		np2cfg.cpu_feature = CPU_FEATURES_CORE_I;
+		np2cfg.cpu_feature_ecx = CPU_FEATURES_ECX_CORE_I;
+		np2cfg.cpu_feature_ex = CPU_FEATURES_EX_CORE_I;
+		np2cfg.cpu_eflags_mask = CPU_EFLAGS_MASK_CORE_I;
+		strcpy(np2cfg.cpu_vendor, CPU_VENDOR_INTEL);
+		strcpy(np2cfg.cpu_brandstring, CPU_BRAND_STRING_CORE_I);
+		np2cfg.cpu_brandid = CPU_BRAND_ID_CORE_I;
 		break;
 	case 15:
 		np2cfg.cpu_family = CPU_AMD_K6_2_FAMILY;

@@ -206,7 +206,7 @@ void atapicmd_a0(IDEDRV drv) {
 			drv->asc = ATAPI_ASC_MEDIUM_NOT_PRESENT;
 			if(drv->sxsidrv==cdchange_drv && g_nevent.item[NEVENT_CDWAIT].clock > 0){
 				if(mediachangeflag==MEDIA_CHANGE_WAIT){
-					nevent_set(NEVENT_CDWAIT, 1, cdchange_timeoutproc, NEVENT_ABSOLUTE); // OS‘¤‚ªCD‚ğÃ‘£‚µ‚Ä‚¢‚é‚æ‚¤‚È‚Ì‚ÅX‚É‹}‚¢‚ÅŒğŠ·
+					nevent_set(NEVENT_CDWAIT, 500, cdchange_timeoutproc, NEVENT_ABSOLUTE); // OS‘¤‚ªCD‚ğÃ‘£‚µ‚Ä‚¢‚é‚æ‚¤‚È‚Ì‚ÅX‚É‹}‚¢‚ÅŒğŠ·
 				}else if(mediachangeflag==0){
 					//nevent_setbyms(NEVENT_CDWAIT, 1000, cdchange_timeoutproc, NEVENT_ABSOLUTE); // OS‘¤‚ªCD‚ª–³‚¢‚Æ”F¯‚µ‚½‚æ‚¤‚È‚Ì‚Å‹}‚¢‚ÅŒğŠ·
 				}

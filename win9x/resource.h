@@ -543,6 +543,9 @@
 #define IDS_CPU_AMD_K6_III              32036
 #define IDS_CPU_AMD_K7_ATHLON           32037
 #define IDS_CPU_AMD_K7_ATHLONXP         32038
+#define IDS_CPU_AMD_K8_ATHLON64         32039
+#define IDS_CPU_AMD_K8_ATHLON64X2       32042
+#define IDS_CPU_AMD_K10_PHENOM          32043
 #define IDS_CPU_80286					32040
 #define IDS_CPU_80386                   32041
 #define IDS_CPU_NEKOPRO                 32049

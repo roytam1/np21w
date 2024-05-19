@@ -629,6 +629,15 @@ void pccore_reset(void) {
 	}else if(np2cfg.cpu_family == CPU_AMD_K7_ATHLON_XP_FAMILY && np2cfg.cpu_model == CPU_AMD_K7_ATHLON_XP_MODEL){
 		strcpy(np2cfg.cpu_vendor, CPU_VENDOR_AMD);
 		strcpy(np2cfg.cpu_brandstring, CPU_BRAND_STRING_AMD_K7_ATHLON_XP);
+	}else if(np2cfg.cpu_family == CPU_AMD_K8_ATHLON_64_FAMILY && np2cfg.cpu_model == CPU_AMD_K8_ATHLON_64_MODEL){
+		strcpy(np2cfg.cpu_vendor, CPU_VENDOR_AMD);
+		strcpy(np2cfg.cpu_brandstring, CPU_BRAND_STRING_AMD_K8_ATHLON_64);
+	}else if(np2cfg.cpu_family == CPU_AMD_K8_ATHLON_64X2_FAMILY && np2cfg.cpu_model == CPU_AMD_K8_ATHLON_64X2_MODEL){
+		strcpy(np2cfg.cpu_vendor, CPU_VENDOR_AMD);
+		strcpy(np2cfg.cpu_brandstring, CPU_BRAND_STRING_AMD_K8_ATHLON_64X2);
+	}else if(np2cfg.cpu_family == CPU_AMD_K10_PHENOM_FAMILY && np2cfg.cpu_model == CPU_AMD_K10_PHENOM_MODEL){
+		strcpy(np2cfg.cpu_vendor, CPU_VENDOR_AMD);
+		strcpy(np2cfg.cpu_brandstring, CPU_BRAND_STRING_AMD_K10_PHENOM);
 
 	}else if(np2cfg.cpu_family == 0 && np2cfg.cpu_model == 0 && np2cfg.cpu_stepping == 0 && np2cfg.cpu_feature == 0){
 		strcpy(np2cfg.cpu_vendor, CPU_VENDOR_NEKOPRO);

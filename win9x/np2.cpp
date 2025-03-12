@@ -1010,6 +1010,12 @@ static void OnCommand(HWND hWnd, WPARAM wParam)
 		case IDM_CHANGECLK_X42:
 			np2_DynamicChangeClockMul(42);
 			break;
+		case IDM_CHANGECLK_X52:
+			np2_DynamicChangeClockMul(52);
+			break;
+		case IDM_CHANGECLK_X62:
+			np2_DynamicChangeClockMul(62);
+			break;
 		case IDM_CHANGECLK_RESTORE:
 			np2_DynamicChangeClockMul(np2cfg.multiple);
 			break;

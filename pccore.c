@@ -401,6 +401,7 @@ void pccore_init(void) {
 	
 #if defined(SUPPORT_MULTITHREAD)
 	nevent_initialize();
+	pcm86cs_initialize();
 #endif
 	
 #if defined(SUPPORT_IA32_HAXM)
@@ -509,6 +510,7 @@ void pccore_term(void) {
 #endif
 	
 #if defined(SUPPORT_MULTITHREAD)
+	pcm86cs_shutdown();
 	nevent_shutdown();
 #endif
 }

@@ -379,9 +379,7 @@
     <ClCompile Include="..\cbus\ideio.c" />
     <ClCompile Include="..\cbus\mpu98ii.c" />
     <ClCompile Include="..\cbus\pc9861k.c" />
-    <ClCompile Include="..\cbus\pcm86io.c">
-      <Optimization Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Disabled</Optimization>
-    </ClCompile>
+    <ClCompile Include="..\cbus\pcm86io.c" />
     <ClCompile Include="..\cbus\sasiio.c" />
     <ClCompile Include="..\cbus\scsicmd.c" />
     <ClCompile Include="..\cbus\scsiio.c" />
@@ -599,15 +597,9 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='ReleaseHAXM|Win32'">true</ExcludedFromBuild>
     </ClCompile>
-    <ClCompile Include="..\sound\opntimer.c">
-      <Optimization Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Disabled</Optimization>
-    </ClCompile>
-    <ClCompile Include="..\sound\pcm86c.c">
-      <Optimization Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Disabled</Optimization>
-    </ClCompile>
-    <ClCompile Include="..\sound\pcm86g.c">
-      <Optimization Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Disabled</Optimization>
-    </ClCompile>
+    <ClCompile Include="..\sound\opntimer.c" />
+    <ClCompile Include="..\sound\pcm86c.c" />
+    <ClCompile Include="..\sound\pcm86g.c" />
     <ClCompile Include="..\sound\pcmmix.c" />
     <ClCompile Include="..\sound\psggenc.c" />
     <ClCompile Include="..\sound\psggeng.c" />

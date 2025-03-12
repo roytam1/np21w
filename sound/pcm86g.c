@@ -351,6 +351,9 @@ void SOUNDCALL pcm86gen_getpcm(PCM86 pcm86, SINT32 *lpBuffer, UINT nCount)
 {
 	if ((nCount) && (pcm86->fifo & 0x80) && (pcm86->div))
 	{
+#if defined(SUPPORT_MULTITHREAD)
+		pcm86cs_enter_criticalsection();
+#endif
 		switch (pcm86->dactrl & 0x70)
 		{
 		case 0x00:						/* 16bit-none */
@@ -383,6 +386,9 @@ void SOUNDCALL pcm86gen_getpcm(PCM86 pcm86, SINT32 *lpBuffer, UINT nCount)
 			pcm86stereo8(pcm86, lpBuffer, nCount);
 			break;
 		}
+#if defined(SUPPORT_MULTITHREAD)
+		pcm86cs_leave_criticalsection();
+#endif
 		pcm86gen_checkbuf(pcm86, nCount);
 	}
 }

@@ -129,6 +129,11 @@ extern "C"
 
 extern const UINT pcm86rate8[];
 
+void pcm86cs_initialize();
+void pcm86cs_shutdown();
+void pcm86cs_enter_criticalsection();
+void pcm86cs_leave_criticalsection();
+
 void pcm86_cb(NEVENTITEM item);
 
 void pcm86gen_initialize(UINT rate);

@@ -591,6 +591,8 @@
 #define IDM_CHANGECLK_X16           40113
 #define IDM_CHANGECLK_X30           40114
 #define IDM_CHANGECLK_X42           40115
+#define IDM_CHANGECLK_X52           40116
+#define IDM_CHANGECLK_X62           40117
 #define IDM_CHANGECLK_RESTORE       40119
 #define IDM_FLAGSAVE                    40201
 #define IDM_FLAGSAVE0                   40201

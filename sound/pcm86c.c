@@ -10,9 +10,8 @@
 #include "iocore.h"
 #include "fmboard.h"
 
-#if 1
+#if 0
 #undef	TRACEOUT
-#define	TRACEOUT(s)	(void)(s)
 static void trace_fmt_ex(const char *fmt, ...)
 {
 	char stmp[2048];
@@ -24,6 +23,8 @@ static void trace_fmt_ex(const char *fmt, ...)
 	OutputDebugStringA(stmp);
 }
 #define	TRACEOUT(s)	trace_fmt_ex s
+#else
+#define	TRACEOUT(s)	(void)(s)
 #endif	/* 1 */
 
 /* サンプリングレートに8掛けた物 */
@@ -43,7 +44,45 @@ static const UINT clk20_128[] = {
 
 	PCM86CFG	pcm86cfg;
 
-	static int bufunferflag = 0;
+	static SINT32 bufunferflag = 0;
+	static SINT32 vbufunferflag = 0;
+
+#if defined(SUPPORT_MULTITHREAD)
+	static int pcm86_cs_initialized = 0;
+	static CRITICAL_SECTION pcm86_cs;
+
+	void pcm86cs_enter_criticalsection(void)
+	{
+		if (!pcm86_cs_initialized) return;
+		EnterCriticalSection(&pcm86_cs);
+	}
+	void pcm86cs_leave_criticalsection(void)
+	{
+		if (!pcm86_cs_initialized) return;
+		LeaveCriticalSection(&pcm86_cs);
+	}
+
+	void pcm86cs_initialize(void)
+	{
+		/* クリティカルセクション準備 */
+		if (!pcm86_cs_initialized)
+		{
+			memset(&pcm86_cs, 0, sizeof(pcm86_cs));
+			InitializeCriticalSection(&pcm86_cs);
+			pcm86_cs_initialized = 1;
+		}
+	}
+	void pcm86cs_shutdown(void)
+	{
+		/* クリティカルセクション破棄 */
+		if (pcm86_cs_initialized)
+		{
+			memset(&pcm86_cs, 0, sizeof(pcm86_cs));
+			DeleteCriticalSection(&pcm86_cs);
+			pcm86_cs_initialized = 0;
+		}
+	}
+#endif
 
 void pcm86gen_initialize(UINT rate)
 {
@@ -101,13 +140,13 @@ void pcm86_cb(NEVENTITEM item)
 {
 	PCM86 pcm86 = &g_pcm86;
 	SINT32 adjustbuf;
-	
+
 	if (pcm86->reqirq)
 	{
 		sound_sync();
-//		RECALC_NOWCLKP;
+		//		RECALC_NOWCLKP;
 
-		adjustbuf = (SINT32)(((SINT64)pcm86->virbuf * 9 + pcm86->realbuf) / 10);
+		adjustbuf = (SINT32)(((SINT64)pcm86->virbuf * 4 + pcm86->realbuf) / 5);
 		if (pcm86->virbuf <= pcm86->fifosize || pcm86->realbuf > pcm86->stepmask && adjustbuf <= pcm86->fifosize)
 		{
 			pcm86->reqirq = 0;
@@ -142,17 +181,47 @@ void pcm86_setnextintr(void) {
 	{
 		cntv = pcm86->virbuf - pcm86->fifosize;
 		cntr = pcm86->realbuf - pcm86->fifosize;
-		if (cntr < cntv && pcm86->realbuf > pcm86->stepmask)
+		if (pcm86->realbuf > pcm86->stepmask)
 		{
-			//cnt = cntr;
-			if (bufunferflag > 64)
+			if (cntr < cntv)
 			{
-				cnt = (SINT32)(((SINT64)cntv * 9 + cntr) / 10);
-				//TRACEOUT(("Buf Under", bufunferflag));
+				//cnt = cntr;
+				if (bufunferflag > 32000)
+				{
+					cnt = (SINT32)(((SINT64)cntv * 9 + cntr) / 10);
+					TRACEOUT(("Buf Under2", bufunferflag));
+				}
+				else if (bufunferflag > 4000)
+				{
+					cnt = (SINT32)(((SINT64)cntv * 99 + cntr) / 100);
+					TRACEOUT(("Buf Under", bufunferflag));
+				}
+				else
+				{
+					cnt = cntv;
+				}
 			}
 			else
 			{
-				cnt = (SINT32)(((SINT64)cntv * 99 + cntr) / 100);
+				if (vbufunferflag > 64000)
+				{
+					cnt = (SINT32)(((SINT64)cntv * 9 + cntr) / 10);
+					TRACEOUT(("VBuf Under3", vbufunferflag));
+				}
+				else if (vbufunferflag > 16000)
+				{
+					cnt = (SINT32)(((SINT64)cntv * 49 + cntr) / 50);
+					TRACEOUT(("VBuf Under2", vbufunferflag));
+				}
+				else if (vbufunferflag > 4000)
+				{
+					cnt = (SINT32)(((SINT64)cntv * 99 + cntr) / 100);
+					TRACEOUT(("VBuf Under", vbufunferflag));
+				}
+				else
+				{
+					cnt = cntv;
+				}
 			}
 		}
 		else
@@ -164,7 +233,7 @@ void pcm86_setnextintr(void) {
 		{
 			cnt += pcm86->stepmask;
 			cnt >>= pcm86->stepbit;
-			cnt += 4;
+			//cnt += 4;
 			/* ここで clk = pccore.realclock * cnt / 86pcm_rate */
 			/* clk = ((pccore.baseclock / 86pcm_rate) * cnt) * pccore.multiple */
 			if (pccore.cpumode & CPUMODE_8MHZ) {
@@ -181,7 +250,7 @@ void pcm86_setnextintr(void) {
 			//if (clk > 1) clk--;
 			clk *= pccore.multiple;
 			nevent_set(NEVENT_86PCM, clk, pcm86_cb, NEVENT_ABSOLUTE);
-			//TRACEOUT(("%d,%d", pcm86->virbuf, pcm86->realbuf));
+			TRACEOUT(("%d,%d", pcm86->virbuf, pcm86->realbuf));
 		}
 		else
 		{
@@ -203,6 +272,9 @@ void pcm86_setnextintr(void) {
 void RECALC_NOWCLKWAIT(UINT64 cnt)
 {
 	SINT64 decvalue = (SINT64)(cnt << g_pcm86.stepbit);
+#if defined(SUPPORT_MULTITHREAD)
+	pcm86cs_enter_criticalsection();
+#endif
 	if (g_pcm86.virbuf - decvalue < g_pcm86.virbuf)
 	{
 		g_pcm86.virbuf -= decvalue;
@@ -211,6 +283,9 @@ void RECALC_NOWCLKWAIT(UINT64 cnt)
 	{
 		g_pcm86.virbuf &= g_pcm86.stepmask;
 	}
+#if defined(SUPPORT_MULTITHREAD)
+	pcm86cs_leave_criticalsection();
+#endif
 }
 
 void pcm86_changeclock(UINT oldmultiple)
@@ -271,6 +346,19 @@ void SOUNDCALL pcm86gen_checkbuf(PCM86 pcm86, UINT nCount)
 	UINT64	cur;
 	UINT64	past;
 	UINT64  pastCycle;
+	UINT64	curClock;
+	SINT32	flagStep;
+	static UINT32	lastClock = 0;
+	curClock = CPU_CLOCK + CPU_BASECLOCK - CPU_REMCLOCK;
+	if (lastClock == 0)
+	{
+		flagStep = 0;
+	}
+	else
+	{
+		flagStep = (SINT32)((SINT64)(curClock - lastClock) * 1000 / pccore.realclock);
+	}
+	//TRACEOUT(("FS %d", flagStep));
 
 	pastCycle = (UINT64)UINT_MAX << 6;
 	cur = CPU_CLOCK + CPU_BASECLOCK - CPU_REMCLOCK;
@@ -313,11 +401,25 @@ void SOUNDCALL pcm86gen_checkbuf(PCM86 pcm86, UINT nCount)
 		}
 		//TRACEOUT(("buf: real %d, vir %d, (FIFOSIZE: %d) FORCE IRQ", pcm86->realbuf, pcm86->virbuf, pcm86->fifosize));
 		//pcm86->lastclock += pcm86->stepclock / 50;
-		if (bufunferflag < INT_MAX)
+		if (bufunferflag < INT_MAX - flagStep)
 		{
-			bufunferflag++;
+			if (lastClock != 0)
+			{
+				bufunferflag += flagStep;
+			}
 			//TRACEOUT(("%d", bufunferflag));
 		}
+	//}
+	//else if (bufs < pcm86->fifosize)
+	//{
+	//	if (bufunferflag < 8000)
+	//	{
+	//		if (lastClock != 0)
+	//		{
+	//			bufunferflag += flagStep;
+	//		}
+	//		//TRACEOUT(("%d", bufunferflag));
+	//	}
 	}
 	else
 	{
@@ -333,11 +435,30 @@ void SOUNDCALL pcm86gen_checkbuf(PCM86 pcm86, UINT nCount)
 		//TRACEOUT(("%d,%d", pcm86->virbuf, pcm86->realbuf));
 		if (pcm86->virbuf > pcm86->fifosize && pcm86->realbuf > pcm86->stepmask && pcm86->realbuf > pcm86->virbuf + pcm86->fifosize * 3)
 		{
-			pcm86->virbuf += 8;
-			//TRACEOUT(("ADJUST!"));
+			//if (vbufunferflag < INT_MAX - flagStep)
+			//{
+			//	if (lastClock != 0)
+			//	{
+			//		vbufunferflag += flagStep;
+			//	}
+			//	//TRACEOUT(("v %d", vbufunferflag));
+			//}
+			pcm86->virbuf += (pcm86->realbuf - (pcm86->virbuf - pcm86->fifosize * 3)) / 8;
+			TRACEOUT(("ADJUST!"));
 		}
+		//else
+		//{
+		//	//vbufunferflag = 0;
+		//	if (lastClock != 0)
+		//	{
+		//		vbufunferflag -= flagStep;
+		//	}
+		//	if (vbufunferflag < 0) vbufunferflag = 0;
+		//}
 		bufunferflag = 0;
 	}
+
+	lastClock = curClock;
 }
 
 BOOL pcm86gen_intrq(int fromFMTimer)

@@ -7,6 +7,22 @@
 #include	"fmboard.h"
 #include	"cs4231io.h"
 
+#if 1
+#undef	TRACEOUT
+#define	TRACEOUT(s)	(void)(s)
+static void trace_fmt_ex(const char* fmt, ...)
+{
+	char stmp[2048];
+	va_list ap;
+	va_start(ap, fmt);
+	vsprintf(stmp, fmt, ap);
+	strcat(stmp, "\n");
+	va_end(ap);
+	OutputDebugStringA(stmp);
+}
+#define	TRACEOUT(s)	trace_fmt_ex s
+#endif	/* 1 */
+
 
 extern	PCM86CFG	pcm86cfg;
 
@@ -75,6 +91,9 @@ static void IOOUTCALL pcm86_oa468(UINT port, REG8 val) {
 	{
 		if (val & 8)
 		{
+#if defined(SUPPORT_MULTITHREAD)
+			pcm86cs_enter_criticalsection();
+#endif
 			// バッファリセット
 			g_pcm86.wrtpos = 0;
 			g_pcm86.readpos = 0;
@@ -82,6 +101,9 @@ static void IOOUTCALL pcm86_oa468(UINT port, REG8 val) {
 			g_pcm86.virbuf = 0;
 			g_pcm86.lastclock = CPU_CLOCK + CPU_BASECLOCK - CPU_REMCLOCK;
 			g_pcm86.lastclock <<= 6;
+#if defined(SUPPORT_MULTITHREAD)
+			pcm86cs_leave_criticalsection();
+#endif
 		}
 	}
 	// 割り込み消去
@@ -147,6 +169,9 @@ static void IOOUTCALL pcm86_oa46a(UINT port, REG8 val) {
 static void IOOUTCALL pcm86_oa46c(UINT port, REG8 val) {
 	
 //	TRACEOUT(("86pcm out %.4x %.2x", port, val));
+#if defined(SUPPORT_MULTITHREAD)
+	pcm86cs_enter_criticalsection();
+#endif
 #if 1
 	if (g_pcm86.virbuf < PCM86_LOGICALBUF) {
 		g_pcm86.virbuf++;
@@ -180,6 +205,9 @@ static void IOOUTCALL pcm86_oa46c(UINT port, REG8 val) {
 //		g_pcm86.write = 1;
 		g_pcm86.reqirq = 1;
 	}
+#endif
+#if defined(SUPPORT_MULTITHREAD)
+	pcm86cs_leave_criticalsection();
 #endif
 	(void)port;
 }

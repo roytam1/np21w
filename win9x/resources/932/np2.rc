@@ -990,6 +990,8 @@ BEGIN
             MENUITEM "&x16",     IDM_CHANGECLK_X16
             MENUITEM "&x30",     IDM_CHANGECLK_X30
             MENUITEM "&x42",     IDM_CHANGECLK_X42
+            MENUITEM "&x52",     IDM_CHANGECLK_X52
+            MENUITEM "&x62",     IDM_CHANGECLK_X62
             MENUITEM "&Restore", IDM_CHANGECLK_RESTORE
         END
         POPUP "&New disk"

@@ -171,8 +171,9 @@ static void np2sysp_cngclkmul(const void *arg1, long arg2) {
 		pccore.multiple = newclockmul;
 		pccore.maxmultiple = newclockmul;
 		pccore.realclock = pccore.baseclock * pccore.multiple;
-		
 		pcm86_changeclock(oldclockmult);
+		nevent_changeclock(oldclockmult, pccore.multiple);
+
 		sound_changeclock();
 		beep_changeclock();
 		mpu98ii_changeclock();

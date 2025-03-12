@@ -23,7 +23,15 @@ extern	COMMNG	cm_rs232c;
 
 static void setsystimerevent(UINT32 cnt, NEVENTPOSITION absolute) {
 
-	if (cnt > 8) {									// ª‹’‚È‚µ
+	PITCH	pitch;
+	pitch = pit.ch + 0;
+	if (cnt > 8) { // ª‹’‚È‚µ
+#if defined(CPUCORE_IA32)
+		if (!(pitch->ctrl & 0x02) && CPU_STAT_PM)
+		{
+			cnt -= 8;
+		}
+#endif
 		cnt *= pccore.multiple;
 	}
 	else {

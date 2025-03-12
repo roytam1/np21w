@@ -211,7 +211,7 @@ REG8 DMACCALL cs4231dmafunc(REG8 func) {
 			if (cs4231cfg.rate) {
 				int playcount = (cs4231.reg.playcount[1]|(cs4231.reg.playcount[0] << 8)) * cs4231_playcountshift[cs4231.reg.datafmt >> 4]; // PI割り込みを発生させるサンプル数(Playback Base register) * サンプルあたりのバイト数
 				// DMA読み取り数カウンタを初期化
-				cs4231.totalsample = 0; 
+				cs4231.totalsample = 0;
 
 				// DMA読み取り位置を戻す
 				dmach = dmac.dmach + cs4231.dmach;
@@ -222,7 +222,7 @@ REG8 DMACCALL cs4231dmafunc(REG8 func) {
 				//cnt = pccore.realclock / cs4231cfg.rate * 512;
 				//nevent_set(NEVENT_CS4231, cnt, cs4231_dma, NEVENT_ABSOLUTE);
 				playcountsmp_Ictl = CS4231_BUFREADSMP;
-				cnt = pccore.realclock / cs4231cfg.rate * playcountsmp_Ictl;
+				cnt = (pccore.realclock / cs4231cfg.rate * playcountsmp_Ictl) / 2;
 				nevent_set(NEVENT_CS4231, cnt, cs4231_dma, NEVENT_ABSOLUTE);
 			}
 			break;
@@ -363,16 +363,16 @@ void cs4231_control(UINT idx, REG8 dat) {
 			}
 		}
 		// XXX: CAL0だけ(0x04)→CAL0とPENが同時に立つ状態(0x05)に遷移した時だけ挙動を変える･･･ Win3.1+necpcm.drv用のその場しのぎ
-		if(((UINT8 *)&cs4231.reg)[idx] == 0x05 && calpenflag == 1){
-			calpenflag = 2;
-			w31play = 1;
-		}else if(((UINT8 *)&cs4231.reg)[idx] == 0x04){
-			calpenflag = 1;
-			w31play = 0;
-		}else{
+		//if(((UINT8 *)&cs4231.reg)[idx] == 0x05 && calpenflag == 1){
+		//	calpenflag = 2;
+		//	w31play = 1;
+		//}else if(((UINT8 *)&cs4231.reg)[idx] == 0x04){
+		//	calpenflag = 1;
+		//	w31play = 0;
+		//}else{
 			calpenflag = 0;
 			w31play = 0;
-		}
+		//}
 		break;
 	}
 }
@@ -384,7 +384,7 @@ UINT dmac_getdata_(DMACH dmach, UINT8 *buf, UINT offset, UINT size) {
 	UINT32	addr;
 	UINT	i;
 	SINT32	sampleirq = 0; // 割り込みまでに必要なデータ転送数(byte)
-#define PLAYCOUNT_ADJUST_VALUE	65536
+#define PLAYCOUNT_ADJUST_VALUE	32768
 #define PLAYCOUNT_ADJUST2_VALUE	16
 	static UINT32	playcount_adjustcounter = 0;
 	static UINT32	playcount_adjustcounter2 = 0;
@@ -393,7 +393,7 @@ UINT dmac_getdata_(DMACH dmach, UINT8 *buf, UINT offset, UINT size) {
 	while(size > 0) {
 		leng = min(dmach->leng.w, size);
 		if (leng) {
-			int playcount = ((cs4231.reg.playcount[1]|(cs4231.reg.playcount[0] << 8))) * cs4231_playcountshift[cs4231.reg.datafmt >> 4]; // PI割り込みを発生させるサンプル数(Playback Base register) * サンプルあたりのバイト数
+			int playcount = ((cs4231.reg.playcount[1]|(cs4231.reg.playcount[0] << 8))) * cs4231_playcountshift[cs4231.reg.datafmt >> 4]+4; // PI割り込みを発生させるサンプル数(Playback Base register) * サンプルあたりのバイト数
 			if(cs4231.totalsample + (SINT32)leng > playcount){
 				// DMA再生サンプル数カウンタ(Playback DMA count register)がPI割り込みを発生させるサンプル数(Playback Base register)を超えないように調整
 				leng = playcount - cs4231.totalsample;

@@ -71,34 +71,44 @@ static void IOOUTCALL pcm86_oa468(UINT port, REG8 val) {
 	sound_sync();
 	xchgbit = g_pcm86.fifo ^ val;
 	// バッファリセット判定
-	if ((xchgbit & 8) && (val & 8)) {
-		g_pcm86.readpos = 0;				// バッファリセット
-		g_pcm86.wrtpos = 0;
-		g_pcm86.realbuf = 0;
-		g_pcm86.virbuf = 0;
-		g_pcm86.lastclock = CPU_CLOCK + CPU_BASECLOCK - CPU_REMCLOCK;
-		g_pcm86.lastclock <<= 6;
+	if (xchgbit & 8)
+	{
+		if (val & 8)
+		{
+			// バッファリセット
+			g_pcm86.wrtpos = 0;
+			g_pcm86.readpos = 0;
+			g_pcm86.realbuf = 0;
+			g_pcm86.virbuf = 0;
+			g_pcm86.lastclock = CPU_CLOCK + CPU_BASECLOCK - CPU_REMCLOCK;
+			g_pcm86.lastclock <<= 6;
+		}
 	}
-	if (/*(xchgbit & 0x10) &&*/ (!(val & 0x10))) {
+	// 割り込み消去
+	if ((!(val & 0x10)))
+	{
 		g_pcm86.irqflag = 0;
-//		g_pcm86.write = 0;
-//		g_pcm86.reqirq = 0;
+	}
+	// 割り込み条件を満たしていれば強制的に割り込む　ポリスノーツ用
+	if (g_pcm86.virbuf <= g_pcm86.fifosize)
+	{
+		g_pcm86.irqflag = 1;
+		//g_pcm86.reqirq = 1;
 	}
 	// サンプリングレート変更
 	if (xchgbit & 7) {
 		g_pcm86.rescue = pcm86rescue[val & 7] << g_pcm86.stepbit;
 		pcm86_setpcmrate(val);
 	}
-#if 1	// これ重大なバグ....
 	g_pcm86.fifo = val;
-#else
-	g_pcm86.fifo = val & (~0x10);
-#endif
 	if ((xchgbit & 0x80) && (val & 0x80)) {
 		g_pcm86.lastclock = CPU_CLOCK + CPU_BASECLOCK - CPU_REMCLOCK;
 		g_pcm86.lastclock <<= 6;
 	}
-	pcm86_setnextintr();
+	if (g_pcm86.reqirq)
+	{
+		pcm86_setnextintr();
+	}
 	(void)port;
 }
 
@@ -127,7 +137,10 @@ static void IOOUTCALL pcm86_oa46a(UINT port, REG8 val) {
 		g_pcm86.stepmask = (1 << g_pcm86.stepbit) - 1;
 		g_pcm86.rescue = pcm86rescue[g_pcm86.fifo & 7] << g_pcm86.stepbit;
 	}
-	pcm86_setnextintr();
+	if (g_pcm86.reqirq)
+	{
+		pcm86_setnextintr();
+	}
 	(void)port;
 }
 
@@ -179,29 +192,50 @@ static REG8 IOINPCALL pcm86_ia460(UINT port)
 
 static REG8 IOINPCALL pcm86_ia466(UINT port) {
 
+	UINT64	cur;
 	UINT64	past;
+	UINT64  pastCycle;
 	UINT64	cnt;
 	UINT64	stepclock;
 	REG8	ret;
-	
-	past = CPU_CLOCK + CPU_BASECLOCK - CPU_REMCLOCK;
-	past <<= 6;
-	past -= g_pcm86.lastclock;
+	int smpsize[0x8] = { 0, 2, 2, 4, 0, 1, 1, 2 };
+
 	stepclock = g_pcm86.stepclock;
-	if (past >= stepclock) {
+
+	pastCycle = (UINT64)UINT_MAX << 6;
+	cur = CPU_CLOCK + CPU_BASECLOCK - CPU_REMCLOCK;
+	cur <<= 6;
+	past = (cur + pastCycle - g_pcm86.lastclock) % pastCycle;
+	if (past > pastCycle / 2)
+	{
+		// 負の値になってしまっているとき
+		if (past < pastCycle - stepclock * 4)
+		{
+			// かなり小さいならリセットをかける
+			past = 1;
+			g_pcm86.lastclock = cur - 1;
+		}
+		else
+		{
+			// 小さいなら様子見で0扱いとする
+			past = 0;
+		}
+	}
+	if (past >= g_pcm86.stepclock)
+	{
 		cnt = past / stepclock;
-		g_pcm86.lastclock += (cnt * stepclock);
+		g_pcm86.lastclock = (g_pcm86.lastclock + cnt * stepclock) % pastCycle;
 		past -= cnt * stepclock;
-		if (g_pcm86.fifo & 0x80) {
-			//sound_sync();
+		if (g_pcm86.fifo & 0x80)
+		{
 			RECALC_NOWCLKWAIT(cnt);
 		}
 	}
-	ret = ((past << 1) >= stepclock)?1:0;
+	ret = ((past << 1) >= stepclock) ? 1 : 0;
 	if (g_pcm86.virbuf >= PCM86_LOGICALBUF) {			// バッファフル
 		ret |= 0x80;
 	}
-	else if (g_pcm86.virbuf <= 0) {						// バッファ０
+	else if (g_pcm86.virbuf <= g_pcm86.stepmask) {						// バッファ０ stepmask以下のときも実質空
 		ret |= 0x40;								// ちと変…
 	}
 	(void)port;
@@ -215,7 +249,7 @@ static REG8 IOINPCALL pcm86_ia468(UINT port) {
 	
 	ret = g_pcm86.fifo & (~0x10);
 #if 1
-	if (pcm86gen_intrq()) {
+	if (pcm86gen_intrq(0)) {
 		ret |= 0x10;
 	}
 #elif 1		// むしろこう？

@@ -580,10 +580,10 @@ cpucontinue:;
 							pccore.multiple -= 1;
 						}
 						pccore.realclock = pccore.baseclock * pccore.multiple;
+						pcm86_changeclock(oldmultiple);
 						nevent_changeclock(oldmultiple, pccore.multiple);
 
 						sound_changeclock();
-						pcm86_changeclock(oldmultiple);
 						beep_changeclock();
 						mpu98ii_changeclock();
 #if defined(SUPPORT_SMPU98)
@@ -614,10 +614,10 @@ cpucontinue:;
 								pccore.multiple += 1;
 							}
 							pccore.realclock = pccore.baseclock * pccore.multiple;
+							pcm86_changeclock(oldmultiple);
 							nevent_changeclock(oldmultiple, pccore.multiple);
 
 							sound_changeclock();
-							pcm86_changeclock(oldmultiple);
 							beep_changeclock();
 							mpu98ii_changeclock();
 #if defined(SUPPORT_SMPU98)

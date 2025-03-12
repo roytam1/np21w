@@ -8,6 +8,22 @@
 #include "cpucore.h"
 #include "pccore.h"
 
+#if 1
+#undef	TRACEOUT
+#define	TRACEOUT(s)	(void)(s)
+static void trace_fmt_ex(const char* fmt, ...)
+{
+	char stmp[2048];
+	va_list ap;
+	va_start(ap, fmt);
+	vsprintf(stmp, fmt, ap);
+	strcat(stmp, "\n");
+	va_end(ap);
+	OutputDebugStringA(stmp);
+}
+#define	TRACEOUT(s)	trace_fmt_ex s
+#endif	/* 1 */
+
 	_NEVENT g_nevent;
 	
 #if defined(SUPPORT_MULTITHREAD)
@@ -182,8 +198,6 @@ void nevent_changeclock(UINT32 oldclock, UINT32 newclock)
 #if defined(SUPPORT_MULTITHREAD)
 	nevent_enter_criticalsection();
 #endif
-	newclock /= pccore.baseclock;
-	oldclock /= pccore.baseclock;
 
 	if(oldclock > 0){
 		for (i = 0; i < g_nevent.readyevents; i++)
@@ -191,11 +205,15 @@ void nevent_changeclock(UINT32 oldclock, UINT32 newclock)
 			id = g_nevent.level[i];
 			item = &g_nevent.item[id];
 			if(item->clock > 0){
-				item->clock = item->clock * newclock / oldclock;
+				item->clock = (item->clock * (newclock + oldclock / 2)) / oldclock;
+				if (item->clock == 0) item->clock = 1;
 			}
 		}
-		CPU_BASECLOCK = CPU_BASECLOCK * newclock / oldclock;
-		CPU_REMCLOCK = CPU_REMCLOCK * newclock / oldclock;
+		CPU_BASECLOCK = (SINT32)((SINT64)CPU_BASECLOCK * ((SINT64)newclock + (SINT64)oldclock / 2) / (SINT64)oldclock);
+		if (CPU_REMCLOCK > 0)
+		{
+			CPU_REMCLOCK = (SINT32)((SINT64)CPU_REMCLOCK * ((SINT64)newclock + (SINT64)oldclock / 2) / (SINT64)oldclock);
+		}
 	}
 #if defined(SUPPORT_MULTITHREAD)
 	nevent_leave_criticalsection();

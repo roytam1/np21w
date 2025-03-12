@@ -3538,21 +3538,43 @@ static void processwait(UINT cnt) {
 #endif
 	}
 	else {
-		if(lateframecount){
-			Sleep(0);
-			if(skipnext > 0) skipnext--;
-		}else{
-			if(skipnext > 0 && averageskipcounter==0){
+		if (lateframecount)
+		{
+			//Sleep(0);
+			if (skipnext > 0) skipnext--;
+		}
+		else
+		{
+			if (skipnext > 0 && averageskipcounter == 0)
+			{
 				Sleep(skipnext); // ‹x‚ß‚é‚¾‚¯‹x‚Þ
-			}else{
-				Sleep(0);
 			}
-			if(averageskipcounter>1){
-				if(!incskip && skipnext < 10) skipnext++;
+			else
+			{
+				//Sleep(0);
+			}
+			if (averageskipcounter > 1)
+			{
+				if (!incskip && skipnext < 10) skipnext++;
 				incskip = 1;
 			}
 			averageskipcounter++;
 		}
+		//if(lateframecount){
+		//	Sleep(0);
+		//	if(skipnext > 0) skipnext--;
+		//}else{
+		//	if(skipnext > 0 && averageskipcounter==0){
+		//		Sleep(skipnext); // ‹x‚ß‚é‚¾‚¯‹x‚Þ
+		//	}else{
+		//		Sleep(0);
+		//	}
+		//	if(averageskipcounter>1){
+		//		if(!incskip && skipnext < 10) skipnext++;
+		//		incskip = 1;
+		//	}
+		//	averageskipcounter++;
+		//}
 	}
 }
 

@@ -53,6 +53,43 @@ static CT1741FN last_ct1741fn = nomake;
 static int playwaitcounter = 0;
 static int testflag = 0;
 
+#if defined(SUPPORT_MULTITHREAD)
+static int ct1741_cs_initialized = 0;
+static CRITICAL_SECTION ct1741_cs;
+
+void ct1741cs_enter_criticalsection(void)
+{
+	if (!ct1741_cs_initialized) return;
+	EnterCriticalSection(&ct1741_cs);
+}
+void ct1741cs_leave_criticalsection(void)
+{
+	if (!ct1741_cs_initialized) return;
+	LeaveCriticalSection(&ct1741_cs);
+}
+
+void ct1741cs_initialize(void)
+{
+	/* クリティカルセクション準備 */
+	if (!ct1741_cs_initialized)
+	{
+		memset(&ct1741_cs, 0, sizeof(ct1741_cs));
+		InitializeCriticalSection(&ct1741_cs);
+		ct1741_cs_initialized = 1;
+	}
+}
+void ct1741cs_shutdown(void)
+{
+	/* クリティカルセクション破棄 */
+	if (ct1741_cs_initialized)
+	{
+		memset(&ct1741_cs, 0, sizeof(ct1741_cs));
+		DeleteCriticalSection(&ct1741_cs);
+		ct1741_cs_initialized = 0;
+	}
+}
+#endif
+
 void ct1741_initialize(UINT rate) {
 
 	g_sb16.dsp_info.dma.rate2 = ct1741_np2_rate = rate;
@@ -255,6 +292,9 @@ static void ct1741_exec_command()
 	case 0x10:	/* Direct DAC */
 		ct1741_change_mode(DSP_MODE_DAC);
 		// PIO再生のつもりだがノーチェック
+#if defined(SUPPORT_MULTITHREAD)
+			ct1741cs_enter_criticalsection();
+#endif
 		if(g_sb16.dsp_info.dma.bufdatas < DMA_BUFSIZE){
 			g_sb16.dsp_info.dma.buffer[g_sb16.dsp_info.dma.bufpos] = g_sb16.dsp_info.in.data[0];
 			g_sb16.dsp_info.dma.bufpos++;
@@ -262,6 +302,9 @@ static void ct1741_exec_command()
 			g_sb16.dsp_info.dma.bufdatas++;
 			last_ct1741fn = pcm8mPIO;
 		}
+#if defined(SUPPORT_MULTITHREAD)
+			ct1741cs_leave_criticalsection();
+#endif
 		if(g_sb16.dsp_info.dma.bufdatas > DMA_BUFSIZE / 2 && !g_sb16.dsp_info.write_busy){
 			g_sb16.dsp_info.write_busy = 1;
 			//sound_sync();
@@ -657,6 +700,9 @@ void ct1741_dma(NEVENTITEM item)
 			if (g_sb16.dsp_info.mode == DSP_MODE_DMA || g_sb16.dsp_info.mode == DSP_MODE_DMA_MASKED) {
 				g_sb16.dsp_info.write_busy = 1;
 
+#if defined(SUPPORT_MULTITHREAD)
+				ct1741cs_enter_criticalsection();
+#endif
 				// 転送～
 				// DMAでデータを取るのが速すぎるといかれるのでバッファサイズに制限を設けた方が良いのかなと思いました（無意味な気もする）
 				//if(g_sb16.dsp_info.dma.bufsize * BUF_ALIGN[g_sb16.dsp_info.dma.mode|g_sb16.dsp_info.dma.stereo <<3] / 4 * g_sb16.dsp_info.freq / 44100 < g_sb16.dsp_info.dma.bufdatas){
@@ -691,8 +737,11 @@ void ct1741_dma(NEVENTITEM item)
 						playwaitcounter = 0;
 					}
 				}
-				printf("g_sb16.dsp_info.dma.mode = %x\n",g_sb16.dsp_info.dma.mode);
+				//TRACEOUT(("g_sb16.dsp_info.dma.mode = %x\n",g_sb16.dsp_info.dma.mode));
 				//g_sb16.dsp_info.dma.bufdatas += r;
+#if defined(SUPPORT_MULTITHREAD)
+				ct1741cs_leave_criticalsection();
+#endif
 
 				// 一定のデータ量を転送したら割り込みを発生させる（フォーマットによってなぜか違いますが何故なのかは不明）
 				g_sb16.dsp_info.smpcounter += r;
@@ -787,6 +836,9 @@ REG8 DMACCALL ct1741dmafunc(REG8 func)
 	switch(func) {
 		case DMAEXT_START:
 			// DMA転送開始
+#if defined(SUPPORT_MULTITHREAD)
+			ct1741cs_enter_criticalsection();
+#endif
 			g_sb16.dsp_info.dma.laststartaddr = g_sb16.dsp_info.dma.chan->startaddr;
 			g_sb16.dsp_info.dma.laststartcount = g_sb16.dsp_info.dma.chan->startcount;
 			if((g_sb16.dsp_info.dmach & 0xe0) && (g_sb16.dsp_info.dma.mode==DSP_DMA_16 || g_sb16.dsp_info.dma.mode==DSP_DMA_NONE)){
@@ -805,6 +857,9 @@ REG8 DMACCALL ct1741dmafunc(REG8 func)
 			g_sb16.dsp_info.smpcounter2 = 0;
 			g_sb16.dsp_info.dma.bufdatas = 0;
 			g_sb16.dsp_info.dma.bufpos = 0;
+#if defined(SUPPORT_MULTITHREAD)
+			ct1741cs_leave_criticalsection();
+#endif
 			playwaitcounter = DMA_BUFSIZE * BUF_ALIGN[g_sb16.dsp_info.dma.mode|g_sb16.dsp_info.dma.stereo <<3] * g_sb16.dsp_info.freq / 44100 / 16;
 			cnt = pccore.realclock / g_sb16.dsp_info.freq * g_sb16.dsp_info.dma.rate2 / g_sb16.dsp_info.freq * (DMAPLAY_ADJUST_VALUE * g_sb16.dsp_info.freq / 44100);
 			if(cnt != 0){
@@ -1100,6 +1155,9 @@ static void SOUNDCALL ct1741_getpcm(DMA_INFO *ct, SINT32 *pcm, UINT count) {
 	// 再生用バッファに送る
 	if(playwaitcounter <= 0){
 		int idx = g_sb16.dsp_info.dma.mode|g_sb16.dsp_info.dma.stereo << 3;
+#if defined(SUPPORT_MULTITHREAD)
+		ct1741cs_enter_criticalsection();
+#endif
 		if(idx!=0){
 			(*ct1741fn[idx])(ct, pcm, count);
 			last_ct1741fn = ct1741fn[idx];
@@ -1108,6 +1166,9 @@ static void SOUNDCALL ct1741_getpcm(DMA_INFO *ct, SINT32 *pcm, UINT count) {
 		}else{
 			(*ct1741fn[idx])(ct, pcm, count);
 		}
+#if defined(SUPPORT_MULTITHREAD)
+		ct1741cs_leave_criticalsection();
+#endif
 	}
 }
 

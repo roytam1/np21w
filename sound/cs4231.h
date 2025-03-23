@@ -161,6 +161,13 @@ void cs4231_dma(NEVENTITEM item);
 REG8 DMACCALL cs4231dmafunc(REG8 func);
 void cs4231_datasend(REG8 dat);
 
+#if defined(SUPPORT_MULTITHREAD)
+void cs4231cs_enter_criticalsection();
+void cs4231cs_leave_criticalsection();
+void cs4231cs_initialize();
+void cs4231cs_shutdown();
+#endif
+
 void cs4231_initialize(UINT rate);
 void cs4231_setvol(UINT vol);
 

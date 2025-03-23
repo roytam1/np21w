@@ -143,6 +143,13 @@ typedef struct { // ステートセーブ互換性維持用（変更禁止）
 } DSP_INFO_OLD;
 
 
+#if defined(SUPPORT_MULTITHREAD)
+void ct1741cs_enter_criticalsection();
+void ct1741cs_leave_criticalsection();
+void ct1741cs_initialize();
+void ct1741cs_shutdown();
+#endif
+
 void ct1741io_reset();
 void ct1741io_bind(void);
 void ct1741io_unbind(void);

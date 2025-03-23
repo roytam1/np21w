@@ -2,6 +2,18 @@
 
 #if 0
 #undef	TRACEOUT
+static void trace_fmt_ex(const char* fmt, ...)
+{
+	char stmp[2048];
+	va_list ap;
+	va_start(ap, fmt);
+	vsprintf(stmp, fmt, ap);
+	strcat(stmp, "\n");
+	va_end(ap);
+	OutputDebugStringA(stmp);
+}
+#define	TRACEOUT(s)	trace_fmt_ex s
+#else
 #define	TRACEOUT(s)	(void)(s)
 #endif	/* 1 */
 
@@ -208,7 +220,7 @@ void atapicmd_a0(IDEDRV drv) {
 				if(mediachangeflag==MEDIA_CHANGE_WAIT){
 					nevent_set(NEVENT_CDWAIT, 500, cdchange_timeoutproc, NEVENT_ABSOLUTE); // OSë§Ç™CDÇç√ë£ÇµÇƒÇ¢ÇÈÇÊÇ§Ç»ÇÃÇ≈çXÇ…ã}Ç¢Ç≈åä∑
 				}else if(mediachangeflag==0){
-					//nevent_setbyms(NEVENT_CDWAIT, 1000, cdchange_timeoutproc, NEVENT_ABSOLUTE); // OSë§Ç™CDÇ™ñ≥Ç¢Ç∆îFéØÇµÇΩÇÊÇ§Ç»ÇÃÇ≈ã}Ç¢Ç≈åä∑
+					nevent_setbyms(NEVENT_CDWAIT, 1000, cdchange_timeoutproc, NEVENT_ABSOLUTE); // OSë§Ç™CDÇ™ñ≥Ç¢Ç∆îFéØÇµÇΩÇÊÇ§Ç»ÇÃÇ≈ã}Ç¢Ç≈åä∑
 				}
 			}
 			if(mediachangeflag < MEDIA_CHANGE_WAIT) mediachangeflag++;
@@ -235,24 +247,25 @@ void atapicmd_a0(IDEDRV drv) {
 				//}
 			}else{
 				// for WinNT,2000 setup
-				if(mediachangeflag >= MEDIA_CHANGE_WAIT){
+				//if(mediachangeflag >= MEDIA_CHANGE_WAIT){
 					drv->media &= ~IDEIO_MEDIA_CHANGED;
-					drv->asc = 0x0204; // LOGICAL DRIVE NOT READY - INITIALIZING COMMAND REQUIRED
+					drv->asc = ATAPI_ASC_MEDIUM_NOT_PRESENT;
+					//drv->asc = 0x0204; // LOGICAL DRIVE NOT READY - INITIALIZING COMMAND REQUIRED
 				//}else if(mediachangeflag >= 1){
 				//	drv->asc = 0x0204; // LOGICAL DRIVE NOT READY - INITIALIZING COMMAND REQUIRED
 				//	mediachangeflag++;
-				}else{
-					drv->asc = ATAPI_ASC_MEDIUM_NOT_PRESENT;
-//#if defined(CPUCORE_IA32)
-//					// Workaround for WinNT
-//					if (CPU_STAT_PM && !CPU_STAT_VM86) {
-						//mediachangeflag++;
-//					} else
-//#endif
-//					{
-						mediachangeflag = MEDIA_CHANGE_WAIT;
-					//}
-				}
+//				}else{
+//					drv->asc = ATAPI_ASC_MEDIUM_NOT_PRESENT;
+////#if defined(CPUCORE_IA32)
+////					// Workaround for WinNT
+////					if (CPU_STAT_PM && !CPU_STAT_VM86) {
+//						//mediachangeflag++;
+////					} else
+////#endif
+////					{
+//						mediachangeflag = MEDIA_CHANGE_WAIT;
+//					//}
+//				}
 			}
 			senderror(drv);
 			break;

@@ -3871,21 +3871,21 @@ void loadNP2INI(const OEMCHAR *fname){
 			}
 		}
 	}
-#if defined(SUPPORT_IDEIO)
-	// INI‚É‹L˜^‚³‚ê‚½CD‚ð‘}“ü
-	if (np2cfg.savecdfile) {
-		for (i = 0; i < 4; i++)
-		{
-			if (np2cfg.idetype[i] == IDETYPE_CDROM) {
-				LPCTSTR lpDisk = np2cfg.idecd[i];
-				if (lpDisk)
-				{
-					diskdrv_setsxsi(i, lpDisk);
-				}
-			}
-		}
-	}
-#endif
+//#if defined(SUPPORT_IDEIO)
+//	// INI‚É‹L˜^‚³‚ê‚½CD‚ð‘}“ü
+//	if (np2cfg.savecdfile) {
+//		for (i = 0; i < 4; i++)
+//		{
+//			if (np2cfg.idetype[i] == IDETYPE_CDROM) {
+//				LPCTSTR lpDisk = np2cfg.idecd[i];
+//				if (lpDisk)
+//				{
+//					diskdrv_setsxsi(i, lpDisk);
+//				}
+//			}
+//		}
+//	}
+//#endif
 	
 	scrndraw_redraw();
 	

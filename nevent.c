@@ -205,14 +205,16 @@ void nevent_changeclock(UINT32 oldclock, UINT32 newclock)
 			id = g_nevent.level[i];
 			item = &g_nevent.item[id];
 			if(item->clock > 0){
-				item->clock = (item->clock * (newclock + oldclock / 2)) / oldclock;
-				if (item->clock == 0) item->clock = 1;
+				SINT64 newClock = ((SINT64)item->clock * newclock) / oldclock;
+				if (newClock <= 0) newClock = 1;
+				if (newClock > INT_MAX) newClock = INT_MAX;
+				item->clock = (SINT32)newClock;
 			}
 		}
-		CPU_BASECLOCK = (SINT32)((SINT64)CPU_BASECLOCK * ((SINT64)newclock + (SINT64)oldclock / 2) / (SINT64)oldclock);
+		CPU_BASECLOCK = (SINT32)(((SINT64)CPU_BASECLOCK * newclock + oldclock / 2) / (SINT64)oldclock);
 		if (CPU_REMCLOCK > 0)
 		{
-			CPU_REMCLOCK = (SINT32)((SINT64)CPU_REMCLOCK * ((SINT64)newclock + (SINT64)oldclock / 2) / (SINT64)oldclock);
+			CPU_REMCLOCK = (SINT32)(((SINT64)CPU_REMCLOCK * newclock + oldclock / 2) / (SINT64)oldclock);
 		}
 	}
 #if defined(SUPPORT_MULTITHREAD)
@@ -346,7 +348,15 @@ void nevent_set(NEVENTID id, SINT32 eventclock, NEVENTCB proc, NEVENTPOSITION ab
 
 void nevent_setbyms(NEVENTID id, SINT32 ms, NEVENTCB proc, NEVENTPOSITION absolute)
 {
-	nevent_set(id, (pccore.realclock / 1000) * ms, proc, absolute);
+	UINT64 waittime = (UINT64)(pccore.realclock / 1000) * ms;
+	if (waittime > INT_MAX - pccore.realclock)
+	{
+		nevent_set(id, INT_MAX - pccore.realclock, proc, absolute);
+	}
+	else
+	{
+		nevent_set(id, (SINT32)waittime, proc, absolute);
+	}
 }
 
 BOOL nevent_iswork(NEVENTID id)

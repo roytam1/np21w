@@ -328,9 +328,8 @@ void pcm86_changeclock(UINT oldmultiple)
 				//TRACEOUT(("%d %d %d", latvirbuf, pcm86->virbuf, past));
 			}
 			past = (cur + pastCycle - pcm86->lastclock) % pastCycle;
-			pcm86->lastclock = (cur + pastCycle - past * (newstepclock + pcm86->stepclock / 2) / pcm86->stepclock) % pastCycle; // •â³
+			pcm86->lastclock = (cur + pastCycle - (past * newstepclock + pcm86->stepclock / 2) / pcm86->stepclock) % pastCycle; // •â³
 			pcm86->stepclock = newstepclock;
-			pcm86_setnextintr();
 			//TRACEOUT(("changed"));
 		}else{
 			//pcm86->stepclock = ((UINT64)pccore.baseclock << 6);

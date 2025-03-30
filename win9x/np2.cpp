@@ -108,13 +108,11 @@
 
 #include	<process.h>
 
-#if defined(CPUCORE_IA32)
-extern "C" UINT8 cpu_drawskip;
-extern "C" UINT8 cpu_nowait;
 #if defined(SUPPORT_ASYNC_CPU)
-extern "C" double np2cpu_lastTimingValue;
-int np2cpu_lastTimingValid = 0;
-#endif
+extern "C" UINT8 pccore_asynccpu_drawskip;
+extern "C" UINT8 pccore_asynccpu_nowait;
+extern "C" double pccore_asynccpu_lastTimingValue;
+extern "C" int pccore_asynccpu_lastTimingValid;
 #endif
 extern bool scrnmng_create_pending; // グラフィックレンダラ生成保留中
 
@@ -209,7 +207,7 @@ static	TCHAR		szClassName[] = _T("NP2-MainWindow");
 						0,
 #endif	// defined(SUPPORT_WACOM_TABLET)
 #if defined(SUPPORT_MULTITHREAD)
-						0,
+						1,
 #endif	// defined(SUPPORT_MULTITHREAD)
 					};
 
@@ -275,6 +273,7 @@ char shift_on[256] = {0};
 
 // マルチスレッド用
 #if defined(SUPPORT_MULTITHREAD)
+static int np2_multithread_requestswitch = 0; // マルチスレッドモード切替要求フラグ
 static int np2_multithread_enable = 0; // マルチスレッドモード有効フラグ
 static BOOL np2_multithread_initialized = 0; // マルチスレッドモード初期化済みフラグ
 static HANDLE	np2_multithread_hThread = NULL; // エミュレーション用スレッド
@@ -639,6 +638,7 @@ static void changescreen(UINT8 newmode) {
 			if (scrnmng_create(g_scrnmode) != SUCCESS) {
 				scrnmng_create_pending = true;
 				//PostQuitMessage(0);
+				np2_multithread_LeaveCriticalSection();
 				np2_multithread_Resume();
 				return;
 			}
@@ -993,6 +993,13 @@ static void OnCommand(HWND hWnd, WPARAM wParam)
 				}
 			}
 			winuileave();
+#if defined(SUPPORT_MULTITHREAD)
+			if (!!np2_multithread_enable != !!np2oscfg.multithread)
+			{
+				// マルチスレッドモード切替要求
+				np2_multithread_requestswitch = 1;
+			}
+#endif
 			break;
 
 		case IDM_CHANGECLK_X2:
@@ -3512,13 +3519,11 @@ static void processwait(UINT cnt) {
 	static int incskip = 0;
 
 	UINT count = timing_getcount();
-#if defined(CPUCORE_IA32)
 #if defined(SUPPORT_ASYNC_CPU)
-	if (!np2cpu_lastTimingValid) {
-		np2cpu_lastTimingValue = timing_getcount_raw();
-		np2cpu_lastTimingValid = 1;
+	if (!pccore_asynccpu_lastTimingValid) {
+		pccore_asynccpu_lastTimingValue = timing_getcount_raw();
+		pccore_asynccpu_lastTimingValid = 1;
 	}
-#endif
 #endif
 	if (count+lateframecount >= cnt) {
 		lateframecount = lateframecount + count - cnt;
@@ -3538,10 +3543,8 @@ static void processwait(UINT cnt) {
 		}
 		incskip = 0;
 		averageskipcounter = 0;
-#if defined(CPUCORE_IA32)
 #if defined(SUPPORT_ASYNC_CPU)
-		np2cpu_lastTimingValid = 0;
-#endif
+		pccore_asynccpu_lastTimingValid = 0;
 #endif
 	}
 	else {
@@ -3901,6 +3904,10 @@ void loadNP2INI(const OEMCHAR *fname){
 	start_hook_systemkey();
 #endif
 
+#if defined(SUPPORT_MULTITHREAD)
+	np2_multithread_requestswitch = 1;
+#endif
+
 	np2_multithread_Resume();
 }
 
@@ -3909,9 +3916,9 @@ static unsigned int __stdcall np2_multithread_EmulatorThreadMain(LPVOID vdParam)
 	while (!np2_multithread_hThread_requestexit) {
 		if (!np2stopemulate && !np2_multithread_pauseemulation && !np2userpause) {
 			UINT8 drawskip = (np2oscfg.DRAW_SKIP == 0 ? 1 : np2oscfg.DRAW_SKIP);
-#if defined(CPUCORE_IA32)
-			cpu_drawskip = drawskip;
-			cpu_nowait = np2oscfg.NOWAIT;
+#if defined(SUPPORT_ASYNC_CPU)
+			pccore_asynccpu_drawskip = drawskip;
+			pccore_asynccpu_nowait = np2oscfg.NOWAIT;
 #endif
 			np2_multithread_pausing = false;
 			if (np2oscfg.NOWAIT) {
@@ -3974,8 +3981,6 @@ static unsigned int __stdcall np2_multithread_EmulatorThreadMain(LPVOID vdParam)
 			}
 			if(autokey_sendbufferlen > 0) 
 				autoSendKey(); // 自動キー送信
-			
-			scrnmng_delaychangemode();
 		}
 		else if (np2_multithread_pauseemulation == 1) {
 			np2_multithread_pausing = true;
@@ -4012,6 +4017,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInst,
 #endif
 	BOOL		xrollkey;
 	int			winx, winy;
+	int			terminateFlag = 0;
 	
 #ifdef _DEBUG
 	// 使うときはstdlib.hとcrtdbg.hをインクルードする
@@ -4059,7 +4065,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInst,
 #endif	// defined(SUPPORT_HOSTDRV)
 
 #if defined(SUPPORT_MULTITHREAD)
-	np2_multithread_enable = np2oscfg.multithread;
 	np2_multithread_Initialize();
 #endif
 
@@ -4396,140 +4401,186 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInst,
 	timeBeginPeriod(1);
 	
 #if defined(SUPPORT_MULTITHREAD)
-	if(np2_multithread_enable){
-		UINT_PTR tmrID;
-		const int tmrInterval = 50;
-		// マルチスレッドモード
-		framereset = framereset_MT_EmulateThread;
-		np2_multithread_StartThread();
-		tmrID = SetTimer(hWnd, 23545, tmrInterval, NULL);
-		while(1) {
-			if (!GetMessage(&msg, NULL, 0, 0)) {
-				break;
-			}
-			if ((msg.hwnd != hWnd) ||
-				((msg.message != WM_SYSKEYDOWN) &&
-				(msg.message != WM_SYSKEYUP))) {
-				if(msg.message == WM_TIMER && msg.wParam == tmrID){
-					framereset_MT_UIThread(1);
+	do
+	{
+		np2_multithread_requestswitch = 0;
+		np2_multithread_enable = np2oscfg.multithread;
+		if (np2_multithread_enable)
+		{
+			UINT_PTR tmrID;
+			const int tmrInterval = 50;
+			// マルチスレッドモード
+			framereset = framereset_MT_EmulateThread;
+			np2_multithread_StartThread();
+			tmrID = SetTimer(hWnd, 23545, tmrInterval, NULL);
+			while (1)
+			{
+				if (!GetMessage(&msg, NULL, 0, 0))
+				{
+					terminateFlag = 1;
+					break;
+				}
+				if ((msg.hwnd != hWnd) ||
+					((msg.message != WM_SYSKEYDOWN) &&
+						(msg.message != WM_SYSKEYUP)))
+				{
+					if (msg.message == WM_TIMER && msg.wParam == tmrID)
+					{
+						framereset_MT_UIThread(1);
 #if defined(SUPPORT_DCLOCK)
-					DispClock::GetInstance()->Update();
+						DispClock::GetInstance()->Update();
 #endif
 #if defined(SUPPORT_VSTi)
-					CVstEditWnd::OnIdle();
+						CVstEditWnd::OnIdle();
 #endif	// defined(SUPPORT_VSTi)
+					}
+					TranslateMessage(&msg);
 				}
-				TranslateMessage(&msg);
-			}
-			DispatchMessage(&msg);
-			mousemng_UIThreadSync();
-			scrnmng_UIThreadProc();
-		}
-		KillTimer(hWnd, tmrID);
-	}else
-#endif
-	{
-		lateframecount = 0;
-		while(1) {
-			if (!np2stopemulate && !np2userpause) {
-				if (PeekMessage(&msg, 0, 0, 0, PM_NOREMOVE)) {
-					if (!GetMessage(&msg, NULL, 0, 0)) {
-						break;
-					}
-					if ((msg.hwnd != hWnd) ||
-						((msg.message != WM_SYSKEYDOWN) &&
-						(msg.message != WM_SYSKEYUP))) {
-						TranslateMessage(&msg);
-					}
-					DispatchMessage(&msg);
-				}
-				else {
-					UINT8 drawskip = (np2oscfg.DRAW_SKIP == 0 ? 1 : np2oscfg.DRAW_SKIP);
-#if defined(CPUCORE_IA32)
-					cpu_drawskip = drawskip;
-					cpu_nowait = np2oscfg.NOWAIT;
-#endif
-					if (np2oscfg.NOWAIT) {
-						ExecuteOneFrame(framecnt == 0);
-						if (drawskip) {		// nowait frame skip
-							framecnt++;
-							if (framecnt >= drawskip) {
-								processwait(0);
-								soundmng_sync();
-							}
-						}
-						else {							// nowait auto skip
-							framecnt = 1;
-							if (timing_getcount()) {
-								processwait(0);
-								soundmng_sync();
-							}
-						}
-					}
-					else if (drawskip) {		// frame skip
-						if (framecnt < drawskip) {
-							ExecuteOneFrame(framecnt == 0);
-							framecnt++;
-						}
-						else {
-							processwait(drawskip);
-							soundmng_sync();
-						}
-					}
-					else {								// auto skip
-						if (!waitcnt) {
-							UINT cnt;
-							ExecuteOneFrame(framecnt == 0);
-							framecnt++;
-							cnt = timing_getcount();
-							if (framecnt > cnt) {
-								waitcnt = framecnt;
-								if (framemax > 1) {
-									framemax--;
-								}
-							}
-							else if (framecnt >= framemax) {
-								if (framemax < 12) {
-									framemax++;
-								}
-								if (cnt >= 12) {
-									timing_reset();
-								}
-								else {
-									timing_setcount(cnt - framecnt);
-								}
-								framereset(0);
-							}
-						}
-						else {
-							processwait(waitcnt);
-							soundmng_sync();
-							waitcnt = framecnt;
-						}
-					}
-					if(autokey_sendbufferlen > 0) 
-						autoSendKey(); // 自動キー送信
-				}
+				DispatchMessage(&msg);
 				scrnmng_delaychangemode();
 				mousemng_UIThreadSync();
 				scrnmng_UIThreadProc();
+				if (np2_multithread_requestswitch) break;
 			}
-			else if ((np2stopemulate == 1 || np2userpause) ||				// background sleep
-					(PeekMessage(&msg, 0, 0, 0, PM_NOREMOVE))) {
-				if(np2stopemulate == 1) {
-					lateframecount = 0;
-					timing_setcount(0);
+			KillTimer(hWnd, tmrID);
+		}
+		else
+#endif
+		{
+			framereset = framereset_ALL;
+			lateframecount = 0;
+			while (1)
+			{
+				if (!np2stopemulate && !np2userpause)
+				{
+					if (PeekMessage(&msg, 0, 0, 0, PM_NOREMOVE))
+					{
+						if (!GetMessage(&msg, NULL, 0, 0))
+						{
+							terminateFlag = 1;
+							break;
+						}
+						if ((msg.hwnd != hWnd) ||
+							((msg.message != WM_SYSKEYDOWN) &&
+								(msg.message != WM_SYSKEYUP)))
+						{
+							TranslateMessage(&msg);
+						}
+						DispatchMessage(&msg);
+					}
+					else
+					{
+						UINT8 drawskip = (np2oscfg.DRAW_SKIP == 0 ? 1 : np2oscfg.DRAW_SKIP);
+#if defined(SUPPORT_ASYNC_CPU)
+						pccore_asynccpu_drawskip = drawskip;
+						pccore_asynccpu_nowait = np2oscfg.NOWAIT;
+#endif
+						if (np2oscfg.NOWAIT)
+						{
+							ExecuteOneFrame(framecnt == 0);
+							if (drawskip)
+							{		// nowait frame skip
+								framecnt++;
+								if (framecnt >= drawskip)
+								{
+									processwait(0);
+									soundmng_sync();
+								}
+							}
+							else
+							{							// nowait auto skip
+								framecnt = 1;
+								if (timing_getcount())
+								{
+									processwait(0);
+									soundmng_sync();
+								}
+							}
+						}
+						else if (drawskip)
+						{		// frame skip
+							if (framecnt < drawskip)
+							{
+								ExecuteOneFrame(framecnt == 0);
+								framecnt++;
+							}
+							else
+							{
+								processwait(drawskip);
+								soundmng_sync();
+							}
+						}
+						else
+						{								// auto skip
+							if (!waitcnt)
+							{
+								UINT cnt;
+								ExecuteOneFrame(framecnt == 0);
+								framecnt++;
+								cnt = timing_getcount();
+								if (framecnt > cnt)
+								{
+									waitcnt = framecnt;
+									if (framemax > 1)
+									{
+										framemax--;
+									}
+								}
+								else if (framecnt >= framemax)
+								{
+									if (framemax < 12)
+									{
+										framemax++;
+									}
+									if (cnt >= 12)
+									{
+										timing_reset();
+									}
+									else
+									{
+										timing_setcount(cnt - framecnt);
+									}
+									framereset(0);
+								}
+							}
+							else
+							{
+								processwait(waitcnt);
+								soundmng_sync();
+								waitcnt = framecnt;
+							}
+						}
+						if (autokey_sendbufferlen > 0)
+							autoSendKey(); // 自動キー送信
+					}
+					scrnmng_delaychangemode();
+					mousemng_UIThreadSync();
+					scrnmng_UIThreadProc();
 				}
-				if (!GetMessage(&msg, NULL, 0, 0)) {
-					break;
+				else if ((np2stopemulate == 1 || np2userpause) ||				// background sleep
+					(PeekMessage(&msg, 0, 0, 0, PM_NOREMOVE)))
+				{
+					if (np2stopemulate == 1)
+					{
+						lateframecount = 0;
+						timing_setcount(0);
+					}
+					if (!GetMessage(&msg, NULL, 0, 0))
+					{
+						terminateFlag = 1;
+						break;
+					}
+					TranslateMessage(&msg);
+					DispatchMessage(&msg);
 				}
-				TranslateMessage(&msg);
-				DispatchMessage(&msg);
+#if defined(SUPPORT_MULTITHREAD)
+				if (np2_multithread_requestswitch) break;
+#endif
 			}
 		}
-	}
 #if defined(SUPPORT_MULTITHREAD)
-	np2_multithread_WaitForExitThread();
+		np2_multithread_WaitForExitThread();
+	} while (np2_multithread_requestswitch && !terminateFlag);
 #endif
 
 	timeEndPeriod(1);

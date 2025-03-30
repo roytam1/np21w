@@ -24,7 +24,7 @@ LANGUAGE LANG_JAPANESE, SUBLANG_DEFAULT
 // Dialog
 //
 
-IDD_CONFIG DIALOG 0, 0, 182, 294
+IDD_CONFIG DIALOG 0, 0, 182, 310
 STYLE DS_SETFONT | DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Configure"
 CLASS "np2dialog"
@@ -59,6 +59,7 @@ BEGIN
     CONTROL         "Confirm dialog (on reset/exit)",IDC_COMFIRM,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,8,248,162,10
     CONTROL         "Resume",IDC_RESUME,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,8,262,162,10
     CONTROL         "Save window size",IDC_SAVEWINDOWSIZE,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,8,276,162,10
+    CONTROL         "Multi-thread mode", IDC_MULTITHREADMODE, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 8, 290, 162, 10
     DEFPUSHBUTTON   "&OK",IDOK,130,8,44,14,WS_GROUP
     PUSHBUTTON      "Cancel",IDCANCEL,130,26,44,14
 END
@@ -1021,7 +1022,7 @@ BEGIN
         MENUITEM SEPARATOR
         MENUITEM "&No wait",                    IDM_NOWAIT
         MENUITEM "&CPU clock stabilizer",       IDM_CPUSTABILIZER
-        MENUITEM "&Async CPU (experimental)",   IDM_ASYNCCPU
+        MENUITEM "Dyn&amic CPU clock adjustment",	IDM_ASYNCCPU
         MENUITEM SEPARATOR
         //MENUITEM "&Auto frame",                 IDM_AUTOFPS
         MENUITEM "F&ull frame",                 IDM_60FPS

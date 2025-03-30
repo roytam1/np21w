@@ -831,7 +831,7 @@ static const PFTBL s_IniItems[] =
 	PFVAL("PENTABFA", PFTYPE_BOOL,		&np2oscfg.pentabfa), // ペンタブレット アスペクト比固定モード
 #endif
 #if defined(SUPPORT_MULTITHREAD)
-	PFVAL("MTENABLE", PFRO_BOOL,		&np2oscfg.multithread), // マルチスレッドモード
+	PFVAL("MTENABLE", PFTYPE_BOOL,		&np2oscfg.multithread), // マルチスレッドモード
 #endif
 };
 

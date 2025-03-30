@@ -7,7 +7,7 @@
 #include	"fmboard.h"
 #include	"cs4231io.h"
 
-#if 1
+#if 0
 #undef	TRACEOUT
 #define	TRACEOUT(s)	(void)(s)
 static void trace_fmt_ex(const char* fmt, ...)
@@ -82,7 +82,7 @@ static void IOOUTCALL pcm86_oa466(UINT port, REG8 val) {
 static void IOOUTCALL pcm86_oa468(UINT port, REG8 val) {
 
 	REG8	xchgbit;
-	
+
 //	TRACEOUT(("86pcm out %.4x %.2x", port, val));
 	sound_sync();
 	xchgbit = g_pcm86.fifo ^ val;
@@ -154,6 +154,10 @@ static void IOOUTCALL pcm86_oa46a(UINT port, REG8 val) {
 #endif
 	}
 	else {
+		if ((val & 0xf) == 0xf)
+		{
+			return; // WORKAROUND: WinNT 3.5Œü‚¯@ˆÙíİ’è’l‚ğ’e‚­
+		}
 		g_pcm86.dactrl = val;
 		g_pcm86.stepbit = pcm86bits[(val >> 4) & 7];
 		g_pcm86.stepmask = (1 << g_pcm86.stepbit) - 1;

@@ -85,6 +85,7 @@
 #define IDC_SOUND_DEVICE_TYPE           11116
 #define IDC_SOUND_DEVICE_NAME           11117
 #define IDC_SAVEWINDOWSIZE              11118
+#define IDC_MULTITHREADMODE             11119
 #define IDC_DISKLABEL                   12101
 #define IDC_MAKE2DD                     12102
 #define IDC_MAKE2HD                     12103

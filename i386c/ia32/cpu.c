@@ -49,10 +49,6 @@
 #endif
 #endif
 
-UINT8 cpu_drawskip = 1;
-UINT8 cpu_nowait = 0;
-double np2cpu_lastTimingValue = 1.0;
-
 sigjmp_buf exec_1step_jmpbuf;
 
 #if defined(IA32_INSTRUCTION_TRACE)
@@ -284,21 +280,6 @@ exec_allstep(void)
 	int prefix;
 	UINT32 op;
 	void (*func)(void);
-#if defined(SUPPORT_ASYNC_CPU)
-	int remclkcnt = INT_MAX;
-	static int latecount = 0;
-	static int latecount2 = 0;
-	static unsigned int hltflag = 0;
-
-	if(latecount2==0){
-		if(latecount > 0){
-			//latecount--;
-		}else if (latecount < 0){
-			latecount++;
-		}
-	}
-	latecount2 = (latecount2+1) & 0x1fff;
-#endif
 	
 	do {
 
@@ -532,108 +513,4 @@ exec_allstep(void)
 cpucontinue:;
 
 	} while (CPU_REMCLOCK > 0);
-
-#if defined(SUPPORT_ASYNC_CPU)
-	// ”ñ“¯ŠúCPUˆ—
-	if(np2cfg.asynccpu && !cpu_nowait){
-#define LATECOUNTER_THRESHOLD	6
-#define LATECOUNTER_THRESHOLDM	2
-		if(CPU_STAT_HLT){
-			hltflag = pccore.multiple;
-		}
-		if (!asynccpu_fastflag && !asynccpu_lateflag) {
-			double timimg = np2cpu_lastTimingValue;
-			if (timimg > cpu_drawskip) {
-				latecount++;
-				if (latecount > +LATECOUNTER_THRESHOLD) {
-					if (pccore.multiple > 4) {
-						UINT32 oldmultiple = pccore.multiple;
-						if (pccore.multiple > 40) {
-							if (timimg > 2.0) {
-								pccore.multiple -= 10;
-							}
-							else if (timimg > 1.5) {
-								pccore.multiple -= 5;
-							}
-							else if (timimg > 1.2) {
-								pccore.multiple -= 3;
-							}
-							else {
-								pccore.multiple -= 1;
-							}
-						}
-						else if (pccore.multiple > 20) {
-							if (timimg > 2.0) {
-								pccore.multiple -= 6;
-							}
-							else if (timimg > 1.5) {
-								pccore.multiple -= 3;
-							}
-							else if (timimg > 1.2) {
-								pccore.multiple -= 2;
-							}
-							else {
-								pccore.multiple -= 1;
-							}
-						}
-						else {
-							pccore.multiple -= 1;
-						}
-						pccore.realclock = pccore.baseclock * pccore.multiple;
-						pcm86_changeclock(oldmultiple);
-						nevent_changeclock(oldmultiple, pccore.multiple);
-
-						sound_changeclock();
-						beep_changeclock();
-						mpu98ii_changeclock();
-#if defined(SUPPORT_SMPU98)
-						smpu98_changeclock();
-#endif
-						keyboard_changeclock();
-						mouseif_changeclock();
-						gdc_updateclock();
-					}
-
-					latecount = 0;
-				}
-				asynccpu_lateflag = 1;
-			}
-			else if(timimg < cpu_drawskip){
-				if (!hltflag && g_nevent.item[NEVENT_FLAMES].proc == screendisp && g_nevent.item[NEVENT_FLAMES].clock >= CPU_BASECLOCK) {
-					latecount--;
-					if (latecount < -LATECOUNTER_THRESHOLDM) {
-						if (pccore.multiple < pccore.maxmultiple) {
-							UINT32 oldmultiple = pccore.multiple;
-							if (timimg < 0.5) {
-								pccore.multiple += 3;
-							}
-							else if (timimg < 0.7) {
-								pccore.multiple += 2;
-							}
-							else {
-								pccore.multiple += 1;
-							}
-							pccore.realclock = pccore.baseclock * pccore.multiple;
-							pcm86_changeclock(oldmultiple);
-							nevent_changeclock(oldmultiple, pccore.multiple);
-
-							sound_changeclock();
-							beep_changeclock();
-							mpu98ii_changeclock();
-#if defined(SUPPORT_SMPU98)
-							smpu98_changeclock();
-#endif
-							keyboard_changeclock();
-							mouseif_changeclock();
-							gdc_updateclock();
-						}
-						latecount = 0;
-					}
-					asynccpu_fastflag = 1;
-				}
-			}
-		}
-	}
-	if(hltflag > 0) hltflag--;
-#endif
 }

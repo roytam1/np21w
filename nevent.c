@@ -8,7 +8,7 @@
 #include "cpucore.h"
 #include "pccore.h"
 
-#if 1
+#if 0
 #undef	TRACEOUT
 #define	TRACEOUT(s)	(void)(s)
 static void trace_fmt_ex(const char* fmt, ...)
@@ -25,6 +25,10 @@ static void trace_fmt_ex(const char* fmt, ...)
 #endif	/* 1 */
 
 	_NEVENT g_nevent;
+
+#if defined(SUPPORT_ASYNC_CPU)
+	extern int pccore_asynccpu_screendisp;
+#endif
 	
 #if defined(SUPPORT_MULTITHREAD)
 static int nevent_cs_initialized = 0;
@@ -170,6 +174,9 @@ void nevent_progress(void)
 			item->flag |= NEVENT_SETEVENT;
 			item->flag &= ~(NEVENT_ENABLE);
 //			TRACEOUT(("event = %x", id));
+#if defined(SUPPORT_ASYNC_CPU)
+			pccore_asynccpu_screendisp = (id == NEVENT_FLAMES && g_nevent.item[NEVENT_FLAMES].proc == screendisp);
+#endif
 		}
 		fevtchk |= (id==NEVENT_FLAMES ? 1 : 0);
 	}
@@ -194,27 +201,34 @@ void nevent_changeclock(UINT32 oldclock, UINT32 newclock)
 	UINT i;
 	NEVENTID id;
 	NEVENTITEM item;
+	SINT32 baseClock;
+	SINT32 remClock;
 	
 #if defined(SUPPORT_MULTITHREAD)
 	nevent_enter_criticalsection();
 #endif
 
-	if(oldclock > 0){
-		for (i = 0; i < g_nevent.readyevents; i++)
+	if (oldclock > 0)
+	{
+		if (g_nevent.readyevents)
 		{
-			id = g_nevent.level[i];
-			item = &g_nevent.item[id];
-			if(item->clock > 0){
-				SINT64 newClock = ((SINT64)item->clock * newclock) / oldclock;
-				if (newClock <= 0) newClock = 1;
-				if (newClock > INT_MAX) newClock = INT_MAX;
-				item->clock = (SINT32)newClock;
+			// イベントのクロック数を修正
+			for (i = 0; i < g_nevent.readyevents; i++)
+			{
+				id = g_nevent.level[i];
+				item = &g_nevent.item[id];
+				if (item->clock > 0)
+				{
+					SINT64 newClock = ((SINT64)item->clock * newclock + oldclock / 2) / oldclock;
+					if (item->clock > 0 && newClock <= 0) newClock = 1;
+					if (newClock > INT_MAX) newClock = INT_MAX;
+					item->clock = (SINT32)newClock;
+				}
 			}
-		}
-		CPU_BASECLOCK = (SINT32)(((SINT64)CPU_BASECLOCK * newclock + oldclock / 2) / (SINT64)oldclock);
-		if (CPU_REMCLOCK > 0)
-		{
-			CPU_REMCLOCK = (SINT32)(((SINT64)CPU_REMCLOCK * newclock + oldclock / 2) / (SINT64)oldclock);
+
+			// クロック変更のタイミングは CPU_BASECLOCK==CPU_REMCLOCK のタイミングになるように調整済み
+			CPU_BASECLOCK = g_nevent.item[g_nevent.level[0]].clock;
+			CPU_REMCLOCK = CPU_BASECLOCK;/* カウンタへセット */
 		}
 	}
 #if defined(SUPPORT_MULTITHREAD)

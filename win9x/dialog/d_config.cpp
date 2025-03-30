@@ -263,6 +263,11 @@ BOOL CConfigureDlg::OnInitDialog()
 	CheckDlgButton(IDC_COMFIRM, (np2oscfg.comfirm) ? BST_CHECKED : BST_UNCHECKED);
 	CheckDlgButton(IDC_RESUME, (np2oscfg.resume) ? BST_CHECKED : BST_UNCHECKED);
 	CheckDlgButton(IDC_SAVEWINDOWSIZE, (np2oscfg.svscrmul) ? BST_CHECKED : BST_UNCHECKED);
+#if defined(SUPPORT_MULTITHREAD)
+	CheckDlgButton(IDC_MULTITHREADMODE, (np2oscfg.multithread) ? BST_CHECKED : BST_UNCHECKED);
+#else
+	GetDlgItem(IDC_MULTITHREADMODE).EnableWindow(FALSE);
+#endif
 	SetClock();
 	m_baseClock.SetFocus();
 
@@ -986,7 +991,15 @@ void CConfigureDlg::OnOK()
 		np2oscfg.svscrmul = bSaveScrnMul;
 		nUpdated |= SYS_UPDATEOSCFG;
 	}
+#if defined(SUPPORT_MULTITHREAD)
+	const UINT8 bMultithreadMode = (IsDlgButtonChecked(IDC_MULTITHREADMODE) != BST_UNCHECKED) ? 1 : 0;
+	if (np2oscfg.multithread != bMultithreadMode)
+	{
+		np2oscfg.multithread = bMultithreadMode;
+		nUpdated |= SYS_UPDATEOSCFG;
+	}
 	sysmng_update(nUpdated);
+#endif
 
 	CDlgProc::OnOK();
 }

@@ -296,7 +296,14 @@ static void setdintr(IDEDRV drv, UINT8 errno, UINT8 status, UINT32 delay) {
 		//nevent_set(NEVENT_SASIIO, (pccore.realclock / 1000 / 1000) * delay, ideioint, NEVENT_ABSOLUTE);
 
 		// 指定した時間遅延（クロック数）
-		nevent_set(NEVENT_SASIIO, delay, ideioint, NEVENT_ABSOLUTE);
+		if (delay == 0)
+		{
+			ideioint(&g_nevent.item[NEVENT_SASIIO]);
+		}
+		else
+		{
+			nevent_set(NEVENT_SASIIO, delay, ideioint, NEVENT_ABSOLUTE);
+		}
 	}
 }
 static void setdintr2(IDEDRV drv, UINT8 errno, UINT8 status, UINT32 delay) {
@@ -310,7 +317,14 @@ static void setdintr2(IDEDRV drv, UINT8 errno, UINT8 status, UINT32 delay) {
 		//nevent_set(NEVENT_SASIIO, (pccore.realclock / 1000 / 1000) * delay, ideioint, NEVENT_ABSOLUTE);
 
 		// 指定した時間遅延（クロック数）
-		nevent_set(NEVENT_SASIIO, delay, ideioint2, NEVENT_ABSOLUTE);
+		if (delay == 0)
+		{
+			ideioint2(&g_nevent.item[NEVENT_SASIIO]);
+		}
+		else
+		{
+			nevent_set(NEVENT_SASIIO, delay, ideioint2, NEVENT_ABSOLUTE);
+		}
 	}
 }
 

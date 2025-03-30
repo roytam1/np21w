@@ -311,7 +311,7 @@ static const CS4231FN cs4231fn[16] = {
 // ----
 
 void SOUNDCALL cs4231_getpcm(CS4231 cs, SINT32 *pcm, UINT count) {
-
+	static int lastPlaybackEnable = 0;
 
 	if (((cs->reg.iface & 1) || cs4231_bufdelaycounter > 0) && (count)) {
 		// CS4231内蔵ボリューム 
@@ -338,13 +338,40 @@ void SOUNDCALL cs4231_getpcm(CS4231 cs, SINT32 *pcm, UINT count) {
 #endif
 		(*cs4231fn[cs->reg.datafmt >> 4])(cs, pcm, count);
 
+		// PIO play enable
+		if (cs4231.reg.iface & PPIO)
+		{
+			if (cs4231.bufsize / 2 < cs4231.bufdatas)
+			{
+				cs4231.intflag &= ~PRDY;
+			}
+			else
+			{
+				cs4231.intflag |= PRDY;
+			}
+		}
+
 		// Playback Enableがローになってもバッファのディレイ分は再生する
-		if((cs->reg.iface & 1)){
-			cs4231_bufdelaycounter = cs->bufdatas;
-		}else if(cs->bufdatas == 0){
+		if (cs->reg.iface & 1)
+		{
 			cs4231_bufdelaycounter = 0;
-		}else{
-			cs4231_bufdelaycounter--;
+			lastPlaybackEnable = 1;
+		}
+		else
+		{
+			if (lastPlaybackEnable)
+			{
+				cs4231_bufdelaycounter = cs->bufdatas;
+			}
+			else if (cs->bufdatas == 0)
+			{
+				cs4231_bufdelaycounter = 0;
+			}
+			else
+			{
+				cs4231_bufdelaycounter--;
+			}
+			lastPlaybackEnable = 0;
 		}
 #if defined(SUPPORT_MULTITHREAD)
 		cs4231cs_leave_criticalsection();

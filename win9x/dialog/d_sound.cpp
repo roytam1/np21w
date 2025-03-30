@@ -1547,7 +1547,7 @@ BOOL SndOptSB16Page::OnCommand(WPARAM wParam, LPARAM lParam)
 	switch (LOWORD(wParam))
 	{
 		case IDC_SND118IO:
-			m_snd118io = m_cmbio.GetCurItemData(0x0188);
+			m_snd118io = m_cmbio.GetCurItemData(0xd2);
 			return TRUE;
 
 		case IDC_SND118DMA:
@@ -1555,7 +1555,7 @@ BOOL SndOptSB16Page::OnCommand(WPARAM wParam, LPARAM lParam)
 			return TRUE;
 
 		case IDC_SND118INTF:
-			m_snd118irqf = m_cmbirqf.GetCurItemData(12);
+			m_snd118irqf = m_cmbirqf.GetCurItemData(5);
 			return TRUE;
 
 		case IDC_SND118DEF:

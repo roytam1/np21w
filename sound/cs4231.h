@@ -11,7 +11,8 @@ sudo make - * @file	cs4231.h
 enum {
 	CS4231_BUFFERS	= (1 << 11),
 	CS4231_BUFMASK	= (CS4231_BUFFERS - 1),
-	CS4231_MAXDMAREADBYTES	= (1 << 9)
+	CS4231_MAXDMAREADBYTES	= (1 << 9),
+	CS4231_PIOBUFFERS = (CS4231_BUFFERS / 2) // 本当はもっと小さいがサウンド再生ストリームのバッファ周期と合わないのでまともに再生できない。厳密にするなら86PCMと同じく仮想バッファを実装すべし
 };
 
 typedef struct {

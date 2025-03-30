@@ -164,7 +164,7 @@ void cs4231_dma(NEVENTITEM item) {
 	UINT	r = 0;
 	//SINT32	cnt;
 	if (item->flag & NEVENT_SETEVENT) {
-		if (cs4231.dmach != 0xff) {
+		if (cs4231.dmach != 0xff && !(cs4231.reg.iface & PPIO)) {
 			dmach = dmac.dmach + cs4231.dmach;
 
 			// サウンド再生用バッファに送る(cs4231g.c)
@@ -204,7 +204,8 @@ void cs4231_dma(NEVENTITEM item) {
 void cs4231_datasend(REG8 dat) {
 	UINT	pos;
 	if (cs4231.reg.iface & PPIO) {		// PIO play enable
-		if (cs4231.bufsize <= cs4231.bufdatas) {
+		if (cs4231.bufdatas > 0)
+		{
 			sound_sync();
 		}
 #if defined(SUPPORT_MULTITHREAD)
@@ -215,6 +216,14 @@ void cs4231_datasend(REG8 dat) {
 			cs4231.buffer[pos] = dat;
 			cs4231.bufdatas++;
 			cs4231.bufwpos = (cs4231.bufwpos + 1) & CS4231_BUFMASK;
+		}
+		if (cs4231.bufdatas > CS4231_PIOBUFFERS)
+		{
+			cs4231.intflag &= ~PRDY;
+		}
+		else
+		{
+			cs4231.intflag |= PRDY;
 		}
 #if defined(SUPPORT_MULTITHREAD)
 		cs4231cs_leave_criticalsection();

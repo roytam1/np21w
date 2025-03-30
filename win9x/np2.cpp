@@ -2372,6 +2372,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 		case WM_ACTIVATE:
 			if (LOWORD(wParam) != WA_INACTIVE) {
 				np2break &= ~NP2BREAK_MAIN;
+				scrndraw_updateallline();
 				scrndraw_redraw();
 				if (np2stopemulate || np2userpause) {
 					scrndraw_draw(1);
@@ -3608,6 +3609,8 @@ void unloadNP2INI(){
 	}
 #endif
 
+	np2_multithread_Suspend();
+
 	sxsi_alltrash();
 	pccore_term();
 
@@ -3897,6 +3900,8 @@ void loadNP2INI(const OEMCHAR *fname){
 #ifdef HOOK_SYSKEY
 	start_hook_systemkey();
 #endif
+
+	np2_multithread_Resume();
 }
 
 #if defined(SUPPORT_MULTITHREAD)

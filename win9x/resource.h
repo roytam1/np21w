@@ -706,6 +706,7 @@
 #define IDM_BEEPLOW                     40632
 #define IDM_BEEPMID                     40633
 #define IDM_BEEPHIGH                    40634
+#define IDM_FIXBEEPOFFSET               40635
 #define IDM_NOSOUND                     40641
 #define IDM_PC9801_14                   40642
 #define IDM_PC9801_26K                  40643

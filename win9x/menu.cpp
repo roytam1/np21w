@@ -371,6 +371,7 @@ void xmenu_update(HMENU hMenu)
 	CheckMenuItem(hMenu, IDM_BEEPLOW, MF_BYCOMMAND | MFCHECK(BEEP_VOL == 1));
 	CheckMenuItem(hMenu, IDM_BEEPMID, MF_BYCOMMAND | MFCHECK(BEEP_VOL == 2));
 	CheckMenuItem(hMenu, IDM_BEEPHIGH, MF_BYCOMMAND | MFCHECK(BEEP_VOL == 3));
+	CheckMenuItem(hMenu, IDM_FIXBEEPOFFSET, MF_BYCOMMAND | MFCHECK(np2cfg.nbeepofs != 0));
 	const UINT8 SOUND_SW = np2cfg.SOUND_SW;
 	CheckMenuItem(hMenu, IDM_NOSOUND, MF_BYCOMMAND | MFCHECK(SOUND_SW == 0x00));
 	CheckMenuItem(hMenu, IDM_PC9801_14, MF_BYCOMMAND | MFCHECK(SOUND_SW == 0x01));

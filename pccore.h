@@ -310,6 +310,9 @@ struct tagNP2Config
 	UINT8	allowMOVCS; // mov cs,xx命令の実行を許可する（8086）
 	UINT8	usetexthook; // Text Hookを有効にする（海外向け）
 	UINT8	rascsi92; // 92互換でRaSCSI形式(*.HDN)を読む
+	UINT8	nbeepofs; // BEEPの出力オフセットを消す
+
+	SINT64	cal_vofs; // 仮想カレンダ時刻オフセット(秒)
 };
 typedef struct tagNP2Config  NP2CFG;		/*!< The define of config */
 

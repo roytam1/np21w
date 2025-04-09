@@ -185,7 +185,8 @@ const OEMCHAR np2version[] = OEMTEXT(NP2VER_CORE);
 #if defined(SUPPORT_GAMEPORT)
 				0,
 #endif
-				0, 0, 0,
+				0, 0, 0, 0,
+				0,
 	};
 
 	PCCORE	pccore = {	PCBASECLOCK25, PCBASEMULTIPLE,

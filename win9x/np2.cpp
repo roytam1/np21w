@@ -1501,6 +1501,11 @@ static void OnCommand(HWND hWnd, WPARAM wParam)
 			update |= SYS_UPDATECFG;
 			break;
 
+		case IDM_FIXBEEPOFFSET:
+			np2cfg.nbeepofs = (np2cfg.nbeepofs == 0 ? 1 : 0);
+			update |= SYS_UPDATECFG;
+			break;
+
 		case IDM_NOSOUND:
 			np2cfg.SOUND_SW = 0x00;
 			update |= SYS_UPDATECFG | SYS_UPDATESBOARD;
@@ -3460,8 +3465,6 @@ static void ExecuteOneFrame_MT_EmulateThread(BOOL bDraw)
 
 	pccore_exec(bDraw);
 
-	joymng_sync();
-	mousemng_sync();
 	recvideo_write();
 }
 static void ExecuteOneFrame(BOOL bDraw)
@@ -4437,6 +4440,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInst,
 					TranslateMessage(&msg);
 				}
 				DispatchMessage(&msg);
+				joymng_sync();
+				mousemng_sync();
 				scrnmng_delaychangemode();
 				mousemng_UIThreadSync();
 				scrnmng_UIThreadProc();

@@ -621,6 +621,10 @@ void board118_reset(const NP2CFG *pConfig)
 		// OPNAタイマーをセット
 		UINT irqval = 0x00;
 		UINT8 irqf = np2cfg.snd118irqf;
+		if (g_nSoundID == SOUNDID_WAVESTAR)
+		{
+			irqf = 0xc; // IRQ12固定
+		}
 		if(g_nSoundID==SOUNDID_PC_9801_86_118 || g_nSoundID==SOUNDID_PC_9801_86_118_SB16){
 			UINT8 irq86table[4] = {0x03, 0x0d, 0x0a, 0x0c};
 			UINT8 nIrq86 = (np2cfg.snd86opt & 0x10) | ((np2cfg.snd86opt & 0x4) << 5) | ((np2cfg.snd86opt & 0x8) << 3);
@@ -748,13 +752,13 @@ void board118_bind(void)
 		a460_soundid = np2cfg.snd118id;//0x80;
 	}
 
-	if(g_nSoundID==SOUNDID_PC_9801_86_WSS || g_nSoundID==SOUNDID_MATE_X_PCM || g_nSoundID==SOUNDID_WAVESTAR || g_nSoundID==SOUNDID_WSS_SB16 || g_nSoundID==SOUNDID_PC_9801_86_WSS_SB16){
+	if(g_nSoundID==SOUNDID_PC_9801_86_WSS || g_nSoundID==SOUNDID_MATE_X_PCM || g_nSoundID==SOUNDID_WSS_SB16 || g_nSoundID==SOUNDID_PC_9801_86_WSS_SB16){
 		// Mate-X PCMの場合、CS4231だけ
-		if(g_nSoundID!=SOUNDID_WAVESTAR){
-			iocore_attachout(cs4231.port[1], ymf_oa460);
-			iocore_attachinp(cs4231.port[1], ymf_ia460);
-			iocore_attachinp(0x881e, wss_i881e);
-		}
+		iocore_attachout(cs4231.port[1], ymf_oa460);
+		iocore_attachinp(cs4231.port[1], ymf_ia460);
+		iocore_attachinp(0x881e, wss_i881e);
+	}else if(g_nSoundID==SOUNDID_WAVESTAR){
+		// WaveStarの場合 なにもない
 	}else{
 		// 118音源の場合、色々割り当て
 
@@ -840,11 +844,13 @@ void board118_unbind(void)
 {
 	cs4231io_unbind();
 	
-	if(g_nSoundID==SOUNDID_PC_9801_86_WSS || g_nSoundID==SOUNDID_MATE_X_PCM || g_nSoundID==SOUNDID_WAVESTAR || g_nSoundID==SOUNDID_WSS_SB16 || g_nSoundID==SOUNDID_PC_9801_86_WSS_SB16){
+	if(g_nSoundID==SOUNDID_PC_9801_86_WSS || g_nSoundID==SOUNDID_MATE_X_PCM || g_nSoundID==SOUNDID_WSS_SB16 || g_nSoundID==SOUNDID_PC_9801_86_WSS_SB16){
 		// Mate-X PCMの場合、CS4231だけ
 		iocore_detachout(cs4231.port[1]);
 		iocore_detachinp(cs4231.port[1]);
 		iocore_detachinp(0x881e);
+	}else if(g_nSoundID==SOUNDID_WAVESTAR){
+		// WaveStarの場合 なにもない
 	}else{
 		// 118音源の場合、色々割り当て
 

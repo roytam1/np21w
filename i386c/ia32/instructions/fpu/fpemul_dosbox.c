@@ -923,7 +923,7 @@ void DB_FPU_FXSAVERSTOR(void){
 	UINT32 maddr;
 
 	CPU_WORKCLOCK(FPU_WORKCLOCK);
-	GET_PCBYTE((op));
+	GET_MODRM_PCBYTE((op));
 	idx = (op >> 3) & 7;
 	sub = (op & 7);
 	
@@ -1148,7 +1148,7 @@ DB_ESC0(void)
 	UINT idx, sub;
 
 	CPU_WORKCLOCK(FPU_WORKCLOCK);
-	GET_PCBYTE(op);
+	GET_MODRM_PCBYTE(op);
 	TRACEOUT(("use FPU d8 %.2x", op));
 	idx = (op >> 3) & 7;
 	sub = (op & 7);
@@ -1207,7 +1207,7 @@ DB_ESC1(void)
 	UINT idx, sub;
 
 	CPU_WORKCLOCK(FPU_WORKCLOCK);
-	GET_PCBYTE(op);
+	GET_MODRM_PCBYTE(op);
 	TRACEOUT(("use FPU d9 %.2x", op));
 	idx = (op >> 3) & 7;
 	sub = (op & 7);
@@ -1469,7 +1469,7 @@ DB_ESC2(void)
 	UINT idx, sub;
 
 	CPU_WORKCLOCK(FPU_WORKCLOCK);
-	GET_PCBYTE(op);
+	GET_MODRM_PCBYTE(op);
 	TRACEOUT(("use FPU da %.2x", op));
 	idx = (op >> 3) & 7;
 	sub = (op & 7);
@@ -1527,7 +1527,7 @@ DB_ESC3(void)
 	UINT idx, sub;
 
 	CPU_WORKCLOCK(FPU_WORKCLOCK);
-	GET_PCBYTE(op);
+	GET_MODRM_PCBYTE(op);
 	TRACEOUT(("use FPU db %.2x", op));
 	idx = (op >> 3) & 7;
 	sub = (op & 7);
@@ -1648,7 +1648,7 @@ DB_ESC4(void)
 	UINT idx, sub;
 
 	CPU_WORKCLOCK(FPU_WORKCLOCK);
-	GET_PCBYTE(op);
+	GET_MODRM_PCBYTE(op);
 	TRACEOUT(("use FPU dc %.2x", op));
 	idx = (op >> 3) & 7;
 	sub = (op & 7);
@@ -1709,7 +1709,7 @@ DB_ESC5(void)
 	UINT idx, sub;
 
 	CPU_WORKCLOCK(FPU_WORKCLOCK);
-	GET_PCBYTE(op);
+	GET_MODRM_PCBYTE(op);
 	TRACEOUT(("use FPU dd %.2x", op));
 	idx = (op >> 3) & 7;
 	sub = (op & 7);
@@ -1815,7 +1815,7 @@ DB_ESC6(void)
 	UINT idx, sub;
 
 	CPU_WORKCLOCK(FPU_WORKCLOCK);
-	GET_PCBYTE(op);
+	GET_MODRM_PCBYTE(op);
 	TRACEOUT(("use FPU de %.2x", op));
 	idx = (op >> 3) & 7;
 	sub = (op & 7);
@@ -1887,7 +1887,7 @@ DB_ESC7(void)
 	UINT idx, sub;
 
 	CPU_WORKCLOCK(FPU_WORKCLOCK);
-	GET_PCBYTE(op);
+	GET_MODRM_PCBYTE(op);
 	TRACEOUT(("use FPU df %.2x", op));
 	idx = (op >> 3) & 7;
 	sub = (op & 7);

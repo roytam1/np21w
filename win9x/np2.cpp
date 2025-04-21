@@ -1736,7 +1736,6 @@ static void OnCommand(HWND hWnd, WPARAM wParam)
 		case IDM_MOUSENC:
 			np2oscfg.mouse_nc = !np2oscfg.mouse_nc;
 			if(np2oscfg.mouse_nc){
-				SetClassLong(g_hWndMain, GCL_STYLE, GetClassLong(g_hWndMain, GCL_STYLE) & ~CS_DBLCLKS);
 				if (np2oscfg.wintype != 0) {
 					// XXX: ƒƒjƒ…[‚ªo‚¹‚È‚­‚È‚Á‚Ä‹l‚Þ‚Ì‚ð‰ñ”ðiŽb’èj
 					if (!scrnmng_isfullscreen()) {
@@ -1750,7 +1749,11 @@ static void OnCommand(HWND hWnd, WPARAM wParam)
 						sysmng_update(SYS_UPDATEOSCFG);
 					}
 				}
-			}else{
+			}
+			if (np2oscfg.MOUSE_SW || np2oscfg.mouse_nc) {
+				SetClassLong(g_hWndMain, GCL_STYLE, GetClassLong(g_hWndMain, GCL_STYLE) & ~CS_DBLCLKS);
+			}
+			else {
 				SetClassLong(g_hWndMain, GCL_STYLE, GetClassLong(g_hWndMain, GCL_STYLE) | CS_DBLCLKS);
 			}
 #ifdef SUPPORT_WACOM_TABLET
@@ -2527,10 +2530,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 			if ((wParam == VK_F12) && (!np2oscfg.F12COPY)) {
 				mousemng_toggle(MOUSEPROC_SYSTEM);
 				np2oscfg.MOUSE_SW = !np2oscfg.MOUSE_SW;
-				if(!np2oscfg.mouse_nc){
-					SetClassLong(g_hWndMain, GCL_STYLE, GetClassLong(g_hWndMain, GCL_STYLE) | CS_DBLCLKS);
-				}else/* if (!scrnmng_isfullscreen())*/ {
-					SetClassLong(g_hWndMain, GCL_STYLE, GetClassLong(g_hWndMain, GCL_STYLE) & ~CS_DBLCLKS);
+				if(np2oscfg.mouse_nc){
 					if (np2oscfg.wintype != 0) {
 						// XXX: ƒƒjƒ…[‚ªo‚¹‚È‚­‚È‚Á‚Ä‹l‚Þ‚Ì‚ð‰ñ”ðiŽb’èj
 						if (!scrnmng_isfullscreen()) {
@@ -2544,6 +2544,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 							sysmng_update(SYS_UPDATEOSCFG);
 						}
 					}
+				}
+				if (np2oscfg.MOUSE_SW || np2oscfg.mouse_nc) {
+					SetClassLong(g_hWndMain, GCL_STYLE, GetClassLong(g_hWndMain, GCL_STYLE) & ~CS_DBLCLKS);
+				}
+				else {
+					SetClassLong(g_hWndMain, GCL_STYLE, GetClassLong(g_hWndMain, GCL_STYLE) | CS_DBLCLKS);
 				}
 				sysmng_update(SYS_UPDATECFG);
 			}
@@ -2753,27 +2759,26 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 			mousemng_toggle(MOUSEPROC_SYSTEM);
 			np2oscfg.MOUSE_SW = !np2oscfg.MOUSE_SW;
 			sysmng_update(SYS_UPDATECFG);
-			if (!np2oscfg.MOUSE_SW) {
-				if(!np2oscfg.mouse_nc){
-					SetClassLong(g_hWndMain, GCL_STYLE, GetClassLong(g_hWndMain, GCL_STYLE) | CS_DBLCLKS);
-				}else/* if (!scrnmng_isfullscreen())*/ {
-					SetClassLong(g_hWndMain, GCL_STYLE, GetClassLong(g_hWndMain, GCL_STYLE) & ~CS_DBLCLKS);
-					if (np2oscfg.wintype != 0) {
-						// XXX: ƒƒjƒ…[‚ªo‚¹‚È‚­‚È‚Á‚Ä‹l‚Þ‚Ì‚ð‰ñ”ðiŽb’èj
-						if (!scrnmng_isfullscreen()) {
-							WINLOCEX	wlex;
-							np2oscfg.wintype = 0;
-							wlex = np2_winlocexallwin(hWnd);
-							winlocex_setholdwnd(wlex, hWnd);
-							np2class_windowtype(hWnd, np2oscfg.wintype);
-							winlocex_move(wlex);
-							winlocex_destroy(wlex);
-							sysmng_update(SYS_UPDATEOSCFG);
-						}
+			if(np2oscfg.mouse_nc){
+				if (np2oscfg.wintype != 0) {
+					// XXX: ƒƒjƒ…[‚ªo‚¹‚È‚­‚È‚Á‚Ä‹l‚Þ‚Ì‚ð‰ñ”ðiŽb’èj
+					if (!scrnmng_isfullscreen()) {
+						WINLOCEX	wlex;
+						np2oscfg.wintype = 0;
+						wlex = np2_winlocexallwin(hWnd);
+						winlocex_setholdwnd(wlex, hWnd);
+						np2class_windowtype(hWnd, np2oscfg.wintype);
+						winlocex_move(wlex);
+						winlocex_destroy(wlex);
+						sysmng_update(SYS_UPDATEOSCFG);
 					}
 				}
-			}else{
+			}
+			if (np2oscfg.MOUSE_SW || np2oscfg.mouse_nc) {
 				SetClassLong(g_hWndMain, GCL_STYLE, GetClassLong(g_hWndMain, GCL_STYLE) & ~CS_DBLCLKS);
+			}
+			else {
+				SetClassLong(g_hWndMain, GCL_STYLE, GetClassLong(g_hWndMain, GCL_STYLE) | CS_DBLCLKS);
 			}
 			np2_multithread_LeaveCriticalSection();
 			break;
@@ -2813,13 +2818,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 			break;
 
 		case WM_LBUTTONDBLCLK:
-			if (!np2oscfg.MOUSE_SW) {
-				if(!np2oscfg.mouse_nc){
+			if(np2oscfg.mouse_nc){
+				if (np2oscfg.wintype != 0) {
+					// XXX: ƒƒjƒ…[‚ªo‚¹‚È‚­‚È‚Á‚Ä‹l‚Þ‚Ì‚ð‰ñ”ðiŽb’èj
 					if (!scrnmng_isfullscreen()) {
-						np2oscfg.wintype++;
-						if (np2oscfg.wintype >= 3) {
-							np2oscfg.wintype = 0;
-						}
+						WINLOCEX	wlex;
+						np2oscfg.wintype = 0;
 						wlex = np2_winlocexallwin(hWnd);
 						winlocex_setholdwnd(wlex, hWnd);
 						np2class_windowtype(hWnd, np2oscfg.wintype);
@@ -2827,32 +2831,35 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 						winlocex_destroy(wlex);
 						sysmng_update(SYS_UPDATEOSCFG);
 					}
-				}else if (!scrnmng_isfullscreen()) {
-					SetClassLong(g_hWndMain, GCL_STYLE, GetClassLong(g_hWndMain, GCL_STYLE) & ~CS_DBLCLKS);
-					if (np2oscfg.wintype != 0) {
-						// XXX: ƒƒjƒ…[‚ªo‚¹‚È‚­‚È‚Á‚Ä‹l‚Þ‚Ì‚ð‰ñ”ðiŽb’èj
-						if (!scrnmng_isfullscreen()) {
-							WINLOCEX	wlex;
-							np2oscfg.wintype = 0;
-							wlex = np2_winlocexallwin(hWnd);
-							winlocex_setholdwnd(wlex, hWnd);
-							np2class_windowtype(hWnd, np2oscfg.wintype);
-							winlocex_move(wlex);
-							winlocex_destroy(wlex);
-							sysmng_update(SYS_UPDATEOSCFG);
-						}
-					}
 				}
-			}else{
+			}
+			else {
+				if (!scrnmng_isfullscreen())
+				{
+					np2oscfg.wintype++;
+					if (np2oscfg.wintype >= 3)
+					{
+						np2oscfg.wintype = 0;
+					}
+					wlex = np2_winlocexallwin(hWnd);
+					winlocex_setholdwnd(wlex, hWnd);
+					np2class_windowtype(hWnd, np2oscfg.wintype);
+					winlocex_move(wlex);
+					winlocex_destroy(wlex);
+					sysmng_update(SYS_UPDATEOSCFG);
+				}
+			}
+			if (np2oscfg.MOUSE_SW || np2oscfg.mouse_nc) {
 				SetClassLong(g_hWndMain, GCL_STYLE, GetClassLong(g_hWndMain, GCL_STYLE) & ~CS_DBLCLKS);
+			}
+			else {
+				SetClassLong(g_hWndMain, GCL_STYLE, GetClassLong(g_hWndMain, GCL_STYLE) | CS_DBLCLKS);
 			}
 			break;
 
 		case WM_RBUTTONDBLCLK:
 			if (!np2oscfg.MOUSE_SW) {
-				if(!np2oscfg.mouse_nc){
-				}else/* if (!scrnmng_isfullscreen())*/ {
-					SetClassLong(g_hWndMain, GCL_STYLE, GetClassLong(g_hWndMain, GCL_STYLE) & ~CS_DBLCLKS);
+				if(np2oscfg.mouse_nc){
 					if (np2oscfg.wintype != 0) {
 						// XXX: ƒƒjƒ…[‚ªo‚¹‚È‚­‚È‚Á‚Ä‹l‚Þ‚Ì‚ð‰ñ”ðiŽb’èj
 						if (!scrnmng_isfullscreen()) {
@@ -2867,8 +2874,14 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 						}
 					}
 				}
-			}else{
+			}
+			if (np2oscfg.MOUSE_SW || np2oscfg.mouse_nc)
+			{
 				SetClassLong(g_hWndMain, GCL_STYLE, GetClassLong(g_hWndMain, GCL_STYLE) & ~CS_DBLCLKS);
+			}
+			else
+			{
+				SetClassLong(g_hWndMain, GCL_STYLE, GetClassLong(g_hWndMain, GCL_STYLE) | CS_DBLCLKS);
 			}
 			break;
 
@@ -3558,14 +3571,32 @@ static void processwait(UINT cnt) {
 		}
 		else
 		{
+#if defined(CPUCORE_IA32)
+			if (CPU_STAT_HLT)
+			{
+				Sleep(5); // ‹x‚Þ
+			}
+			else
+			{
+				if (skipnext > 4 && averageskipcounter == 0)
+				{
+					Sleep(1); // ‹x‚Þ
+				}
+				else
+				{
+					//Sleep(0);
+				}
+			}
+#else
 			if (skipnext > 0 && averageskipcounter == 0)
 			{
-				Sleep(skipnext); // ‹x‚ß‚é‚¾‚¯‹x‚Þ
+				Sleep(1); // ‹x‚Þ
 			}
 			else
 			{
 				//Sleep(0);
 			}
+#endif
 			if (averageskipcounter > 1)
 			{
 				if (!incskip && skipnext < 10) skipnext++;
@@ -4123,7 +4154,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInst,
 
 	np2class_initialize(hInstance);
 	if (!hPrevInst) {
-		if(np2oscfg.mouse_nc/* && !scrnmng_isfullscreen()*/){
+		if(np2oscfg.MOUSE_SW || np2oscfg.mouse_nc){
 			wc.style = CS_BYTEALIGNCLIENT | CS_HREDRAW | CS_VREDRAW;
 		}else{
 			wc.style = CS_BYTEALIGNCLIENT | CS_HREDRAW | CS_VREDRAW | CS_DBLCLKS;

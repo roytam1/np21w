@@ -714,7 +714,7 @@ REG16 MEMCALL memp_read16(UINT32 address) {
 		}
 		else {
 			ret = memp_read8(address + 0);
-			ret += (REG16)(memp_read8(address + 1) << 8);
+			ret |= (REG16)(memp_read8(address + 1) << 8);
 			return(ret);
 		}
 	}
@@ -834,12 +834,12 @@ UINT32 MEMCALL memp_read32(UINT32 address) {
 		else {
 			if (!(address & 1)) {
 				ret = memp_read16(address + 0);
-				ret += (UINT32)memp_read16(address + 2) << 16;
+				ret |= (UINT32)memp_read16(address + 2) << 16;
 			}
 			else {
 				ret = memp_read8(address + 0);
-				ret += (UINT32)memp_read16(address + 1) << 8;
-				ret += (UINT32)memp_read8(address + 3) << 24;
+				ret |= (UINT32)memp_read16(address + 1) << 8;
+				ret |= (UINT32)memp_read8(address + 3) << 24;
 			}
 			return(ret);
 		}
@@ -847,7 +847,7 @@ UINT32 MEMCALL memp_read32(UINT32 address) {
 }
 
 // ----
-REG8 MEMCALL memp_read8_codefetch(UINT32 address) {
+PF_UINT8 MEMCALL memp_read8_codefetch(UINT32 address) {
 	
 	if (address < I286_MEMREADMAX) {
 		return(mem[address]);
@@ -885,9 +885,9 @@ REG8 MEMCALL memp_read8_codefetch(UINT32 address) {
 		}
 	}
 }
-REG16 MEMCALL memp_read16_codefetch(UINT32 address) {
+PF_UINT16 MEMCALL memp_read16_codefetch(UINT32 address) {
 
-	REG16	ret;
+	PF_UINT16	ret;
 	
 	if (address < (I286_MEMREADMAX - 1)) {
 		return(LOADINTELWORD(mem + address));
@@ -924,7 +924,7 @@ REG16 MEMCALL memp_read16_codefetch(UINT32 address) {
 		}
 		else {
 			ret = memp_read8(address + 0);
-			ret += (REG16)(memp_read8(address + 1) << 8);
+			ret |= (UINT32)(memp_read8(address + 1) << 8);
 			return(ret);
 		}
 	}
@@ -971,12 +971,12 @@ UINT32 MEMCALL memp_read32_codefetch(UINT32 address) {
 		else {
 			if (!(address & 1)) {
 				ret = memp_read16(address + 0);
-				ret += (UINT32)memp_read16(address + 2) << 16;
+				ret |= (UINT32)memp_read16(address + 2) << 16;
 			}
 			else {
 				ret = memp_read8(address + 0);
-				ret += (UINT32)memp_read16(address + 1) << 8;
-				ret += (UINT32)memp_read8(address + 3) << 24;
+				ret |= (UINT32)memp_read16(address + 1) << 8;
+				ret |= (UINT32)memp_read8(address + 3) << 24;
 			}
 			return(ret);
 		}
@@ -984,16 +984,16 @@ UINT32 MEMCALL memp_read32_codefetch(UINT32 address) {
 }
 
 // ----
-REG8 MEMCALL memp_read8_paging(UINT32 address) {
+PF_UINT8 MEMCALL memp_read8_paging(UINT32 address) {
 	
 	return memp_read8_codefetch(address);
 }
-REG16 MEMCALL memp_read16_paging(UINT32 address) {
+PF_UINT16 MEMCALL memp_read16_paging(UINT32 address) {
 	
 	return memp_read16_codefetch(address);
 }
 
-UINT32 MEMCALL memp_read32_paging(UINT32 address) {
+PF_UINT32 MEMCALL memp_read32_paging(UINT32 address) {
 	
 	return memp_read32_codefetch(address);
 }

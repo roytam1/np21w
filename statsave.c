@@ -1853,6 +1853,9 @@ const SFENTRY	*tblterm;
 #endif
 
 #if defined(CPUCORE_IA32)
+#if defined(USE_CPU_EIPMASK)
+	CPU_EIPMASK = CPU_STATSAVE.cpu_inst_default.op_32 ? 0xffffffff : 0xffff;
+#endif
 	fpu_initialize();
 #endif
 

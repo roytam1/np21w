@@ -290,7 +290,12 @@ static void mousecapture(BOOL capture) {
 	else {
 		ShowCursor(TRUE);
 		ClipCursor(NULL);
-		style |= CS_DBLCLKS;
+		if (np2oscfg.mouse_nc) {
+			style &= ~(CS_DBLCLKS);
+		}
+		else {
+			style |= CS_DBLCLKS;
+		}
 		mousecaptureflg = 0;
 		EnterCriticalSection(&mousemng_multithread_deviceinit_cs);
 		if(np2oscfg.rawmouse && fndi8create && diRawMouse){

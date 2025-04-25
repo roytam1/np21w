@@ -109,10 +109,18 @@
 #include	<process.h>
 
 #if defined(SUPPORT_ASYNC_CPU)
-extern "C" UINT8 pccore_asynccpu_drawskip;
-extern "C" UINT8 pccore_asynccpu_nowait;
-extern "C" double pccore_asynccpu_lastTimingValue;
-extern "C" int pccore_asynccpu_lastTimingValid;
+extern "C" UINT32 pccore_asynccpu_drawskip;
+extern "C" UINT32 pccore_asynccpu_nowait;
+extern "C" UINT32 pccore_asynccpu_lastTimingValue;
+extern "C" UINT32 pccore_asynccpu_asyncOffset;
+
+static void setasyncoffset()
+{
+	UINT32 asynctgt = np2cfg.asynctgt;
+	if (asynctgt > 100) asynctgt = 100;
+	if (asynctgt < 1) asynctgt = 1;
+	pccore_asynccpu_asyncOffset = TIMING_MSSHIFT_VALUE * (100 - asynctgt) / 100;
+}
 #endif
 extern bool scrnmng_create_pending; // ƒOƒ‰ƒtƒBƒbƒNƒŒƒ“ƒ_ƒ‰¶¬•Û—¯’†
 
@@ -1316,6 +1324,32 @@ static void OnCommand(HWND hWnd, WPARAM wParam)
 #if defined(SUPPORT_ASYNC_CPU)
 		case IDM_ASYNCCPU:
 			np2cfg.asynccpu = !np2cfg.asynccpu;
+			update |= SYS_UPDATECFG;
+			break;
+
+		case IDM_ASYNCCPU_MAX:
+			np2cfg.asynctgt = 100;
+			setasyncoffset();
+			update |= SYS_UPDATECFG;
+			break;
+		case IDM_ASYNCCPU_20:
+			np2cfg.asynctgt = 20;
+			setasyncoffset();
+			update |= SYS_UPDATECFG;
+			break;
+		case IDM_ASYNCCPU_30:
+			np2cfg.asynctgt = 30;
+			setasyncoffset();
+			update |= SYS_UPDATECFG;
+			break;
+		case IDM_ASYNCCPU_50:
+			np2cfg.asynctgt = 50;
+			setasyncoffset();
+			update |= SYS_UPDATECFG;
+			break;
+		case IDM_ASYNCCPU_70:
+			np2cfg.asynctgt = 70;
+			setasyncoffset();
 			update |= SYS_UPDATECFG;
 			break;
 #endif
@@ -3528,19 +3562,19 @@ static void framereset_ALL(UINT cnt) {
 
 static void (*framereset)(UINT cnt) = framereset_ALL;
 
+static void processasyncwait()
+{
+#if defined(SUPPORT_ASYNC_CPU)
+	UINT32 rawTiming = timing_getcount_raw();
+	pccore_asynccpu_lastTimingValue = rawTiming + pccore_asynccpu_asyncOffset;
+#endif
+}
+
 static void processwait(UINT cnt) {
 
-	static int averageskipcounter = 0;
-	static int skipnext = 0;
-	static int incskip = 0;
+	static int frameSleep = 0;
 
 	UINT count = timing_getcount();
-#if defined(SUPPORT_ASYNC_CPU)
-	if (!pccore_asynccpu_lastTimingValid) {
-		pccore_asynccpu_lastTimingValue = timing_getcount_raw();
-		pccore_asynccpu_lastTimingValid = 1;
-	}
-#endif
 	if (count+lateframecount >= cnt) {
 		lateframecount = lateframecount + count - cnt;
 #if defined(SUPPORT_IA32_HAXM)
@@ -3552,73 +3586,23 @@ static void processwait(UINT cnt) {
 		if(lateframecount > np2oscfg.cpustabf) lateframecount = np2oscfg.cpustabf;
 		timing_setcount(0);
 		framereset(cnt);
-		if(skipnext > 0){
-			if(averageskipcounter <= 1){
-				skipnext = 0;
-			}
-		}
-		incskip = 0;
-		averageskipcounter = 0;
-#if defined(SUPPORT_ASYNC_CPU)
-		pccore_asynccpu_lastTimingValid = 0;
-#endif
+		frameSleep = 0;
 	}
-	else {
-		if (lateframecount)
+	else if (frameSleep == 0)
+	{
+		UINT32 rawTiming = timing_getcount_raw();
+		int waitTime = (TIMING_MSSHIFT_VALUE - (rawTiming & TIMING_MSSHIFT_MASK)) / timing_getmsstep();
+		waitTime--; // ­‚µŒ¸‚ç‚·
+		if (waitTime > 0)
 		{
-			//Sleep(0);
-			if (skipnext > 0) skipnext--;
+			if (waitTime > 1000) waitTime = 1000;
+			Sleep(waitTime); // ‹x‚Þ
 		}
-		else
+		else if (waitTime == 0)
 		{
-#if defined(CPUCORE_IA32)
-			if (CPU_STAT_HLT)
-			{
-				Sleep(5); // ‹x‚Þ
-			}
-			else
-			{
-				if (skipnext > 4 && averageskipcounter == 0)
-				{
-					Sleep(1); // ‹x‚Þ
-				}
-				else
-				{
-					//Sleep(0);
-				}
-			}
-#else
-			if (skipnext > 0 && averageskipcounter == 0)
-			{
-				Sleep(1); // ‹x‚Þ
-			}
-			else
-			{
-				//Sleep(0);
-			}
-#endif
-			if (averageskipcounter > 1)
-			{
-				if (!incskip && skipnext < 10) skipnext++;
-				incskip = 1;
-			}
-			averageskipcounter++;
+			Sleep(0);
 		}
-		//if(lateframecount){
-		//	Sleep(0);
-		//	if(skipnext > 0) skipnext--;
-		//}else{
-		//	if(skipnext > 0 && averageskipcounter==0){
-		//		Sleep(skipnext); // ‹x‚ß‚é‚¾‚¯‹x‚Þ
-		//	}else{
-		//		Sleep(0);
-		//	}
-		//	if(averageskipcounter>1){
-		//		if(!incskip && skipnext < 10) skipnext++;
-		//		incskip = 1;
-		//	}
-		//	averageskipcounter++;
-		//}
+		frameSleep = 1;
 	}
 }
 
@@ -3850,6 +3834,9 @@ void loadNP2INI(const OEMCHAR *fname){
 #endif
 	
 	SetTickCounterMode(np2oscfg.tickmode);
+#if defined(SUPPORT_ASYNC_CPU)
+	setasyncoffset();
+#endif
 	pccore_reset();
 	np2_SetUserPause(0);
 	
@@ -3949,7 +3936,7 @@ void loadNP2INI(const OEMCHAR *fname){
 static unsigned int __stdcall np2_multithread_EmulatorThreadMain(LPVOID vdParam){
 	while (!np2_multithread_hThread_requestexit) {
 		if (!np2stopemulate && !np2_multithread_pauseemulation && !np2userpause) {
-			UINT8 drawskip = (np2oscfg.DRAW_SKIP == 0 ? 1 : np2oscfg.DRAW_SKIP);
+			UINT32 drawskip = (np2oscfg.DRAW_SKIP == 0 ? 1 : np2oscfg.DRAW_SKIP);
 #if defined(SUPPORT_ASYNC_CPU)
 			pccore_asynccpu_drawskip = drawskip;
 			pccore_asynccpu_nowait = np2oscfg.NOWAIT;
@@ -3975,6 +3962,7 @@ static unsigned int __stdcall np2_multithread_EmulatorThreadMain(LPVOID vdParam)
 			else if (drawskip) {		// frame skip
 				if (framecnt < drawskip) {
 					ExecuteOneFrame_MT_EmulateThread(framecnt == 0);
+					if (framecnt == 0) processasyncwait();
 					framecnt++;
 				}
 				else {
@@ -4005,6 +3993,7 @@ static unsigned int __stdcall np2_multithread_EmulatorThreadMain(LPVOID vdParam)
 							timing_setcount(cnt - framecnt);
 						}
 						framereset_MT_EmulateThread(0);
+						if (framecnt == 0) processasyncwait();
 					}
 				}
 				else {
@@ -4315,6 +4304,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInst,
 #endif
 
 	SetTickCounterMode(np2oscfg.tickmode);
+#if defined(SUPPORT_ASYNC_CPU)
+	setasyncoffset();
+#endif
 	pccore_reset();
 	np2_SetUserPause(0);
 	
@@ -4506,7 +4498,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInst,
 					}
 					else
 					{
-						UINT8 drawskip = (np2oscfg.DRAW_SKIP == 0 ? 1 : np2oscfg.DRAW_SKIP);
+						UINT32 drawskip = (np2oscfg.DRAW_SKIP == 0 ? 1 : np2oscfg.DRAW_SKIP);
 #if defined(SUPPORT_ASYNC_CPU)
 						pccore_asynccpu_drawskip = drawskip;
 						pccore_asynccpu_nowait = np2oscfg.NOWAIT;

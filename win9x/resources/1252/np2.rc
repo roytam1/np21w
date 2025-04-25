@@ -1029,6 +1029,14 @@ BEGIN
         MENUITEM "&No wait",                    IDM_NOWAIT
         MENUITEM "&CPU clock stabilizer",       IDM_CPUSTABILIZER
         MENUITEM "Dyn&amic CPU clock adjustment",  IDM_ASYNCCPU
+        POPUP "Dynamic CPU clock &target"
+        BEGIN
+            MENUITEM "100%", IDM_ASYNCCPU_MAX
+            MENUITEM "70%", IDM_ASYNCCPU_70
+            MENUITEM "50%", IDM_ASYNCCPU_50
+            MENUITEM "30%", IDM_ASYNCCPU_30
+            MENUITEM "20%", IDM_ASYNCCPU_20
+        END
         MENUITEM SEPARATOR
         //MENUITEM "&Auto frame",                 IDM_AUTOFPS
         MENUITEM "F&ull frame",                 IDM_60FPS
@@ -1073,6 +1081,7 @@ BEGIN
             MENUITEM "Beep &low",                   IDM_BEEPLOW
             MENUITEM "Beep &mid",                   IDM_BEEPMID
             MENUITEM "Beep &high",                  IDM_BEEPHIGH
+            MENUITEM "Fix beep PCM offset",         IDM_FIXBEEPOFFSET
             MENUITEM SEPARATOR
             MENUITEM "&Disable boards",             IDM_NOSOUND
             MENUITEM "PC-9801-&14",                 IDM_PC9801_14

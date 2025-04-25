@@ -1022,6 +1022,14 @@ BEGIN
         MENUITEM "CPUウェイト無し(&N)",         IDM_NOWAIT
         MENUITEM "CPUクロック安定化(&C)",       IDM_CPUSTABILIZER
         MENUITEM "動的CPUクロック調整(&A)",		IDM_ASYNCCPU
+        POPUP "動的CPUクロック目標(&T)"
+        BEGIN
+            MENUITEM "100%", IDM_ASYNCCPU_MAX
+            MENUITEM "70%", IDM_ASYNCCPU_70
+            MENUITEM "50%", IDM_ASYNCCPU_50
+            MENUITEM "30%", IDM_ASYNCCPU_30
+            MENUITEM "20%", IDM_ASYNCCPU_20
+        END
         MENUITEM SEPARATOR
         //MENUITEM "自動フレームスキップ(&A)",    IDM_AUTOFPS
         MENUITEM "フレームスキップ無し(&U)",    IDM_60FPS
@@ -1066,6 +1074,7 @@ BEGIN
             MENUITEM "Beep音　小(&L)",              IDM_BEEPLOW
             MENUITEM "Beep音　中(&M)",              IDM_BEEPMID
             MENUITEM "Beep音　大(&H)",              IDM_BEEPHIGH
+            MENUITEM "BeepPCMオフセット補正",       IDM_FIXBEEPOFFSET
             MENUITEM SEPARATOR
             MENUITEM "サウンドボード無し(&D)",      IDM_NOSOUND
             MENUITEM "PC-9801-&14",                 IDM_PC9801_14

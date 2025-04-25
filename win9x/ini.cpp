@@ -682,6 +682,7 @@ static const PFTBL s_IniItems[] =
 	
 #if defined(SUPPORT_ASYNC_CPU)
 	PFVAL("ASYNCCPU", PFTYPE_BOOL,		&np2cfg.asynccpu), // 非同期CPUモード有効
+	PFVAL("ASYNCTGT", PFTYPE_UINT8,		&np2cfg.asynctgt), // 非同期CPUモード 目標負荷
 #endif
 	PFVAL("CONSTTSC", PFTYPE_BOOL,		&np2cfg.consttsc), // RDTSCをクロック変更によらず一定間隔にする
 #if defined(SUPPORT_IDEIO)

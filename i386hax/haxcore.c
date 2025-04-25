@@ -962,7 +962,7 @@ coutinue_cpu_imm:
 			}
 			break;
 		}
-		if(tunnel->io._port==0x1480){
+		if(tunnel->io._port==0x1480 || tunnel->io._port == 0x04d2){
 			// ゲームポート読み取りは即座に返す
 			goto coutinue_cpu_imm;
 		}

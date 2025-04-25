@@ -29,6 +29,9 @@ static	UINT8	joypad1btn[4];
 
 static	REG8	joyavailable = 0;
 
+static UINT32	joyAnalogX = 0x8000;
+static UINT32	joyAnalogY = 0x8000;
+
 void joymng_initialize(void) {
 
 	JOYINFO		ji;
@@ -63,6 +66,8 @@ REG8 joymng_getstat(void) {
 				joyavailable = 1;
 				np2oscfg.JOYPAD1 |= 0x80;
 				joyflag = 0xff;
+				joyAnalogX = ji.dwXpos;
+				joyAnalogY = ji.dwYpos;
 				if (ji.dwXpos < 0x4000U) {
 					joyflag &= ~JOY_LEFT_BIT;
 				}
@@ -101,6 +106,15 @@ REG8 joymng_getstat(void) {
 REG8 joymng_available(void) {
 	return(joyavailable);
 }
+UINT32 joymng_getAnalogX(void)
+{
+	return joyAnalogX;
+}
+UINT32 joymng_getAnalogY(void)
+{
+	return joyAnalogY;
+}
+
 
 // joyflag	bit:0		up
 // 			bit:1		down

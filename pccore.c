@@ -183,7 +183,7 @@ const OEMCHAR np2version[] = OEMTEXT(NP2VER_CORE);
 				0, 0,
 				1, 0,
 #if defined(SUPPORT_GAMEPORT)
-				0,
+				0, 0,
 #endif
 				0, 0, 0, 0,
 				0,

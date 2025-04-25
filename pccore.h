@@ -306,7 +306,8 @@ struct tagNP2Config
 	UINT8	cddtskip; // CD-ROM オーディオ再生時にデータトラックをスキップ
 
 #if defined(SUPPORT_GAMEPORT)
-	UINT8	gameport; // 118音源のゲームポートを使用する
+	UINT8	gameport; // SB16や118音源のゲームポートを使用する
+	UINT8	analogjoy; // ゲームポートをアナログジョイスティックにする
 #endif
 	UINT8	allowMOVCS; // mov cs,xx命令の実行を許可する（8086）
 	UINT8	usetexthook; // Text Hookを有効にする（海外向け）

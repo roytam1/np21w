@@ -2430,6 +2430,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 				keystat_allrelease();
 				mousemng_enable(MOUSEPROC_BG);
 				np2_multithread_LeaveCriticalSection();
+				// キャプチャ外す
+				mousemng_disable(MOUSEPROC_SYSTEM);
+				np2oscfg.MOUSE_SW = 0;
+				update |= SYS_UPDATECFG;
 			}
 			else {
 				np2break |= NP2BREAK_MAIN;
@@ -3365,7 +3369,7 @@ void autoSendKey(){
 void createAsciiTo98KeyCodeList(){
 	int i;
 	// キーコード表作成（暫定）
-	char numkeys[] = {0,'!', '"','#','$','%','&','\'','(',')'};
+	UINT8 numkeys[] = {0,'!', '"','#','$','%','&','\'','(',')'};
 	for(i='0';i<='9';i++){
 		vkeylist[i] = i-'0';
 		if(i=='0') vkeylist[i] = 0x0a;
@@ -3378,16 +3382,16 @@ void createAsciiTo98KeyCodeList(){
 		shift_on[i] = 1;
 		vkeylist[i+0x20] = vkeylist[i];
 	}
-	char spkeyascii[] = { '-', '^','\\', '@', '[', ';', ':', ']', ',', '.', '/', '_'};
-	char spshascii[]  = { '=', '`', '|', '~', '{', '+', '*', '}', '<', '>', '?', '_'};
+	UINT8 spkeyascii[] = { '-', '^','\\', '@', '[', ';', ':', ']', ',', '.', '/', '_'};
+	UINT8 spshascii[]  = { '=', '`', '|', '~', '{', '+', '*', '}', '<', '>', '?', '_'};
 	char spkeycode[]  = {0x0B,0x0C,0x0D,0x1A,0x1B,0x26,0x27,0x28,0x30,0x31,0x32,0x33};
 	vkeylist[' '] = 0x34;
 	vkeylist['\t'] = 0x0f;
 	vkeylist['\n'] = 0x1c;
-	for(i=0;i<=sizeof(spkeyascii)/sizeof(spkeyascii[0]);i++){
+	for(i=0;i<NELEMENTS(spkeyascii);i++){
 		vkeylist[spkeyascii[i]] = spkeycode[i];
-		vkeylist[ spshascii[i]] = spkeycode[i];
-		shift_on[ spshascii[i]] = 1;
+		vkeylist[spshascii[i] ] = spkeycode[i];
+		shift_on[spshascii[i] ] = 1;
 	}
 	char kanakeycode[] = { 0x31,0x1b,0x28,0x30,0x32,0x0a,0x03,0x12,0x04,0x05,0x06,0x07,0x08,0x09,0x29,0x0d,0x03,0x12,0x04,0x05,0x06,0x14,0x21,0x22,0x27,0x2d,0x2a,0x1f,0x13,0x19,0x2b,0x10,0x1d,0x29,0x11,0x1e,0x16,0x17,0x01,0x30,0x24,0x20,0x2c,0x02,0x0c,0x0b,0x23,0x2e,0x28,0x32,0x2f,0x07,0x08,0x09,0x18,0x25,0x31,0x26,0x33,0x0a,0x15,0x1a,0x1b };
 	for (i = 0xa1; i <= 0xdf; i++)

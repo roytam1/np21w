@@ -1895,6 +1895,7 @@ public:
 protected:
 	virtual BOOL OnInitDialog();
 	virtual void OnOK();
+	virtual BOOL OnCommand(WPARAM wParam, LPARAM lParam);
 
 private:
 	CComboData m_cmbid;				//!< ID
@@ -1925,6 +1926,16 @@ SndOptPadPage::SndOptPadPage()
 BOOL SndOptPadPage::OnInitDialog()
 {
 	CheckDlgButton(IDC_JOYPAD1, (np2oscfg.JOYPAD1 & 1) ? BST_CHECKED : BST_UNCHECKED);
+#if defined(SUPPORT_GAMEPORT)
+	CheckDlgButton(IDC_PAD1_GAMEPORT, (np2cfg.gameport & 1) ? BST_CHECKED : BST_UNCHECKED);
+	CheckDlgButton(IDC_PAD1_ANALOG, (np2cfg.analogjoy & 1) ? BST_CHECKED : BST_UNCHECKED);
+#else
+	GetDlgItem(IDC_PAD1_GAMEPORT).EnableWindow(0);
+	GetDlgItem(IDC_PAD1_ANALOG).EnableWindow(0);
+#endif
+
+	const BOOL bGamePortEnable = (IsDlgButtonChecked(IDC_PAD1_GAMEPORT) != BST_UNCHECKED) ? TRUE : FALSE;
+	GetDlgItem(IDC_PAD1_ANALOG).EnableWindow(bGamePortEnable);
 
 	for (UINT i = 0; i < _countof(s_pad); i++)
 	{
@@ -2014,6 +2025,20 @@ void SndOptPadPage::OnOK()
 		np2oscfg.JOYPAD1 = cJoyPad;
 	}
 
+#if defined(SUPPORT_GAMEPORT)
+	const UINT8 cJoyPadGamePort = (np2oscfg.JOYPAD1 & (~1)) | ((IsDlgButtonChecked(IDC_PAD1_GAMEPORT) != BST_UNCHECKED) ? 1 : 0);
+	if (np2cfg.gameport != cJoyPadGamePort)
+	{
+		np2cfg.gameport = cJoyPadGamePort;
+	}
+
+	const UINT8 cJoyPadAnalogInput = (np2oscfg.JOYPAD1 & (~1)) | ((IsDlgButtonChecked(IDC_PAD1_ANALOG) != BST_UNCHECKED) ? 1 : 0);
+	if (np2cfg.analogjoy != cJoyPadAnalogInput)
+	{
+		np2cfg.analogjoy = cJoyPadAnalogInput;
+	}
+#endif
+
 	for (UINT i = 0; i < _countof(s_pad); i++)
 	{
 		UINT8 cBtn = 0;
@@ -2041,8 +2066,25 @@ void SndOptPadPage::OnOK()
 	if (bUpdated)
 	{
 		::joymng_initialize();
-		::sysmng_update(SYS_UPDATEOSCFG);
+		::sysmng_update(SYS_UPDATEOSCFG|SYS_UPDATECFG);
 	}
+}
+
+/**
+ * ユーザーがメニューの項目を選択したときに、フレームワークによって呼び出されます
+ * @param[in] wParam パラメタ
+ * @param[in] lParam パラメタ
+ * @retval TRUE アプリケーションがこのメッセージを処理した
+ */
+BOOL SndOptPadPage::OnCommand(WPARAM wParam, LPARAM lParam)
+{
+	if (LOWORD(wParam) == IDC_PAD1_GAMEPORT)
+	{
+		const BOOL bEnable = (IsDlgButtonChecked(IDC_PAD1_GAMEPORT) != BST_UNCHECKED) ? TRUE : FALSE;
+		GetDlgItem(IDC_PAD1_ANALOG).EnableWindow(bEnable);
+		return TRUE;
+	}
+	return FALSE;
 }
 
 

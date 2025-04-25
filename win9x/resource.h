@@ -269,6 +269,8 @@
 #define IDC_PAD1_RC                     15712
 #define IDC_PAD1_RD                     15713
 #define IDC_PAD1_ID                     15714
+#define IDC_PAD1_GAMEPORT               15715
+#define IDC_PAD1_ANALOG                 15716
 #define IDC_USEFMGEN                    15801
 #define IDC_CLNDREAL                    16101
 #define IDC_CLNDVIR                     16102

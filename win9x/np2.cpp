@@ -2038,7 +2038,7 @@ static void OnCommand(HWND hWnd, WPARAM wParam)
 				sysmng_update(SYS_UPDATEOSCFG);
 			}
 			break;
-			
+
 		case IDM_COPYPASTE_COPYTVRAM:
 			{
 				HGLOBAL hMem;
@@ -2366,12 +2366,38 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 					CDebugUtyView::New();
 					break;
 
+				case IDM_ALLOWRESIZE:
+					np2oscfg.thickframe ^= 1;
+					update |= SYS_UPDATEOSCFG;
+					if (!scrnmng_isfullscreen())
+					{
+						UINT8 thick;
+						thick = (GetWindowLong(hWnd, GWL_STYLE) & WS_THICKFRAME) ? 1 : 0;
+						if (thick != np2oscfg.thickframe)
+						{
+							WINLOCEX wlex;
+							wlex = np2_winlocexallwin(hWnd);
+							winlocex_setholdwnd(wlex, hWnd);
+							np2class_frametype(hWnd, np2oscfg.thickframe);
+							winlocex_move(wlex);
+							winlocex_destroy(wlex);
+						}
+					}
+					break;
+
+				case IDM_SAVEWINDOWSIZE:
+					np2oscfg.svscrmul ^= 1;
+					update |= SYS_UPDATEOSCFG;
+					break;
+
 				case IDM_SCRNMUL4:
 				case IDM_SCRNMUL6:
 				case IDM_SCRNMUL8:
 				case IDM_SCRNMUL10:
 				case IDM_SCRNMUL12:
 				case IDM_SCRNMUL16:
+				case IDM_SCRNMUL24:
+				case IDM_SCRNMUL32:
 					if ((!scrnmng_isfullscreen()) &&
 						!(GetWindowLong(g_hWndMain, GWL_STYLE) & WS_MINIMIZE))
 					{
@@ -4184,6 +4210,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInst,
 	hWnd = CreateWindowEx(0, szClassName, np2oscfg.titles, style,
 						winx, winy, 640, 400,
 						NULL, NULL, hInstance, NULL);
+	winloc_DisableCornerRound(g_hWndMain);
 	g_hWndMain = hWnd;
 
 	//{

@@ -4,6 +4,9 @@
  */
 
 #include "compiler.h"
+
+#ifdef SUPPORT_VSTi
+
 #include "vsteditwnd.h"
 #include "vsteffect.h"
 
@@ -246,3 +249,5 @@ bool CVstEditWnd::OnUpdateDisplay()
 {
 	return (m_hWnd != NULL);
 }
+
+#endif

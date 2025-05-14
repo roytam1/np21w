@@ -49,6 +49,9 @@
 #if defined(SUPPORT_HOSTDRV)
 #include	"hostdrv.h"
 #endif
+#if defined(SUPPORT_HOSTDRVNT)
+#include	"hostdrvnt.h"
+#endif
 #include	"np2ver.h"
 #include	"calendar.h"
 #include	"timing.h"
@@ -136,7 +139,7 @@ const OEMCHAR np2version[] = OEMTEXT(NP2VER_CORE);
 #if defined(SUPPORT_FMGEN)
 				1,
 #endif	/* SUPPORT_FMGEN */
-				3, 0, 50, 0, 0, 1,
+				3, 0, 50, 0, 0, 1, 0,
 
 				0, {OEMTEXT(""), OEMTEXT(""), OEMTEXT(""), OEMTEXT("")},
 #if defined(SUPPORT_IDEIO)
@@ -457,6 +460,10 @@ void pccore_init(void) {
 	hostdrv_initialize();
 #endif
 
+#if defined(SUPPORT_HOSTDRVNT)
+	hostdrvNT_initialize();
+#endif
+
 #if defined(SUPPORT_GPIB)
 	gpibio_initialize();
 #endif
@@ -466,6 +473,10 @@ void pccore_term(void) {
 	
 #if defined(SUPPORT_GPIB)
 	gpibio_shutdown();
+#endif
+
+#if defined(SUPPORT_HOSTDRVNT)
+	hostdrvNT_deinitialize();
 #endif
 
 #if defined(SUPPORT_HOSTDRV)
@@ -802,6 +813,9 @@ void pccore_reset(void) {
 
 #if defined(SUPPORT_HOSTDRV)
 	hostdrv_reset();
+#endif
+#if defined(SUPPORT_HOSTDRVNT)
+	hostdrvNT_reset();
 #endif
 
 	timing_reset();
@@ -1277,6 +1291,9 @@ void pccore_exec(BOOL draw) {
 #endif
 #if defined(SUPPORT_HOSTDRV)
 			hostdrv_reset(); // XXX: Win9xの再起動で必要
+#endif
+#if defined(SUPPORT_HOSTDRVNT)
+			hostdrvNT_reset(); // XXX: Win9xの再起動で必要
 #endif
 #if defined(SUPPORT_PCI)
 			pcidev_basereset(); // XXX: Win9xの再起動で必要

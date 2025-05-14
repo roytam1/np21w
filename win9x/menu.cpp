@@ -227,6 +227,8 @@ void sysmenu_update(HMENU hMenu)
 	CheckMenuItem(hMenu, IDM_BGSOUND, MF_BYCOMMAND | MFCHECK(background & 2));
 
 	const int scrnmul = scrnmng_getmultiple();
+	CheckMenuItem(hMenu, IDM_ALLOWRESIZE, MF_BYCOMMAND | MFCHECK(np2oscfg.thickframe));
+	CheckMenuItem(hMenu, IDM_SAVEWINDOWSIZE, MF_BYCOMMAND | MFCHECK(np2oscfg.svscrmul));
 	CheckMenuItem(hMenu, IDM_SCRNMUL4, MF_BYCOMMAND | MFCHECK(scrnmul == 4));
 	CheckMenuItem(hMenu, IDM_SCRNMUL6, MF_BYCOMMAND | MFCHECK(scrnmul == 6));
 	CheckMenuItem(hMenu, IDM_SCRNMUL8, MF_BYCOMMAND | MFCHECK(scrnmul == 8));

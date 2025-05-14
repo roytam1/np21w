@@ -31,7 +31,7 @@ LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
 // Dialog
 //
 
-IDD_CONFIG DIALOG 0, 0, 182, 310
+IDD_CONFIG DIALOG 0, 0, 182, 324
 STYLE DS_SETFONT | DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Configure"
 CLASS "np2dialog"
@@ -66,7 +66,8 @@ BEGIN
     CONTROL         "Confirm dialog (on reset/exit)",IDC_COMFIRM,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,8,248,162,10
     CONTROL         "Resume",IDC_RESUME,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,8,262,162,10
     CONTROL         "Save window size",IDC_SAVEWINDOWSIZE,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,8,276,162,10
-    CONTROL         "Multi-thread mode", IDC_MULTITHREADMODE, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 8, 290, 162, 10
+    CONTROL         "Save settings for each resolution", IDC_SAVEWINDOWSIZEPERRES, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 16, 290, 180, 10
+    CONTROL         "Multi-thread mode", IDC_MULTITHREADMODE, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 8, 304, 162, 10
     DEFPUSHBUTTON   "&OK",IDOK,130,8,44,14,WS_GROUP
     PUSHBUTTON      "Cancel",IDCANCEL,130,26,44,14
 END
@@ -954,12 +955,15 @@ BEGIN
     MENUITEM "Back&ground sound",           IDM_BGSOUND
     MENUITEM "&Restore window border",      IDM_RESTOREBORDER
     MENUITEM SEPARATOR
-    MENUITEM " 320x200(x0.5)",              IDM_SCRNMUL4
-    MENUITEM " 480x300(x0.75)",             IDM_SCRNMUL6
-    MENUITEM " 640x400(x1)",                IDM_SCRNMUL8
-    MENUITEM " 800x500(x1.25",              IDM_SCRNMUL10
-    MENUITEM " 960x600(x1.5)",              IDM_SCRNMUL12
+    MENUITEM "Allow resize",                IDM_ALLOWRESIZE
+    MENUITEM "320x200(x0.5)",               IDM_SCRNMUL4
+    MENUITEM "480x300(x0.75)",              IDM_SCRNMUL6
+    MENUITEM "640x400(x1)",                 IDM_SCRNMUL8
+    MENUITEM "800x500(x1.25)",              IDM_SCRNMUL10
+    MENUITEM "960x600(x1.5)",               IDM_SCRNMUL12
     MENUITEM "1280x800(x2)",                IDM_SCRNMUL16
+    MENUITEM "1920x1200(x3)",               IDM_SCRNMUL24
+    MENUITEM "2560x1600(x4)",               IDM_SCRNMUL32
     MENUITEM SEPARATOR
 END
 
@@ -1031,14 +1035,14 @@ BEGIN
         MENUITEM "&No wait",                    IDM_NOWAIT
         MENUITEM "&CPU clock stabilizer",       IDM_CPUSTABILIZER
         MENUITEM "Dyn&amic CPU clock adjustment",  IDM_ASYNCCPU
-        POPUP "Dynamic CPU clock &target"
-        BEGIN
-            MENUITEM "100%", IDM_ASYNCCPU_MAX
-            MENUITEM "70%", IDM_ASYNCCPU_70
-            MENUITEM "50%", IDM_ASYNCCPU_50
-            MENUITEM "30%", IDM_ASYNCCPU_30
-            MENUITEM "20%", IDM_ASYNCCPU_20
-        END
+        //POPUP "Dynamic CPU clock &target"
+        //BEGIN
+        //    MENUITEM "100%", IDM_ASYNCCPU_MAX
+        //    MENUITEM "70%", IDM_ASYNCCPU_70
+        //    MENUITEM "50%", IDM_ASYNCCPU_50
+        //    MENUITEM "30%", IDM_ASYNCCPU_30
+        //    MENUITEM "20%", IDM_ASYNCCPU_20
+        //END
         MENUITEM SEPARATOR
         //MENUITEM "&Auto frame",                 IDM_AUTOFPS
         MENUITEM "F&ull frame",                 IDM_60FPS

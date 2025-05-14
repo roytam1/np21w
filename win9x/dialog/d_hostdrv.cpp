@@ -14,6 +14,9 @@
 #include "pccore.h"
 #include "common/strres.h"
 #include "hostdrv.h"
+#if defined(SUPPORT_HOSTDRVNT)
+#include "hostdrvNT.h"
+#endif
 #include "ini.h"
 
 #include <shlobj.h>
@@ -141,6 +144,9 @@ void CHostdrvDlg::OnOK()
 		np2cfg.hdrvacc = m_hdrvacc;
 		update |= SYS_UPDATECFG;
 	}
+#if defined(SUPPORT_HOSTDRVNT)
+	hostdrvNT_updateHDrvRoot();
+#endif
 
 	sysmng_update(update);
 

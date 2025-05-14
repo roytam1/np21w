@@ -10,32 +10,53 @@ typedef HRESULT (WINAPI *pfnDwmIsCompositionEnabled)(
 	BOOL *pfEnabled
 );
 typedef HRESULT (WINAPI *pfnDwmGetWindowAttribute)(
-	   HWND  hwnd,
-	   DWORD dwAttribute,
-       PVOID pvAttribute, 
-	   DWORD cbAttribute
+	HWND  hwnd,
+	DWORD dwAttribute,
+	PVOID pvAttribute, 
+	DWORD cbAttribute
 );
-typedef enum _DWMWINDOWATTRIBUTE { 
-  DWMWA_NCRENDERING_ENABLED          = 1,
-  DWMWA_NCRENDERING_POLICY,
-  DWMWA_TRANSITIONS_FORCEDISABLED,
-  DWMWA_ALLOW_NCPAINT,
-  DWMWA_CAPTION_BUTTON_BOUNDS,
-  DWMWA_NONCLIENT_RTL_LAYOUT,
-  DWMWA_FORCE_ICONIC_REPRESENTATION,
-  DWMWA_FLIP3D_POLICY,
-  DWMWA_EXTENDED_FRAME_BOUNDS,
-  DWMWA_HAS_ICONIC_BITMAP,
-  DWMWA_DISALLOW_PEEK,
-  DWMWA_EXCLUDED_FROM_PEEK,
-  DWMWA_CLOAK,
-  DWMWA_CLOAKED,
-  DWMWA_FREEZE_REPRESENTATION,
-  DWMWA_LAST
+typedef HRESULT(WINAPI* pfnDwmSetWindowAttribute)(
+	HWND hwnd,
+	DWORD dwAttribute,
+	LPCVOID pvAttribute,
+	DWORD cbAttribute
+);
+typedef enum _DWMWINDOWATTRIBUTE {
+	DWMWA_NCRENDERING_ENABLED = 1,       
+	DWMWA_NCRENDERING_POLICY,            
+	DWMWA_TRANSITIONS_FORCEDISABLED,     
+	DWMWA_ALLOW_NCPAINT,                 
+	DWMWA_CAPTION_BUTTON_BOUNDS,         
+	DWMWA_NONCLIENT_RTL_LAYOUT,          
+	DWMWA_FORCE_ICONIC_REPRESENTATION,   
+	DWMWA_FLIP3D_POLICY,                 
+	DWMWA_EXTENDED_FRAME_BOUNDS,         
+	DWMWA_HAS_ICONIC_BITMAP,             
+	DWMWA_DISALLOW_PEEK,                 
+	DWMWA_EXCLUDED_FROM_PEEK,            
+	DWMWA_CLOAK,                         
+	DWMWA_CLOAKED,                       
+	DWMWA_FREEZE_REPRESENTATION,         
+	DWMWA_PASSIVE_UPDATE_MODE,           
+	DWMWA_USE_HOSTBACKDROPBRUSH,         
+	DWMWA_USE_IMMERSIVE_DARK_MODE = 20,  
+	DWMWA_WINDOW_CORNER_PREFERENCE = 33, 
+	DWMWA_BORDER_COLOR,                  
+	DWMWA_CAPTION_COLOR,                 
+	DWMWA_TEXT_COLOR,                    
+	DWMWA_VISIBLE_FRAME_BORDER_THICKNESS,
+	DWMWA_LAST
 } DWMWINDOWATTRIBUTE;
+typedef enum {
+	DWMWCP_DEFAULT = 0,
+	DWMWCP_DONOTROUND = 1,
+	DWMWCP_ROUND = 2,
+	DWMWCP_ROUNDSMALL = 3
+} DWM_WINDOW_CORNER_PREFERENCE;
 
 static pfnDwmIsCompositionEnabled	F_DwmIsCompositionEnabled = NULL;
 static pfnDwmGetWindowAttribute	F_DwmGetWindowAttribute = NULL;
+static pfnDwmSetWindowAttribute	F_DwmSetWindowAttribute = NULL;
 static HMODULE hDwmModule = NULL;
 static int noDWM = 0;
 
@@ -57,11 +78,14 @@ BOOL winloc_InitDwmFunc() {
 			}
 			F_DwmIsCompositionEnabled = (pfnDwmIsCompositionEnabled)GetProcAddress(hDwmModule, "DwmIsCompositionEnabled");
 			F_DwmGetWindowAttribute = (pfnDwmGetWindowAttribute)GetProcAddress(hDwmModule, "DwmGetWindowAttribute");
-			if(!F_DwmIsCompositionEnabled || !F_DwmGetWindowAttribute){
-				// âΩåÃÇ©DwmGetWindowAttributeÇ‚DwmIsCompositionEnabledÇ™ñ≥Ç¢ÅH
+			F_DwmSetWindowAttribute = (pfnDwmSetWindowAttribute)GetProcAddress(hDwmModule, "DwmSetWindowAttribute");
+			if(!F_DwmIsCompositionEnabled || !F_DwmGetWindowAttribute || !F_DwmSetWindowAttribute){
+				// âΩåÃÇ©DwmGetWindowAttributeÇ‚DwmIsCompositionEnabledÇ»Ç«Ç™ñ≥Ç¢ÅH
 				FreeLibrary(hDwmModule);
 				hDwmModule = NULL;
+				F_DwmIsCompositionEnabled = NULL;
 				F_DwmGetWindowAttribute = NULL;
+				F_DwmSetWindowAttribute = NULL;
 				noDWM = 1;
 				return FALSE;
 			}
@@ -74,8 +98,16 @@ void winloc_DisposeDwmFunc() {
 	if(hDwmModule){
 		F_DwmIsCompositionEnabled = NULL;
 		F_DwmGetWindowAttribute = NULL;
+		F_DwmSetWindowAttribute = NULL;
 		FreeLibrary(hDwmModule);
 		hDwmModule = NULL;
+	}
+}
+
+void winloc_DisableCornerRound(HWND hwnd) {
+	if (F_DwmSetWindowAttribute) {
+		DWM_WINDOW_CORNER_PREFERENCE cornerReference = DWMWCP_DONOTROUND;
+		F_DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &cornerReference, sizeof(DWM_WINDOW_CORNER_PREFERENCE));
 	}
 }
 

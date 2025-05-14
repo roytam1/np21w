@@ -30,6 +30,41 @@
 #if defined(SUPPORT_HRTIMER)
 #include	"timemng.h"
 #endif
+#if defined(SUPPORT_IA32_HAXM)
+#include	"i386hax/haxfunc.h"
+#include	"i386hax/haxcore.h"
+#endif
+#include	"dosio.h"
+
+#include <shlwapi.h>
+
+#if 1
+#undef	TRACEOUT
+static void trace_fmt_ex(const char* fmt, ...)
+{
+	char stmp[2048];
+	va_list ap;
+	va_start(ap, fmt);
+	vsprintf(stmp, fmt, ap);
+	strcat(stmp, "\n");
+	va_end(ap);
+	OutputDebugStringA(stmp);
+}
+#define	TRACEOUT(s)	trace_fmt_ex s
+static void trace_fmt_exw(const WCHAR* fmt, ...)
+{
+	WCHAR stmp[2048];
+	va_list ap;
+	va_start(ap, fmt);
+	vswprintf(stmp, 2048, fmt, ap);
+	wcscat(stmp, L"\n");
+	va_end(ap);
+	OutputDebugStringW(stmp);
+}
+#define	TRACEOUTW(s)	trace_fmt_exw s
+#else
+#define	TRACEOUTW(s)	(void)0
+#endif	/* 1 */
 
 
 #define		NP2SYSP_VER			"C"
@@ -550,7 +585,7 @@ static REG8 IOINPCALL np2sysp_i0e9(UINT port) {
 // ---- I/F
 
 void np2sysp_reset(const NP2CFG *pConfig) {
-
+	
 	ZeroMemory(&np2sysp, sizeof(np2sysp));
 
 	(void)pConfig;

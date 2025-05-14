@@ -1407,6 +1407,9 @@
     <ClCompile Include="..\i386c\ia32\instructions\sse4a\sse4a.c">
       <Filter>ソース ファイル\i386c\ia32\instructions\sse4a</Filter>
     </ClCompile>
+    <ClCompile Include="..\generic\hostdrvnt.c">
+      <Filter>ソース ファイル\generic</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\calendar.h">
@@ -2473,6 +2476,12 @@
     </ClInclude>
     <ClInclude Include="..\i386c\ia32\instructions\sse4a\sse4a.h">
       <Filter>ヘッダー ファイル\i386c\ia32\instructions\sse4a</Filter>
+    </ClInclude>
+    <ClInclude Include="..\generic\hostdrvnt.h">
+      <Filter>ヘッダー ファイル\generic</Filter>
+    </ClInclude>
+    <ClInclude Include="..\generic\hostdrvntdef.h">
+      <Filter>ヘッダー ファイル\generic</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

@@ -4,6 +4,9 @@
  */
 
 #include "compiler.h"
+
+#ifdef SUPPORT_VSTi
+
 #include "vsteffect.h"
 #include "vsteditwndbase.h"
 
@@ -283,3 +286,5 @@ VstIntPtr CVstEffect::audioMasterCallback(VstInt32 opcode, VstInt32 index, VstIn
 
 	return ret;
 }
+
+#endif

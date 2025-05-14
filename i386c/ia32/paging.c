@@ -710,9 +710,11 @@ paging(UINT32 laddr, int ucrw)
 	UINT bit;
 	UINT err;
 
+#if !defined(SUPPORT_IA32_HAXM) // HAXMはエミュレーションTLBを使わない
 	ep = tlb_lookup(laddr, ucrw);
 	if (ep != NULL)
 		return ep->paddr + (laddr & CPU_PAGE_MASK);
+#endif
 
 	pde_addr = CPU_STAT_PDE_BASE + ((laddr >> 20) & 0xffc);
 	pde = cpu_memoryread_d_paging(pde_addr);
@@ -728,47 +730,61 @@ paging(UINT32 laddr, int ucrw)
 		cpu_memorywrite_d_paging(pde_addr, pde);
 	}
 
-	pte_addr = (pde & CPU_PDE_BASEADDR_MASK) + ((laddr >> 10) & 0xffc);
-	pte = cpu_memoryread_d_paging(pte_addr);
-	if (!(pte & CPU_PTE_PRESENT)) {
-		VERBOSE(("paging: page is not present"));
-		VERBOSE(("paging: laddr = 0x%08x, pde_addr = 0x%08x, pde = 0x%08x", laddr, pde_addr, pde));
-		VERBOSE(("paging: pte_addr = 0x%08x, pte = 0x%08x", pte_addr, pte));
-		err = 0;
-		goto pf_exception;
+#if defined(SUPPORT_IA32_HAXM) // HAXMは4MBページのことがある
+	if ((CPU_CR4 & CPU_CR4_PSE) && (pde & CPU_PDE_PAGE_SIZE)) {
+		/* 4MB page size */
+		paddr = (pde & CPU_PDE_4M_BASEADDR_MASK) | (laddr & 0x003fffff);
+
+		bit = ucrw & (CPU_PAGE_WRITE | CPU_PAGE_USER_MODE);
+		bit |= (pde & (CPU_PTE_WRITABLE | CPU_PTE_USER_MODE));
+		bit |= CPU_STAT_WP;
 	}
-	if (!(pte & CPU_PTE_ACCESS)) {
-		pte |= CPU_PTE_ACCESS;
-		cpu_memorywrite_d_paging(pte_addr, pte);
-	}
-
-	/* make physical address */
-	paddr = (pte & CPU_PTE_BASEADDR_MASK) + (laddr & CPU_PAGE_MASK);
-
-	bit  = ucrw & (CPU_PAGE_WRITE|CPU_PAGE_USER_MODE);
-	bit |= (pde & pte & (CPU_PTE_WRITABLE|CPU_PTE_USER_MODE));
-	bit |= CPU_STAT_WP;
-
-#if !defined(USE_PAGE_ACCESS_TABLE)
-	if (!(page_access & (1 << bit)))
-#else
-	if (!(page_access_bit[bit]))
+	else
 #endif
 	{
-		VERBOSE(("paging: page access violation."));
-		VERBOSE(("paging: laddr = 0x%08x, pde_addr = 0x%08x, pde = 0x%08x", laddr, pde_addr, pde));
-		VERBOSE(("paging: pte_addr = 0x%08x, pte = 0x%08x", pte_addr, pte));
-		VERBOSE(("paging: paddr = 0x%08x, bit = 0x%08x", paddr, bit));
-		err = 1;
-		goto pf_exception;
-	}
+		/* 4KB page size */
+		pte_addr = (pde & CPU_PDE_BASEADDR_MASK) + ((laddr >> 10) & 0xffc);
+		pte = cpu_memoryread_d_paging(pte_addr);
+		if (!(pte & CPU_PTE_PRESENT)) {
+			VERBOSE(("paging: page is not present"));
+			VERBOSE(("paging: laddr = 0x%08x, pde_addr = 0x%08x, pde = 0x%08x", laddr, pde_addr, pde));
+			VERBOSE(("paging: pte_addr = 0x%08x, pte = 0x%08x", pte_addr, pte));
+			err = 0;
+			goto pf_exception;
+		}
+		if (!(pte & CPU_PTE_ACCESS)) {
+			pte |= CPU_PTE_ACCESS;
+			cpu_memorywrite_d_paging(pte_addr, pte);
+		}
 
-	if ((ucrw & CPU_PAGE_WRITE) && !(pte & CPU_PTE_DIRTY)) {
-		pte |= CPU_PTE_DIRTY;
-		cpu_memorywrite_d_paging(pte_addr, pte);
-	}
+		/* make physical address */
+		paddr = (pte & CPU_PTE_BASEADDR_MASK) + (laddr & CPU_PAGE_MASK);
 
-	tlb_update(laddr, pte, (bit & (CPU_PTE_WRITABLE|CPU_PTE_USER_MODE)) + ((ucrw & CPU_PAGE_CODE) ? 1 : 0));
+		bit = ucrw & (CPU_PAGE_WRITE | CPU_PAGE_USER_MODE);
+		bit |= (pde & pte & (CPU_PTE_WRITABLE | CPU_PTE_USER_MODE));
+		bit |= CPU_STAT_WP;
+
+#if !defined(USE_PAGE_ACCESS_TABLE)
+		if (!(page_access & (1 << bit)))
+#else
+		if (!(page_access_bit[bit]))
+#endif
+		{
+			VERBOSE(("paging: page access violation."));
+			VERBOSE(("paging: laddr = 0x%08x, pde_addr = 0x%08x, pde = 0x%08x", laddr, pde_addr, pde));
+			VERBOSE(("paging: pte_addr = 0x%08x, pte = 0x%08x", pte_addr, pte));
+			VERBOSE(("paging: paddr = 0x%08x, bit = 0x%08x", paddr, bit));
+			err = 1;
+			goto pf_exception;
+		}
+
+		if ((ucrw & CPU_PAGE_WRITE) && !(pte & CPU_PTE_DIRTY)) {
+			pte |= CPU_PTE_DIRTY;
+			cpu_memorywrite_d_paging(pte_addr, pte);
+		}
+
+		tlb_update(laddr, pte, (bit & (CPU_PTE_WRITABLE | CPU_PTE_USER_MODE)) + ((ucrw & CPU_PAGE_CODE) ? 1 : 0));
+	}
 
 	return paddr;
 

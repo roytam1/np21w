@@ -4,8 +4,10 @@
  */
 
 #include "compiler.h"
-#include "vstbuffer.h"
 
+#ifdef SUPPORT_VSTi
+
+#include "vstbuffer.h"
 /**
  * コンストラクタ
  */
@@ -122,3 +124,5 @@ void CVstBuffer::GetShort(short* lpBuffer) const
 		}
 	}
 }
+
+#endif

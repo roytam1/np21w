@@ -67,8 +67,11 @@ CSubWndBase::~CSubWndBase()
  */
 BOOL CSubWndBase::Create(UINT nCaptionID, DWORD dwStyle, int x, int y, int nWidth, int nHeight, HWND hwndParent, HMENU nIDorHMenu)
 {
+	BOOL r;
 	std::tstring rCaption(LoadTString(nCaptionID));
-	return CreateEx(0, s_szClassName, rCaption.c_str(), dwStyle, x, y, nWidth, nHeight, hwndParent, nIDorHMenu);
+	r = CreateEx(0, s_szClassName, rCaption.c_str(), dwStyle, x, y, nWidth, nHeight, hwndParent, nIDorHMenu);
+	winloc_DisableCornerRound(m_hWnd);
+	return r;
 }
 
 /**
@@ -86,7 +89,9 @@ BOOL CSubWndBase::Create(UINT nCaptionID, DWORD dwStyle, int x, int y, int nWidt
  */
 BOOL CSubWndBase::Create(LPCTSTR lpCaption, DWORD dwStyle, int x, int y, int nWidth, int nHeight, HWND hwndParent, HMENU nIDorHMenu)
 {
-	return CreateEx(0, s_szClassName, lpCaption, dwStyle, x, y, nWidth, nHeight, hwndParent, nIDorHMenu);
+	BOOL r = CreateEx(0, s_szClassName, lpCaption, dwStyle, x, y, nWidth, nHeight, hwndParent, nIDorHMenu);
+	winloc_DisableCornerRound(m_hWnd);
+	return r;
 }
 
 /**

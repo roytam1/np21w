@@ -86,6 +86,7 @@
 #define IDC_SOUND_DEVICE_NAME           11117
 #define IDC_SAVEWINDOWSIZE              11118
 #define IDC_MULTITHREADMODE             11119
+#define IDC_SAVEWINDOWSIZEPERRES        11120
 #define IDC_DISKLABEL                   12101
 #define IDC_MAKE2DD                     12102
 #define IDC_MAKE2HD                     12103
@@ -572,6 +573,8 @@
 #define IDM_DEBUGUTY                    40011
 #define IDM_VIEWER                      40012
 #define IDM_RESTOREBORDER               40013
+#define IDM_ALLOWRESIZE					40048
+#define IDM_SAVEWINDOWSIZE				40049
 #define IDM_SCRNMUL                     40050
 #define IDM_SCRNMUL4                    40054
 #define IDM_SCRNMUL6                    40056
@@ -579,6 +582,8 @@
 #define IDM_SCRNMUL10                   40060
 #define IDM_SCRNMUL12                   40062
 #define IDM_SCRNMUL16                   40066
+#define IDM_SCRNMUL24                   40074
+#define IDM_SCRNMUL32                   40082
 #define IDM_RESET                       40101
 #define IDM_CONFIG                      40102
 #define IDM_NEWDISK                     40103

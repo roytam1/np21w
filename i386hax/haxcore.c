@@ -552,8 +552,8 @@ ia32hax_copyregHAXtoNP2(void)
 	CPU_STAT_WP = (CPU_CR0 & CPU_CR0_WP) ? 0x10 : 0;
 	CPU_STAT_CPL = (UINT8)CPU_CS_DESC.rpl;
 	CPU_STAT_USER_MODE = (CPU_CS_DESC.rpl == 3) ? CPU_MODE_USER : CPU_MODE_SUPERVISER;
-	//CPU_STAT_PDE_BASE = CPU_CR3 & CPU_CR3_PD_MASK;
-	CPU_STAT_PDE_BASE = np2haxstat.state._pde;
+	CPU_STAT_PDE_BASE = CPU_CR3 & CPU_CR3_PD_MASK;
+	//CPU_STAT_PDE_BASE = np2haxstat.state._pde;
 	
 	//ia32hax_setHAXtoNP2IOADDR();
 }

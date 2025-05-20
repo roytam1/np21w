@@ -63,11 +63,13 @@ private:
 	UINT8 m_hdrvenable;			//!< 有効
 	TCHAR m_hdrvroot[MAX_PATH];	//!< 共有ディレクトリ
 	UINT8 m_hdrvacc;			//!< アクセス権限
+	UINT8 m_hdrvNTenable;		//!< NT有効
 	CWndProc m_chkenabled;		//!< Enabled
-	CComboData m_cmbdir;			//!< Shared Directory
+	CComboData m_cmbdir;		//!< Shared Directory
 	CWndProc m_chkread;			//!< Permission: Read
 	CWndProc m_chkwrite;		//!< Permission: Write
 	CWndProc m_chkdelete;		//!< Permission: Delete
+	CWndProc m_chkNTenabled;	//!< Enabled NT
 };
 
 /**
@@ -90,6 +92,7 @@ BOOL CHostdrvDlg::OnInitDialog()
 	hostdrv_setcurrentpath(m_hdrvroot);
 	m_hdrvacc = np2cfg.hdrvacc;
 	m_hdrvenable = np2cfg.hdrvenable;
+	m_hdrvNTenable = np2cfg.hdrvntenable;
 	
 	m_chkenabled.SubclassDlgItem(IDC_HOSTDRVENABLE, this);
 	if(m_hdrvenable)
@@ -122,6 +125,13 @@ BOOL CHostdrvDlg::OnInitDialog()
 	else
 		m_chkdelete.SendMessage(BM_SETCHECK , BST_UNCHECKED , 0);
 
+	m_chkNTenabled.SubclassDlgItem(IDC_HOSTDRVNTENABLE, this);
+	if (m_hdrvNTenable)
+		m_chkNTenabled.SendMessage(BM_SETCHECK, BST_CHECKED, 0);
+	else
+		m_chkNTenabled.SendMessage(BM_SETCHECK, BST_UNCHECKED, 0);
+
+
 	m_cmbdir.SetFocus();
 
 	return FALSE;
@@ -137,9 +147,10 @@ void CHostdrvDlg::OnOK()
 	//TCHAR numbuf[31];
 	
 	hostdrv_setcurrentpath(m_hdrvroot);
-	if (m_hdrvenable!=np2cfg.hdrvenable || _tcscmp(np2cfg.hdrvroot, m_hdrvroot)!=0 || m_hdrvacc!=np2cfg.hdrvacc)
+	if (m_hdrvenable!=np2cfg.hdrvenable || m_hdrvNTenable != np2cfg.hdrvntenable || _tcscmp(np2cfg.hdrvroot, m_hdrvroot)!=0 || m_hdrvacc!=np2cfg.hdrvacc)
 	{
 		np2cfg.hdrvenable = m_hdrvenable;
+		np2cfg.hdrvntenable = m_hdrvNTenable;
 		_tcscpy(np2cfg.hdrvroot, m_hdrvroot);
 		np2cfg.hdrvacc = m_hdrvacc;
 		update |= SYS_UPDATECFG;
@@ -258,6 +269,10 @@ BOOL CHostdrvDlg::OnCommand(WPARAM wParam, LPARAM lParam)
 		case IDC_HOSTDRVDELETE:
 			m_hdrvacc = (m_hdrvacc & ~HDFMODE_DELETE);
 			m_hdrvacc |= (m_chkdelete.SendMessage(BM_GETCHECK , 0 , 0) ? HDFMODE_DELETE : 0);
+			return TRUE;
+
+		case IDC_HOSTDRVNTENABLE:
+			m_hdrvNTenable = (UINT8)m_chkNTenabled.SendMessage(BM_GETCHECK, 0, 0);
 			return TRUE;
 	}
 	return FALSE;

@@ -464,7 +464,7 @@ static const PFTBL s_IniItems[] =
 	PFVAL("hdrv_acc", PFTYPE_UINT8,		&np2cfg.hdrvacc),
 #endif
 #if defined(SUPPORT_HOSTDRVNT)
-	PFVAL("usehdrvn", PFRO_BOOL,		&np2cfg.hdrvntenable),
+	PFVAL("usehdrvn", PFTYPE_BOOL,		&np2cfg.hdrvntenable),
 #endif
 
 	PFSTR("pc_model", PFTYPE_STR,		np2cfg.model),

@@ -319,6 +319,7 @@
 #define IDC_HOSTDRVREAD					19092
 #define IDC_HOSTDRVWRITE				19093
 #define IDC_HOSTDRVDELETE				19094
+#define IDC_HOSTDRVNTENABLE				19095
 #define IDC_HOSTDRVBROWSE				19099
 #define IDC_IDE1TYPE                    19100
 #define IDC_IDE2TYPE                    19101

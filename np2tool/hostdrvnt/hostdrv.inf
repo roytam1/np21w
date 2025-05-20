@@ -2,7 +2,7 @@
 Signature="$Windows NT$"
 Class=LegacyDriver
 Provider=%ProviderName%
-DriverVer=05/05/2025,0.1.0.0
+DriverVer=05/20/2025,1.2.0.0
 
 [DestinationDirs]
 DefaultDestDir = 12 ; system32\drivers
@@ -19,12 +19,18 @@ hostdrv.sys
 hdrvmnt.exe
 
 [NP2HostDrive.AddReg]
+HKLM,"System\CurrentControlSet\Services\hostdrv","Group",0x00000000,"File System"
 HKLM,"System\CurrentControlSet\Services\hostdrv","Type",0x00010001,1
-HKLM,"System\CurrentControlSet\Services\hostdrv","Start",0x00010001,2
+HKLM,"System\CurrentControlSet\Services\hostdrv","Start",0x00010001,1
 HKLM,"System\CurrentControlSet\Services\hostdrv","ErrorControl",0x00010001,1
 HKLM,"System\CurrentControlSet\Services\hostdrv","ImagePath",0x00020000,"system32\drivers\hostdrv.sys"
-HKLM, System\CurrentControlSet\Services\hostdrv","DisplayName",0x00000000,"Neko Project II Host Drive"
+HKLM,"System\CurrentControlSet\Services\hostdrv","DisplayName",0x00000000,"Neko Project II Host Drive"
 HKLM,"System\CurrentControlSet\Services\hostdrv","IsRemovableDevice",0x00010001,0
+HKLM,"System\CurrentControlSet\Services\hostdrv","UseRealCapacity",0x00010001,0
+HKLM,"System\CurrentControlSet\Services\hostdrv","UseCheckNotify",0x00010001,0
+HKLM,"System\CurrentControlSet\Services\hostdrv","CheckNotifyInterval",0x00010001,0
+HKLM,"System\CurrentControlSet\Services\hostdrv","AutoMount",0x00010001,0
+HKLM,"System\CurrentControlSet\Services\hostdrv","AutoMountDriveLetter",0x00000000,"Auto"
 
 [SourceDisksNames]
 1=%DiskName%,,,

@@ -92,6 +92,7 @@ typedef enum
 #define NP2_IRP_MJ_FLUSH_BUFFERS			0x09
 
 #define NP2_IRP_MN_QUERY_DIRECTORY			0x01
+#define NP2_IRP_MN_NOTIFY_CHANGE_DIRECTORY	0x02
 #define NP2_IRP_MN_USER_FS_REQUEST			0x00
 
 #define NP2_SL_RESTART_SCAN					0x00000001
@@ -118,6 +119,9 @@ typedef enum
 #define NP2_STATUS_END_OF_FILE				0xC0000011L
 #define NP2_STATUS_NOT_SUPPORTED			0xC00000BBL
 #define NP2_STATUS_MEDIA_WRITE_PROTECTED	0xC00000A2L
+#define NP2_STATUS_PENDING                  0x00000103L
+#define NP2_STATUS_INSUFFICIENT_RESOURCES   0xC000009AL
+#define NP2_STATUS_NOTIFY_ENUM_DIR          0x0000010CL
 
 #define NP2_FILE_USE_FILE_POINTER_POSITION	0xfffffffe
 
@@ -161,6 +165,18 @@ typedef enum
 #define NP2_FILE_OPEN_BY_FILE_ID                    0x00002000
 #define NP2_FILE_OPEN_FOR_BACKUP_INTENT             0x00004000
 #define NP2_FILE_NO_COMPRESSION                     0x00008000
+
+#define NP2_FILE_ACTION_ADDED					0x00000001
+#define NP2_FILE_ACTION_REMOVED					0x00000002
+#define NP2_FILE_ACTION_MODIFIED				0x00000003
+#define NP2_FILE_ACTION_RENAMED_OLD_NAME		0x00000004
+#define NP2_FILE_ACTION_RENAMED_NEW_NAME		0x00000005
+#define NP2_FILE_ACTION_ADDED_STREAM			0x00000006
+#define NP2_FILE_ACTION_REMOVED_STREAM			0x00000007
+#define NP2_FILE_ACTION_MODIFIED_STREAM			0x00000008
+#define NP2_FILE_ACTION_REMOVED_BY_DELETE		0x00000009
+#define NP2_FILE_ACTION_ID_NOT_TUNNELLED		0x0000000A
+#define NP2_FILE_ACTION_TUNNELLED_ID_COLLISION	0x0000000B
 
 #define NP2_SL_FORCE_ACCESS_CHECK           0x01
 #define NP2_SL_OPEN_PAGING_FILE             0x02
@@ -280,6 +296,11 @@ typedef struct
 				UINT32 DeleteHandle;
 			};
 		} setFile;
+		struct
+		{
+			ULONG length;
+			ULONG completionFilter;
+		} notifyDirectory;
 		struct
 		{
 			UINT32 argument1;
@@ -477,7 +498,14 @@ typedef struct
 typedef struct
 {
 	UINT64 AllocationSize;
-} FILE_ALLOCATION_INFORMATION;
+} NP2_FILE_ALLOCATION_INFORMATION;
+typedef struct
+{
+	UINT32 NextEntryOffset;
+	UINT32 Action;
+	UINT32 FileNameLength;
+	WCHAR FileName[MAX_PATH];
+} NP2_FILE_NOTIFY_INFORMATION;
 #pragma pack(pop)
 #pragma pack(push, 1)
 typedef struct

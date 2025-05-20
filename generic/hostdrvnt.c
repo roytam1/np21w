@@ -66,17 +66,39 @@ HOSTDRVNT hostdrvNT;
 static WCHAR s_hdrvRoot[MAX_PATH] = { 0 };
 static UINT8 s_hdrvAcc = 0;
 
+// I/O待機用いろいろ
+static UINT32 s_pendingListCount = 0;
+static UINT32 s_pendingIrpListAddr = 0;
+static UINT32 s_pendingAliveListAddr = 0;
+static SINT32 s_pendingIndexOrCompleteCount = 0;
+
+#define HOSTDRVNTOPTIONS_NONE				0x0
+#define HOSTDRVNTOPTIONS_REMOVABLEDEVICE	0x1
+#define HOSTDRVNTOPTIONS_USEREALCAPACITY	0x2
+
+// おぷしょん
+static UINT32 s_hostdrvNTOptions = HOSTDRVNTOPTIONS_NONE;
+
 // ---------- Utility Functions
 
+static void hostdrvNT_notifyChange(WCHAR* changedHostFileName, UINT32 action);
+
+/// <summary>
+/// ホスト共有ドライブのルートパスを取得してUnicode文字列として記憶。最後の区切り文字（\）がある場合は削除する。
+/// </summary>
 void hostdrvNT_updateHDrvRoot(void)
 {
 	int slen;
+
+	// パス長さが制限オーバーならエラー
 	if (_tcslen(np2cfg.hdrvroot) >= MAX_PATH)
 	{
 		s_hdrvRoot[0] = '\0';
 		s_hdrvAcc = 0;
 		return;
 	}
+
+	// パス長さが制限オーバーならエラー
 #ifdef UNICODE
 	// 変換不要
 	wcscpy(s_hdrvRoot, np2cfg.hdrvroot);
@@ -92,6 +114,8 @@ void hostdrvNT_updateHDrvRoot(void)
 	ZeroMemory(s_hdrvRoot, sizeof(s_hdrvRoot));
 	MultiByteToWideChar(CP_UTF8, 0, np2cfg.hdrvroot, strlen(np2cfg.hdrvroot) + 1, s_hdrvRoot, lengthUnicode);
 #endif
+
+	// 最後の文字が\なら除去
 	slen = wcslen(s_hdrvRoot);
 	if (slen > 0 && s_hdrvRoot[slen - 1] == '\\')
 	{
@@ -134,7 +158,15 @@ static void hostdrvNT_closeFile(int index)
 		// 削除権限があれば削除
 		if (s_hdrvAcc & HDFMODE_DELETE)
 		{
-			DeleteFileW(hostdrvNT.files[index].hostFileName);
+			if (hostdrvNT.files[index].isDirectory)
+			{
+				RemoveDirectoryW(hostdrvNT.files[index].hostFileName);
+			}
+			else
+			{
+				DeleteFileW(hostdrvNT.files[index].hostFileName);
+			}
+			hostdrvNT_notifyChange(hostdrvNT.files[index].hostFileName, NP2_FILE_ACTION_REMOVED, 0);
 		}
 		hostdrvNT.files[index].deleteOnClose = 0;
 	}
@@ -203,7 +235,8 @@ static int hostdrvNT_getHostPath(WCHAR* virPath, WCHAR* hostPath, UINT8* isRoot,
 	// ルートディレクトリ判定
 	if (wcslen(hostPath) > hdrvPathLen + 1)
 	{
-		*isRoot = (wcschr(hostPath + hdrvPathLen + 1, '\\') != NULL);
+		UINT32 vlen = wcslen(hostPath + hdrvPathLen + 1);
+		*isRoot = (vlen == 0 || (vlen == 1 && *(hostPath + hdrvPathLen + 1) == '\\'));
 	}
 	else
 	{
@@ -386,6 +419,164 @@ static NP2HOSTDRVNT_FILEINFO* hostdrvNT_getFileInfo(NP2_FILE_OBJECT* fileObject)
 	return &hostdrvNT.files[fsContextFileIndex];
 }
 
+/// <summary>
+/// IRP_MN_NOTIFY_CHANGE_DIRECTORYで監視中の変更を処理する
+/// </summary>
+/// <param name="changedHostFileName">変更されたファイル名。仮想パスではなくホストのファイル名で指定</param>
+/// <param name="action">通知するアクション NP2_FILE_ACTION_～を指定</param>
+/// <param name="forceRequestEnumDir">強制更新させる場合はtrue。XXX: 1個で通知できない場合はこれを使う。</param>
+static void hostdrvNT_notifyChange(WCHAR* changedHostFileName, UINT32 action, UINT32 forceRequestEnumDir)
+{
+	WCHAR changedHostDir[MAX_PATH]; // 変更されたファイルのあるディレクトリ名
+	NP2HOSTDRVNT_FILEINFO* fi;
+	int i;
+	WCHAR hdrvPath[MAX_PATH];
+
+	wcscpy(hdrvPath, s_hdrvRoot);
+
+	for (i = 0; i < s_pendingListCount; i++)
+	{
+		UINT32 irpListAddr = s_pendingIrpListAddr + i * sizeof(UINT32);
+		UINT32 fileIdxListAddr = s_pendingAliveListAddr + i * sizeof(UINT32);
+		UINT32 irpAddr = cpu_kmemoryread_d(irpListAddr);
+		UINT32 fileIdx = cpu_kmemoryread_d(fileIdxListAddr);
+		if (irpAddr != 0 && fileIdx != 0)
+		{
+			DWORD attr; // ファイル属性処理用テンポラリ
+			UINT32 irpStatusAddr = irpAddr + 4 + 4 + 4 + 4 + 4 + 4; // IRP構造体のStatusが書き込まれている位置のアドレス
+			UINT32 irpInfoAddr = irpStatusAddr + 4; // IRP構造体のInformationが書き込まれている位置のアドレス
+			UINT32 irpOutBufferAddr; // SystemBufferのアドレス
+			UINT32 length; // SystemBufferの長さ
+			UINT32 completionFilter = 0; // 監視対象の条件のフィルタ
+			UINT32 irpstackFlags = 0; // IRPスタックのFlags
+			UINT32 watchTree = 0; // 下にあるディレクトリツリー全体を監視
+			UINT32 match = 0; // 今回の変更が条件にマッチしているかどうか
+
+			// ファイルオブジェクトを取得
+			fi = &hostdrvNT.files[fileIdx];
+			if (fi->fileName == NULL)
+			{
+				// ファイルが閉じていたらもう監視できないのでエラー
+				cpu_kmemorywrite_d(irpStatusAddr, NP2_STATUS_INVALID_PARAMETER);
+				cpu_kmemorywrite_d(irpInfoAddr, 0); // Information
+				cpu_kmemorywrite_d(fileIdxListAddr, 0); // イベント発生要求
+				if (s_pendingIndexOrCompleteCount < 0) s_pendingIndexOrCompleteCount = 0;
+				s_pendingIndexOrCompleteCount++;
+				continue;
+			}
+
+			// 書き込み先メモリアドレスを取得
+			irpOutBufferAddr = cpu_kmemoryread_d(irpAddr + 4 + 4 + 4); // IRP構造体のSystemBufferが書き込まれている位置
+			if (irpOutBufferAddr == NULL)
+			{
+				// NULLはおかしいのでエラー
+				cpu_kmemorywrite_d(irpStatusAddr, NP2_STATUS_INVALID_PARAMETER);
+				cpu_kmemorywrite_d(irpInfoAddr, 0); // Information
+				cpu_kmemorywrite_d(fileIdxListAddr, 0); // イベント発生要求
+				if (s_pendingIndexOrCompleteCount < 0) s_pendingIndexOrCompleteCount = 0;
+				s_pendingIndexOrCompleteCount++;
+				continue;
+			}
+
+			// 書き込み先サイズを取得　XXX:記録する場所がないのでSystemBufferの最初の部分を借りている
+			length = cpu_kmemoryread_d(irpOutBufferAddr);
+
+			// フィルタ条件を取得　XXX:記録する場所がないのでSystemBufferの最初の部分を借りている
+			completionFilter = cpu_kmemoryread_d(irpOutBufferAddr + 4);
+
+			// フラグを取得　XXX:記録する場所がないのでSystemBufferの最初の部分を借りている
+			irpstackFlags = cpu_kmemoryread(irpOutBufferAddr + 8);
+			watchTree = !!(irpstackFlags & NP2_SL_WATCH_TREE);
+
+			// ファイル名を除いてディレクトリ部分を取得
+			wcscpy(changedHostDir, changedHostFileName);
+			attr = GetFileAttributesW(changedHostDir);
+			if (attr == INVALID_FILE_ATTRIBUTES || !(attr & FILE_ATTRIBUTE_DIRECTORY))
+			{
+				// ファイルなら最後のドライブ区切り文字以降をカット
+				WCHAR* hostSepa;
+				if (hostSepa = wcsrchr(changedHostDir, '\\'))
+				{
+					*hostSepa = '\0';
+				}
+			}
+			else
+			{
+				// ディレクトリなら最後の文字が\の時カット
+				UINT32 changedHostDirLen = wcslen(changedHostDir);
+				if (changedHostDirLen >= 1 && changedHostDir[changedHostDirLen - 1] == '\\')
+				{
+					changedHostDir[changedHostDirLen - 1] = '\0';
+				}
+			}
+
+			// パスを比較して必要に応じて変更通知
+			if (wcscmp(fi->hostFileName, changedHostDir) == 0)
+			{
+				// 完全一致パターン
+				match = 1;
+			}
+			else if (watchTree)
+			{
+				// 下の階層まで見るモード
+				UINT32 path1Len = 0;
+				UINT32 path2Len = 0;
+				path1Len = wcslen(fi->hostFileName);
+				path2Len = wcslen(changedHostDir);
+				if (path1Len < path2Len && wcsncmp(fi->hostFileName, changedHostDir, path1Len) == 0)
+				{
+					// 下層一致パターン
+					match = 1;
+				}
+			}
+
+			// 条件に一致した
+			if (match)
+			{
+				WCHAR* fileNamePart;
+				NP2_FILE_NOTIFY_INFORMATION info = { 0 };
+
+				// 監視しているディレクトリからの相対パスに変換
+				if (wcslen(changedHostFileName) > wcslen(fi->hostFileName) + 1)
+				{
+					fileNamePart = changedHostFileName + wcslen(fi->hostFileName) + 1;
+				}
+				else
+				{
+					fileNamePart = changedHostFileName + wcslen(fi->hostFileName);
+				}
+
+				// 変更内容をセット
+				info.Action = action;
+
+				// ファイル名をセット
+				info.FileNameLength = wcslen(fileNamePart) * sizeof(WCHAR);
+				wcscpy(info.FileName, fileNamePart);
+
+				// XXX: 次エントリは使わないことにする
+				info.NextEntryOffset = 0;
+
+				// 書き込み
+				if (sizeof(info) <= length && !forceRequestEnumDir)
+				{
+					length = sizeof(info);
+					cpu_kmemorywrite_d(irpStatusAddr, NP2_STATUS_SUCCESS);
+				}
+				else
+				{
+					cpu_kmemorywrite_d(irpStatusAddr, NP2_STATUS_NOTIFY_ENUM_DIR);
+				}
+				hostdrvNT_memwrite(irpOutBufferAddr, &info, length);
+
+				cpu_kmemorywrite_d(irpInfoAddr, length); // Information（書き込んだデータサイズ）
+				cpu_kmemorywrite_d(fileIdxListAddr, 0); // イベント発生要求
+				if (s_pendingIndexOrCompleteCount < 0) s_pendingIndexOrCompleteCount = 0;
+				s_pendingIndexOrCompleteCount++;
+			}
+		}
+	}
+}
+
 static int hostdrvNT_getOneEntry(NP2HOSTDRVNT_FILEINFO* fi, NP2_FILE_BOTH_DIR_INFORMATION* dirInfo, WCHAR* pattern)
 {
 	WIN32_FIND_DATA findFileData;
@@ -534,6 +725,56 @@ static void hostdrvNT_IRP_MJ_CREATE(HOSTDRVNT_INVOKEINFO *invokeInfo)
 		cpu_kmemorywrite_d(invokeInfo->statusAddr, NP2_STATUS_INVALID_PARAMETER);
 		cpu_kmemorywrite_d(invokeInfo->statusAddr + 4, 0); // Information
 		return;
+	}
+
+	// 指定した場所からの相対指定の場合
+	if (fileObject.RelatedFileObject != NULL)
+	{
+		WCHAR* dirName;
+		UINT32 dirNameLen;
+		NP2_FILE_OBJECT relFileObject = { 0 }; // パスの基準にするファイルオブジェクト
+		hostdrvNT_memread(fileObject.RelatedFileObject, &relFileObject, sizeof(NP2_FILE_OBJECT));
+		dirName = hostdrvNT_readUnicodeString(relFileObject.FileName.Buffer, relFileObject.FileName.Length);
+		if (!dirName)
+		{
+			TRACEOUTW((L"ERROR: read dirName Failed"));
+			cpu_kmemorywrite_d(invokeInfo->statusAddr, NP2_STATUS_INVALID_PARAMETER);
+			cpu_kmemorywrite_d(invokeInfo->statusAddr + 4, 0); // Information
+			return;
+		}
+		dirNameLen = wcslen(dirName);
+		if (dirNameLen > 0)
+		{
+			WCHAR *pathTmp;
+			UINT32 combineLen;
+			if (dirName[dirNameLen - 1] == '\\')
+			{
+				dirName[dirNameLen - 1] = '\0';
+			}
+			combineLen = wcslen(dirName) + 1 + wcslen(fileName);
+			if (combineLen >= MAX_PATH)
+			{
+				TRACEOUTW((L"ERROR: too long path"));
+				cpu_kmemorywrite_d(invokeInfo->statusAddr, NP2_STATUS_INVALID_PARAMETER);
+				cpu_kmemorywrite_d(invokeInfo->statusAddr + 4, 0); // Information
+				return;
+			}
+			pathTmp = (WCHAR*)malloc((combineLen + 1) * sizeof(WCHAR));
+			ZeroMemory(pathTmp, (combineLen + 1) * sizeof(WCHAR));
+			if (!pathTmp)
+			{
+				TRACEOUTW((L"ERROR: read dirName alloc Failed"));
+				cpu_kmemorywrite_d(invokeInfo->statusAddr, NP2_STATUS_INVALID_PARAMETER);
+				cpu_kmemorywrite_d(invokeInfo->statusAddr + 4, 0); // Information
+				return;
+			}
+			wcscpy(pathTmp, dirName);
+			wcscat(pathTmp, L"\\");
+			wcscat(pathTmp, fileName);
+			free(fileName);
+			fileName = pathTmp; // ディレクトリ付きに入れ替え
+		}
+		free(dirName);
 	}
 
 	// フラグ系を取得
@@ -750,6 +991,8 @@ static void hostdrvNT_IRP_MJ_CREATE(HOSTDRVNT_INVOKEINFO *invokeInfo)
 				// あらためて属性を取得
 				attrs = GetFileAttributesW(hostPath);
 				returnInformation = NP2_FILE_CREATED;
+
+				hostdrvNT_notifyChange(hostPath, NP2_FILE_ACTION_ADDED, 0);
 			}
 		}
 		else
@@ -811,14 +1054,22 @@ static void hostdrvNT_IRP_MJ_CREATE(HOSTDRVNT_INVOKEINFO *invokeInfo)
 					{
 						// ファイルが既に開かれてロックされている
 						TRACEOUTW((L"OPEN FILE ERROR (ERROR_SHARING_VIOLATION code %d): %d %s", error, fileIndex, hostPath));
-						cpu_kmemorywrite_d(invokeInfo->statusAddr, NP2_STATUS_SHARING_VIOLATION); // Status STATUS_SHARING_VIOLATION
+						cpu_kmemorywrite_d(invokeInfo->statusAddr, NP2_STATUS_SHARING_VIOLATION);
 						cpu_kmemorywrite_d(invokeInfo->statusAddr + 4, 0); // Information
 						TRACEOUTW((L"returns STATUS_SHARING_VIOLATION"));
+					}
+					else if (error == ERROR_ACCESS_DENIED)
+					{
+						// 書き込み禁止状態など
+						TRACEOUTW((L"OPEN FILE ERROR (NP2_STATUS_ACCESS_DENIED code %d): %d %s", error, fileIndex, hostPath));
+						cpu_kmemorywrite_d(invokeInfo->statusAddr, NP2_STATUS_ACCESS_DENIED);
+						cpu_kmemorywrite_d(invokeInfo->statusAddr + 4, 0); // Information
+						TRACEOUTW((L"returns NP2_STATUS_ACCESS_DENIED"));
 					}
 					else
 					{
 						TRACEOUTW((L"OPEN FILE ERROR (code %d): %d %s", error, fileIndex, hostPath));
-						cpu_kmemorywrite_d(invokeInfo->statusAddr, NP2_STATUS_OBJECT_NAME_INVALID); // Status STATUS_OBJECT_NAME_INVALID
+						cpu_kmemorywrite_d(invokeInfo->statusAddr, NP2_STATUS_OBJECT_NAME_INVALID);
 						cpu_kmemorywrite_d(invokeInfo->statusAddr + 4, 0); // Information
 						TRACEOUTW((L"returns STATUS_OBJECT_NAME_INVALID"));
 					}
@@ -935,12 +1186,26 @@ static void hostdrvNT_IRP_MJ_QUERY_VOLUME_INFORMATION(HOSTDRVNT_INVOKEINFO* invo
 	else if (fsInfoClass == FileFsSizeInformation)
 	{
 		MP2_FILE_FS_SIZE_INFORMATION info = { 0 };
+		ULARGE_INTEGER freeBytesAvailable;
+		ULARGE_INTEGER totalNumberOfBytes;
+		ULARGE_INTEGER totalNumberOfFreeBytes;
 
-		// 大きすぎると色々おかしくなるのでダミーを返す
-		info.SectorsPerAllocationUnit = 8;      // 8 セクタで 1 クラスタ
-		info.BytesPerSector = 512;              // 512 バイト/セクタ
-		info.TotalAllocationUnits = (UINT64)2 * 1024 * 1024 * 1024 / (info.SectorsPerAllocationUnit * info.BytesPerSector);
-		info.AvailableAllocationUnits = info.TotalAllocationUnits / 2;
+		if ((s_hostdrvNTOptions & HOSTDRVNTOPTIONS_USEREALCAPACITY) && GetDiskFreeSpaceEx(s_hdrvRoot, &freeBytesAvailable, &totalNumberOfBytes, &totalNumberOfFreeBytes))
+		{
+			// 実容量を返す
+			info.SectorsPerAllocationUnit = 8;      // 8 セクタで 1 クラスタ
+			info.BytesPerSector = 512;              // 512 バイト/セクタ
+			info.TotalAllocationUnits = (UINT64)totalNumberOfBytes.QuadPart / (info.SectorsPerAllocationUnit * info.BytesPerSector);
+			info.AvailableAllocationUnits = (UINT64)freeBytesAvailable.QuadPart / (info.SectorsPerAllocationUnit * info.BytesPerSector);
+		}
+		else
+		{
+			// ダミーを返す
+			info.SectorsPerAllocationUnit = 8;      // 8 セクタで 1 クラスタ
+			info.BytesPerSector = 512;              // 512 バイト/セクタ
+			info.TotalAllocationUnits = (UINT64)2 * 1024 * 1024 * 1024 / (info.SectorsPerAllocationUnit * info.BytesPerSector);
+			info.AvailableAllocationUnits = info.TotalAllocationUnits / 2;
+		}
 
 		dataLen = sizeof(info);
 		returnData = &info;
@@ -951,12 +1216,27 @@ static void hostdrvNT_IRP_MJ_QUERY_VOLUME_INFORMATION(HOSTDRVNT_INVOKEINFO* invo
 	else if (fsInfoClass == FileFsFullSizeInformation)
 	{
 		MP2_FILE_FS_FULL_SIZE_INFORMATION info = { 0 };
+		ULARGE_INTEGER freeBytesAvailable;
+		ULARGE_INTEGER totalNumberOfBytes;
+		ULARGE_INTEGER totalNumberOfFreeBytes;
 
-		// 大きすぎると色々おかしくなるのでダミーを返す
-		info.SectorsPerAllocationUnit = 8;      // 8 セクタで 1 クラスタ
-		info.BytesPerSector = 512;              // 512 バイト/セクタ
-		info.TotalAllocationUnits = (UINT64)2 * 1024 * 1024 * 1024 / (info.SectorsPerAllocationUnit * info.BytesPerSector);
-		info.ActualAvailableAllocationUnits = info.CallerAvailableAllocationUnits = info.TotalAllocationUnits / 2;
+		if ((s_hostdrvNTOptions & HOSTDRVNTOPTIONS_USEREALCAPACITY) && GetDiskFreeSpaceEx(s_hdrvRoot, &freeBytesAvailable, &totalNumberOfBytes, &totalNumberOfFreeBytes))
+		{
+			// 実容量を返す
+			info.SectorsPerAllocationUnit = 8;      // 8 セクタで 1 クラスタ
+			info.BytesPerSector = 512;              // 512 バイト/セクタ
+			info.TotalAllocationUnits = (UINT64)totalNumberOfBytes.QuadPart / (info.SectorsPerAllocationUnit * info.BytesPerSector);
+			info.ActualAvailableAllocationUnits = (UINT64)totalNumberOfFreeBytes.QuadPart / (info.SectorsPerAllocationUnit * info.BytesPerSector);
+			info.CallerAvailableAllocationUnits = (UINT64)freeBytesAvailable.QuadPart / (info.SectorsPerAllocationUnit * info.BytesPerSector);
+		}
+		else
+		{
+			// ダミーを返す
+			info.SectorsPerAllocationUnit = 8;      // 8 セクタで 1 クラスタ
+			info.BytesPerSector = 512;              // 512 バイト/セクタ
+			info.TotalAllocationUnits = (UINT64)2 * 1024 * 1024 * 1024 / (info.SectorsPerAllocationUnit * info.BytesPerSector);
+			info.ActualAvailableAllocationUnits = info.CallerAvailableAllocationUnits = info.TotalAllocationUnits / 2;
+		}
 
 		dataLen = sizeof(info);
 		returnData = &info;
@@ -1043,6 +1323,7 @@ static void hostdrvNT_IRP_MJ_DIRECTORY_CONTROL(HOSTDRVNT_INVOKEINFO* invokeInfo)
 				}
 			}
 		}
+		TRACEOUTW((L"FILE PATTERN: %s", filePattern));
 
 		// スキャンを最初からやり直すかどうか確認
 		restartScan = invokeInfo->stack.flags & NP2_SL_RESTART_SCAN;
@@ -1063,6 +1344,7 @@ static void hostdrvNT_IRP_MJ_DIRECTORY_CONTROL(HOSTDRVNT_INVOKEINFO* invokeInfo)
 			// 1つだけ返すモード
 			UINT32 length = invokeInfo->stack.parameters.read.length;
 			FILE_INFORMATION_CLASS fileInfoClass = invokeInfo->stack.parameters.queryDirectory.FileInformationClass;
+			TRACEOUTW((L"Single Entry Mode"));
 			if (fileInfoClass == FileBothDirectoryInformation)
 			{
 				NP2_FILE_BOTH_DIR_INFORMATION dirInfo = { 0 };
@@ -1103,6 +1385,7 @@ static void hostdrvNT_IRP_MJ_DIRECTORY_CONTROL(HOSTDRVNT_INVOKEINFO* invokeInfo)
 			UINT32 wLength = 0;
 			UINT32 length = invokeInfo->stack.parameters.read.length;
 			FILE_INFORMATION_CLASS fileInfoClass = invokeInfo->stack.parameters.queryDirectory.FileInformationClass;
+			TRACEOUTW((L"Multi Entry Mode"));
 			if (fileInfoClass == FileBothDirectoryInformation)
 			{
 				UINT32 lastWriteAddr = invokeInfo->outBufferAddr;
@@ -1163,6 +1446,77 @@ static void hostdrvNT_IRP_MJ_DIRECTORY_CONTROL(HOSTDRVNT_INVOKEINFO* invokeInfo)
 				cpu_kmemorywrite_d(invokeInfo->statusAddr + 4, 0); // Information
 			}
 		}
+	}
+	else if (invokeInfo->stack.minorFunction == NP2_IRP_MN_NOTIFY_CHANGE_DIRECTORY)
+	{
+		NP2_FILE_OBJECT fileObject = { 0 };
+		NP2HOSTDRVNT_FILEINFO* fi;
+		UINT32 length;
+		int i;
+
+		// 非対応の場合抜ける
+		if (s_pendingListCount == 0)
+		{
+			TRACEOUTW((L"Not implemented minorFunction: %d (0x%02x)", invokeInfo->stack.minorFunction, invokeInfo->stack.minorFunction));
+			cpu_kmemorywrite_d(invokeInfo->statusAddr, NP2_STATUS_INVALID_DEVICE_REQUEST);
+			cpu_kmemorywrite_d(invokeInfo->statusAddr + 4, 0); // Information
+			return;
+		}
+
+		// 対象のファイルオブジェクトを取得
+		if (invokeInfo->stack.fileObject == NULL)
+		{
+			TRACEOUTW((L"Invalid FileObject"));
+			cpu_kmemorywrite_d(invokeInfo->statusAddr, NP2_STATUS_INVALID_PARAMETER);
+			cpu_kmemorywrite_d(invokeInfo->statusAddr + 4, 0); // Information
+			return;
+		}
+		hostdrvNT_memread(invokeInfo->stack.fileObject, &fileObject, sizeof(fileObject));
+		fi = hostdrvNT_getFileInfo(&fileObject);
+		if (!fi)
+		{
+			TRACEOUTW((L"Invalid FsContext"));
+			cpu_kmemorywrite_d(invokeInfo->statusAddr, NP2_STATUS_INVALID_PARAMETER);
+			cpu_kmemorywrite_d(invokeInfo->statusAddr + 4, 0); // Information
+			return;
+		}
+
+		// 監視を開始する
+		length = invokeInfo->stack.parameters.notifyDirectory.length;
+		if (length < 9)
+		{
+			// 後で領域を借りるので、バッファに9byte格納できないならSTATUS_BUFFER_TOO_SMALL
+			cpu_kmemorywrite_d(invokeInfo->statusAddr, NP2_STATUS_BUFFER_TOO_SMALL);
+			cpu_kmemorywrite_d(invokeInfo->statusAddr + 4, 0); // Information
+			return;
+		}
+
+		// あいているところへ放り込む
+		for (i = 0; i < s_pendingListCount; i++)
+		{
+			UINT32 irpListAddr = s_pendingIrpListAddr + i * sizeof(UINT32);
+			UINT32 fileIdxListAddr = s_pendingAliveListAddr + i * sizeof(UINT32);
+			UINT32 irpAddr = cpu_kmemoryread_d(irpListAddr);
+			UINT32 fileIdx = cpu_kmemoryread_d(fileIdxListAddr);
+			if (irpAddr == 0 && fileIdx == 0)
+			{
+				// 監視開始
+				TRACEOUTW((L"IRP_MN_NOTIFY_CHANGE_DIRECTORY: Start pending idx=%d", i));
+				cpu_kmemorywrite_d(fileIdxListAddr, cpu_kmemoryread_d(fileObject.FsContext)); // ファイルインデックスを記憶
+				s_pendingIndexOrCompleteCount = i; // 待機開始対象のインデックスをセット
+				cpu_kmemorywrite_d(invokeInfo->outBufferAddr, invokeInfo->stack.parameters.notifyDirectory.length); // XXX: 出力用バッファを借りてlengthを無理やり記憶
+				cpu_kmemorywrite_d(invokeInfo->outBufferAddr + 4, invokeInfo->stack.parameters.notifyDirectory.completionFilter); // XXX: 出力用バッファを借りてcompletionFilterを無理やり記憶
+				cpu_kmemorywrite(invokeInfo->outBufferAddr + 8, invokeInfo->stack.flags); // XXX: 出力用バッファを借りてflagsを無理やり記憶
+				cpu_kmemorywrite_d(invokeInfo->statusAddr, NP2_STATUS_PENDING);
+				cpu_kmemorywrite_d(invokeInfo->statusAddr + 4, 0); // Information
+				return;
+			}
+		}
+
+		// あいてないのでエラー
+		TRACEOUTW((L"IRP_MN_NOTIFY_CHANGE_DIRECTORY: Cannot pending because of too meny pending objects."));
+		cpu_kmemorywrite_d(invokeInfo->statusAddr, NP2_STATUS_INSUFFICIENT_RESOURCES);
+		cpu_kmemorywrite_d(invokeInfo->statusAddr + 4, 0); // Information
 	}
 	else
 	{
@@ -1503,11 +1857,12 @@ static void hostdrvNT_IRP_MJ_SET_INFORMATION(HOSTDRVNT_INVOKEINFO* invokeInfo)
 		return;
 	}
 
-	// ファイル or ディレクトリ情報取得
+	// ファイル or ディレクトリ情報設定
 	if (infoClass == FileBasicInformation)
 	{
 		NP2_FILE_BASIC_INFORMATION basicInfo = { 0 };
 		WIN32_FILE_ATTRIBUTE_DATA fileInfo;
+		UINT32 changeFileTime = 0;
 
 		// 入力データサイズが期待通りか確認
 		if (length < sizeof(basicInfo))
@@ -1528,20 +1883,29 @@ static void hostdrvNT_IRP_MJ_SET_INFORMATION(HOSTDRVNT_INVOKEINFO* invokeInfo)
 		}
 
 		// ファイル属性を設定
-		if (basicInfo.CreationTime != 0xffffffffffffffffull)
+		if (basicInfo.CreationTime != 0xffffffffffffffffull && 
+			(fileInfo.ftCreationTime.dwHighDateTime != (UINT32)(basicInfo.CreationTime >> 32) ||
+			 fileInfo.ftCreationTime.dwLowDateTime != (UINT32)(basicInfo.CreationTime)))
 		{
 			fileInfo.ftCreationTime.dwHighDateTime = (UINT32)(basicInfo.CreationTime >> 32);
 			fileInfo.ftCreationTime.dwLowDateTime = (UINT32)(basicInfo.CreationTime);
+			changeFileTime = 1;
 		}
-		if (basicInfo.LastAccessTime != 0xffffffffffffffffull)
+		if (basicInfo.LastAccessTime != 0xffffffffffffffffull &&
+			(fileInfo.ftLastAccessTime.dwHighDateTime != (UINT32)(basicInfo.LastAccessTime >> 32) ||
+			 fileInfo.ftLastAccessTime.dwLowDateTime != (UINT32)(basicInfo.LastAccessTime)))
 		{
 			fileInfo.ftLastAccessTime.dwHighDateTime = (UINT32)(basicInfo.LastAccessTime >> 32);
 			fileInfo.ftLastAccessTime.dwLowDateTime = (UINT32)(basicInfo.LastAccessTime);
+			changeFileTime = 1;
 		}
-		if (basicInfo.LastWriteTime != 0xffffffffffffffffull)
+		if (basicInfo.LastWriteTime != 0xffffffffffffffffull &&
+			(fileInfo.ftLastWriteTime.dwHighDateTime != (UINT32)(basicInfo.LastWriteTime >> 32) ||
+			 fileInfo.ftLastWriteTime.dwLowDateTime != (UINT32)(basicInfo.LastWriteTime)))
 		{
 			fileInfo.ftLastWriteTime.dwHighDateTime = (UINT32)(basicInfo.LastWriteTime >> 32);
 			fileInfo.ftLastWriteTime.dwLowDateTime = (UINT32)(basicInfo.LastWriteTime);
+			changeFileTime = 1;
 		}
 		fileInfo.dwFileAttributes = basicInfo.FileAttributes;
 		if (fi->isDirectory)
@@ -1552,7 +1916,40 @@ static void hostdrvNT_IRP_MJ_SET_INFORMATION(HOSTDRVNT_INVOKEINFO* invokeInfo)
 		{
 			fileInfo.dwFileAttributes = FILE_ATTRIBUTE_NORMAL;
 		}
-		SetFileAttributesW(fi->hostFileName, fileInfo.dwFileAttributes);
+		if (!SetFileAttributesW(fi->hostFileName, fileInfo.dwFileAttributes))
+		{
+			DWORD error = GetLastError();
+			TRACEOUTW((L"Error: SetFileAttributesW code: %d (0x%08x)", error, error));
+		}
+		if (changeFileTime)
+		{
+			HANDLE fh = fi->hFile;
+			if (!fh || fh == INVALID_HANDLE_VALUE)
+			{
+				// ファイルハンドルが閉じていたら再オープン
+				UINT32 fsContextFileIndex = cpu_kmemoryread_d(fileObject.FsContext);
+				if (!hostdrvNT_reopenFile(fsContextFileIndex))
+				{
+					cpu_kmemorywrite_d(invokeInfo->statusAddr, NP2_STATUS_OBJECT_NAME_INVALID);
+					cpu_kmemorywrite_d(invokeInfo->statusAddr + 4, 0); // Information
+					return;
+				}
+				fh = fi->hFile;
+				if (!fh || fh == INVALID_HANDLE_VALUE)
+				{
+					cpu_kmemorywrite_d(invokeInfo->statusAddr, NP2_STATUS_INVALID_PARAMETER);
+					cpu_kmemorywrite_d(invokeInfo->statusAddr + 4, 0); // Information
+					return;
+				}
+			}
+			if (!SetFileTime(fh, &fileInfo.ftCreationTime, &fileInfo.ftLastAccessTime, &fileInfo.ftLastWriteTime))
+			{
+				DWORD error = GetLastError();
+				TRACEOUTW((L"Error: SetFileTime code: %d (0x%08x)", error, error));
+			}
+		}
+
+		hostdrvNT_notifyChange(fi->hostFileName, NP2_FILE_ACTION_MODIFIED, 0);
 	}
 	else if (infoClass == FileEndOfFileInformation)
 	{
@@ -1608,7 +2005,7 @@ static void hostdrvNT_IRP_MJ_SET_INFORMATION(HOSTDRVNT_INVOKEINFO* invokeInfo)
 	}
 	else if (infoClass == FileAllocationInformation)
 	{
-		FILE_ALLOCATION_INFORMATION allocInfo = { 0 };
+		NP2_FILE_ALLOCATION_INFORMATION allocInfo = { 0 };
 		WIN32_FILE_ATTRIBUTE_DATA fileInfo;
 		HANDLE fh;
 
@@ -1850,6 +2247,8 @@ static void hostdrvNT_IRP_MJ_SET_INFORMATION(HOSTDRVNT_INVOKEINFO* invokeInfo)
 		wcscpy(fi->hostFileName, newHostPath);
 		free(oldFileName);
 		free(oldHostFileName);
+
+		hostdrvNT_notifyChange(fi->hostFileName, NP2_FILE_ACTION_RENAMED_NEW_NAME, 1);
 	}
 	else
 	{
@@ -2314,9 +2713,32 @@ static void hostdrvNT_invoke()
 	invokeInfo.deviceFlags = cpu_kmemoryread_d(hostdrvNT.dataAddr + 12);
 	invokeInfo.outBufferAddr = cpu_kmemoryread_d(hostdrvNT.dataAddr + 16);
 	invokeInfo.sectionObjectPointerAddr = cpu_kmemoryread_d(hostdrvNT.dataAddr + 20);
-	if (hostdrvNT.cmdBaseVersion == 1)
+	if (hostdrvNT.cmdBaseVersion >= 1)
 	{
 		hostdrvNT.version = cpu_kmemoryread_d(hostdrvNT.dataAddr + 24);
+	}
+	if (hostdrvNT.version >= 2)
+	{
+		// IO待機用
+		s_pendingListCount = cpu_kmemoryread_d(hostdrvNT.dataAddr + 28);
+		s_pendingIrpListAddr = cpu_kmemoryread_d(hostdrvNT.dataAddr + 32);
+		s_pendingAliveListAddr = cpu_kmemoryread_d(hostdrvNT.dataAddr + 36);
+		s_pendingIndexOrCompleteCount = cpu_kmemoryread_d(hostdrvNT.dataAddr + 40);
+	}
+	else
+	{
+		// 対応していない旧ドライバ
+		s_pendingListCount = 0;
+	}
+	if (hostdrvNT.version >= 3)
+	{
+		// おぷしょん
+		s_hostdrvNTOptions = cpu_kmemoryread_d(hostdrvNT.dataAddr + 44);
+	}
+	else
+	{
+		// 対応していない旧ドライバ
+		s_hostdrvNTOptions = HOSTDRVNTOPTIONS_NONE;
 	}
 
 	switch (invokeInfo.stack.majorFunction)
@@ -2410,6 +2832,13 @@ static void hostdrvNT_invoke()
 	}
 
 	}
+
+	TRACEOUTW((L"  -> Return Status: 0x%08x", cpu_kmemoryread_d(invokeInfo.statusAddr)));
+
+	if (hostdrvNT.version == 2)
+	{
+		cpu_kmemorywrite_d(hostdrvNT.dataAddr + 40, s_pendingIndexOrCompleteCount);
+	}
 }
 
 // ---------- IO Ports
@@ -2445,15 +2874,21 @@ static void IOOUTCALL hostdrvNT_o7ee(UINT port, REG8 dat)
 	}
 	else if ('0' <= dat && dat <= '9' && hostdrvNT.cmdInvokePos == 5)
 	{
-		hostdrvNT.cmdBaseVersion = (UINT32)dat * 10;
+		hostdrvNT.cmdBaseVersion = (UINT32)(dat - '0') * 10;
 		hostdrvNT.cmdInvokePos++;
 	}
 	else if ('0' <= dat && dat <= '9' && hostdrvNT.cmdInvokePos == 6)
 	{
-		hostdrvNT.cmdBaseVersion += (UINT32)dat;
+		hostdrvNT.cmdBaseVersion += (UINT32)(dat - '0');
 		if (hostdrvNT.dataAddr)
 		{
+			// 呼び出し
 			hostdrvNT_invoke();
+		}
+		else
+		{
+			// リセット
+			hostdrvNT_reset();
 		}
 		hostdrvNT.cmdInvokePos = 0;
 	}

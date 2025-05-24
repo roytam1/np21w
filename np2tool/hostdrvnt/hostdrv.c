@@ -1,5 +1,8 @@
 #include <ntddk.h>
 
+#define HOSTDRVNT_IO_ADDR	0x7EC
+#define HOSTDRVNT_IO_CMD	0x7EE
+
 // このデバイスドライバのデバイス名
 #define DEVICE_NAME     L"\\Device\\HOSTDRV"
 #define DOS_DEVICE_NAME L"\\DosDevices\\HOSTDRV"
@@ -12,6 +15,8 @@
 #define HOSTDRVNTOPTIONS_USEREALCAPACITY	0x2
 #define HOSTDRVNTOPTIONS_USECHECKNOTIFY		0x4
 #define HOSTDRVNTOPTIONS_AUTOMOUNTDRIVE		0x8
+
+#define HOSTDRVNT_VERSION		4
 
 // エミュレータとの通信用
 typedef struct tagHOSTDRV_INFO {
@@ -48,8 +53,9 @@ typedef struct tagHOSTDRV_NOTIFYINFO {
 // ないとOSが決め打ちの範囲外参照してIRQL_NOT_LESS_OR_EQUALが頻発。どこまであれば安全かは不明。
 // FSRTL_COMMON_FCB_HEADERを構造体の最初に含めなければならないという条件が必須のようにも思えます。
 typedef struct tagHOSTDRV_FSCONTEXT {
+	UCHAR systemReserved[40]; // FSRTL_COMMON_FCB_HEADER部分。OSが使うので触ってはいけない。32bit環境では40byte
     ULONG fileIndex; // エミュレータ本体が管理するファイルID
-    ULONG reserved[15]; // 予約
+    ULONG reserved[5]; // 予約
 } HOSTDRV_FSCONTEXT, *PHOSTDRV_FSCONTEXT;
 
 // 高速I/Oの処理可否を返す関数。使わないので常時FALSEを返す。
@@ -211,6 +217,76 @@ VOID HostdrvStopTimer()
 	g_checkNotifyTimerEnabled = 0;
 }
 
+NTSTATUS ReserveIoPortRange(PDRIVER_OBJECT DriverObject)
+{
+    PCM_PARTIAL_RESOURCE_DESCRIPTOR pResourceDescriptor;
+    PCM_PARTIAL_RESOURCE_LIST pPartialResourceList;
+    PCM_FULL_RESOURCE_DESCRIPTOR pFullResourceDescriptor;
+    PCM_RESOURCE_LIST pResourceList;
+    ULONG listSize;
+    UNICODE_STRING className;
+
+    BOOLEAN conflictDetected = FALSE;
+    NTSTATUS status;
+    
+    listSize = sizeof(CM_RESOURCE_LIST) + sizeof(CM_PARTIAL_RESOURCE_DESCRIPTOR);
+    pResourceList = ExAllocatePoolWithTag(PagedPool, listSize, 'resl');
+    if(!pResourceList){
+    	return STATUS_INSUFFICIENT_RESOURCES;
+    }
+    RtlZeroMemory(pResourceList, listSize);
+    pResourceList->Count = 1;
+
+	pFullResourceDescriptor = &(pResourceList->List[0]);
+    pFullResourceDescriptor->InterfaceType = Internal;
+    pFullResourceDescriptor->BusNumber = 0;
+    
+    pPartialResourceList = &(pFullResourceDescriptor->PartialResourceList);
+    pPartialResourceList->Version = 1;
+    pPartialResourceList->Revision = 1;
+    pPartialResourceList->Count = 2;
+    
+    pResourceDescriptor = &(pPartialResourceList->PartialDescriptors[0]);
+    pResourceDescriptor->Type = CmResourceTypePort;
+    pResourceDescriptor->ShareDisposition = CmResourceShareDriverExclusive;
+    pResourceDescriptor->Flags = CM_RESOURCE_PORT_IO | CM_RESOURCE_PORT_16_BIT_DECODE;
+    pResourceDescriptor->u.Port.Start.QuadPart = HOSTDRVNT_IO_ADDR;
+    pResourceDescriptor->u.Port.Length = 1;
+    
+    pResourceDescriptor = &(pPartialResourceList->PartialDescriptors[1]);
+    pResourceDescriptor->Type = CmResourceTypePort;
+    pResourceDescriptor->ShareDisposition = CmResourceShareDriverExclusive;
+    pResourceDescriptor->Flags = CM_RESOURCE_PORT_IO | CM_RESOURCE_PORT_16_BIT_DECODE;
+    pResourceDescriptor->u.Port.Start.QuadPart = HOSTDRVNT_IO_CMD;
+    pResourceDescriptor->u.Port.Length = 1;
+    
+    // リソース使用の報告
+	RtlInitUnicodeString(&className, L"LegacyDriver");
+    status = IoReportResourceUsage(
+        &className,           // DriverClassName
+        DriverObject,         // OwningDriverObject
+        pResourceList,        // ResourceList
+        listSize,             // ResourceListSize
+        NULL,                 // PhysicalDeviceObject
+        NULL,                 // ConflictList
+        0,                    // ConflictCount
+        FALSE,                // ArbiterRequest
+        &conflictDetected     // ConflictDetected
+    );
+    
+	ExFreePool(pResourceList);
+
+    if (!NT_SUCCESS(status)) {
+        return status;
+    }
+
+    if (conflictDetected) {
+        return STATUS_CONFLICTING_ADDRESSES;
+    }
+
+    return STATUS_SUCCESS;
+}
+
 // デバイスドライバのエントリポイント
 NTSTATUS DriverEntry(IN PDRIVER_OBJECT DriverObject, IN PUNICODE_STRING RegistryPath) {
     UNICODE_STRING deviceNameUnicodeString, dosDeviceNameUnicodeString;
@@ -220,23 +296,29 @@ NTSTATUS DriverEntry(IN PDRIVER_OBJECT DriverObject, IN PUNICODE_STRING Registry
     NTSTATUS status;
     int i;
     
+    // I/Oポートが使えるかを確認
+    status = ReserveIoPortRange(DriverObject);
+    if (!NT_SUCCESS(status)) {
+        return status;
+    }
+
     // hostdrv for NT対応かを簡易チェック
-    if(READ_PORT_UCHAR((PUCHAR)0x7EC) != 98 || READ_PORT_UCHAR((PUCHAR)0x7EE) != 21){
+    if(READ_PORT_UCHAR((PUCHAR)HOSTDRVNT_IO_ADDR) != 98 || READ_PORT_UCHAR((PUCHAR)HOSTDRVNT_IO_CMD) != 21){
         return STATUS_NO_SUCH_DEVICE;
 	}
 	
     // hostdrv for NTをリセット
-    WRITE_PORT_UCHAR((PUCHAR)0x7EC, (UCHAR)0);
-    WRITE_PORT_UCHAR((PUCHAR)0x7EC, (UCHAR)0);
-    WRITE_PORT_UCHAR((PUCHAR)0x7EC, (UCHAR)0);
-    WRITE_PORT_UCHAR((PUCHAR)0x7EC, (UCHAR)0);
-    WRITE_PORT_UCHAR((PUCHAR)0x7EE, (UCHAR)'H');
-    WRITE_PORT_UCHAR((PUCHAR)0x7EE, (UCHAR)'D');
-    WRITE_PORT_UCHAR((PUCHAR)0x7EE, (UCHAR)'R');
-    WRITE_PORT_UCHAR((PUCHAR)0x7EE, (UCHAR)'9');
-    WRITE_PORT_UCHAR((PUCHAR)0x7EE, (UCHAR)'8');
-    WRITE_PORT_UCHAR((PUCHAR)0x7EE, (UCHAR)'0');
-    WRITE_PORT_UCHAR((PUCHAR)0x7EE, (UCHAR)'1');
+    WRITE_PORT_UCHAR((PUCHAR)HOSTDRVNT_IO_ADDR, (UCHAR)0);
+    WRITE_PORT_UCHAR((PUCHAR)HOSTDRVNT_IO_ADDR, (UCHAR)0);
+    WRITE_PORT_UCHAR((PUCHAR)HOSTDRVNT_IO_ADDR, (UCHAR)0);
+    WRITE_PORT_UCHAR((PUCHAR)HOSTDRVNT_IO_ADDR, (UCHAR)0);
+    WRITE_PORT_UCHAR((PUCHAR)HOSTDRVNT_IO_CMD, (UCHAR)'H');
+    WRITE_PORT_UCHAR((PUCHAR)HOSTDRVNT_IO_CMD, (UCHAR)'D');
+    WRITE_PORT_UCHAR((PUCHAR)HOSTDRVNT_IO_CMD, (UCHAR)'R');
+    WRITE_PORT_UCHAR((PUCHAR)HOSTDRVNT_IO_CMD, (UCHAR)'9');
+    WRITE_PORT_UCHAR((PUCHAR)HOSTDRVNT_IO_CMD, (UCHAR)'8');
+    WRITE_PORT_UCHAR((PUCHAR)HOSTDRVNT_IO_CMD, (UCHAR)'0');
+    WRITE_PORT_UCHAR((PUCHAR)HOSTDRVNT_IO_CMD, (UCHAR)'1');
 
     // 排他ロック初期化　初期化のみで破棄処理はいらない
     ExInitializeFastMutex(&g_Mutex);
@@ -470,7 +552,7 @@ NTSTATUS HostdrvDispatch(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp) {
     } else {
         lpHostdrvInfo->sectionObjectPointer = NULL;
     }
-    lpHostdrvInfo->version = 3;
+    lpHostdrvInfo->version = HOSTDRVNT_VERSION;
     lpHostdrvInfo->pendingListCount = PENDING_IRP_MAX;
     lpHostdrvInfo->pendingIrpList = g_pendingIrpList;
     lpHostdrvInfo->pendingAliveList = g_pendingAliveList;
@@ -483,17 +565,17 @@ NTSTATUS HostdrvDispatch(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp) {
     // 構造体アドレスを書き込んでエミュレータで処理させる（ハイパーバイザーコール）
     // エミュレータ側でステータスやバッファなどの値がセットされる
     hostdrvInfoAddr = (ULONG)lpHostdrvInfo;
-    WRITE_PORT_UCHAR((PUCHAR)0x7EC, (UCHAR)(hostdrvInfoAddr));
-    WRITE_PORT_UCHAR((PUCHAR)0x7EC, (UCHAR)(hostdrvInfoAddr >> 8));
-    WRITE_PORT_UCHAR((PUCHAR)0x7EC, (UCHAR)(hostdrvInfoAddr >> 16));
-    WRITE_PORT_UCHAR((PUCHAR)0x7EC, (UCHAR)(hostdrvInfoAddr >> 24));
-    WRITE_PORT_UCHAR((PUCHAR)0x7EE, (UCHAR)'H');
-    WRITE_PORT_UCHAR((PUCHAR)0x7EE, (UCHAR)'D');
-    WRITE_PORT_UCHAR((PUCHAR)0x7EE, (UCHAR)'R');
-    WRITE_PORT_UCHAR((PUCHAR)0x7EE, (UCHAR)'9');
-    WRITE_PORT_UCHAR((PUCHAR)0x7EE, (UCHAR)'8');
-    WRITE_PORT_UCHAR((PUCHAR)0x7EE, (UCHAR)'0');
-    WRITE_PORT_UCHAR((PUCHAR)0x7EE, (UCHAR)'1');
+    WRITE_PORT_UCHAR((PUCHAR)HOSTDRVNT_IO_ADDR, (UCHAR)(hostdrvInfoAddr));
+    WRITE_PORT_UCHAR((PUCHAR)HOSTDRVNT_IO_ADDR, (UCHAR)(hostdrvInfoAddr >> 8));
+    WRITE_PORT_UCHAR((PUCHAR)HOSTDRVNT_IO_ADDR, (UCHAR)(hostdrvInfoAddr >> 16));
+    WRITE_PORT_UCHAR((PUCHAR)HOSTDRVNT_IO_ADDR, (UCHAR)(hostdrvInfoAddr >> 24));
+    WRITE_PORT_UCHAR((PUCHAR)HOSTDRVNT_IO_CMD, (UCHAR)'H');
+    WRITE_PORT_UCHAR((PUCHAR)HOSTDRVNT_IO_CMD, (UCHAR)'D');
+    WRITE_PORT_UCHAR((PUCHAR)HOSTDRVNT_IO_CMD, (UCHAR)'R');
+    WRITE_PORT_UCHAR((PUCHAR)HOSTDRVNT_IO_CMD, (UCHAR)'9');
+    WRITE_PORT_UCHAR((PUCHAR)HOSTDRVNT_IO_CMD, (UCHAR)'8');
+    WRITE_PORT_UCHAR((PUCHAR)HOSTDRVNT_IO_CMD, (UCHAR)'0');
+    WRITE_PORT_UCHAR((PUCHAR)HOSTDRVNT_IO_CMD, (UCHAR)'1');
     if(Irp->IoStatus.Status == STATUS_PENDING){
     	// 待機希望
     	if(lpHostdrvInfo->pending.pendingIndex < 0 || PENDING_IRP_MAX <= lpHostdrvInfo->pending.pendingIndex){
@@ -636,7 +718,7 @@ VOID HostdrvRescheduleTimer(IN PVOID Context)
     
     if(lpHostdrvInfo){
     	// エミュレータ側に渡すデータ設定
-	    lpHostdrvInfo->version = 3;
+	    lpHostdrvInfo->version = HOSTDRVNT_VERSION;
 	    lpHostdrvInfo->pendingListCount = PENDING_IRP_MAX;
 	    lpHostdrvInfo->pendingIrpList = g_pendingIrpList;
 	    lpHostdrvInfo->pendingAliveList = g_pendingAliveList;
@@ -645,16 +727,16 @@ VOID HostdrvRescheduleTimer(IN PVOID Context)
 	    // 構造体アドレスを書き込んでエミュレータで処理させる（ハイパーバイザーコール）
 	    // エミュレータ側でステータスやバッファなどの値がセットされる
 	    hostdrvInfoAddr = (ULONG)lpHostdrvInfo;
-	    WRITE_PORT_UCHAR((PUCHAR)0x7EC, (UCHAR)(hostdrvInfoAddr));
-	    WRITE_PORT_UCHAR((PUCHAR)0x7EC, (UCHAR)(hostdrvInfoAddr >> 8));
-	    WRITE_PORT_UCHAR((PUCHAR)0x7EC, (UCHAR)(hostdrvInfoAddr >> 16));
-	    WRITE_PORT_UCHAR((PUCHAR)0x7EC, (UCHAR)(hostdrvInfoAddr >> 24));
-	    WRITE_PORT_UCHAR((PUCHAR)0x7EE, (UCHAR)'H');
-	    WRITE_PORT_UCHAR((PUCHAR)0x7EE, (UCHAR)'D');
-	    WRITE_PORT_UCHAR((PUCHAR)0x7EE, (UCHAR)'R');
-	    WRITE_PORT_UCHAR((PUCHAR)0x7EE, (UCHAR)'9');
-	    WRITE_PORT_UCHAR((PUCHAR)0x7EE, (UCHAR)'8');
-	    WRITE_PORT_UCHAR((PUCHAR)0x7EE, (UCHAR)'M');
+	    WRITE_PORT_UCHAR((PUCHAR)HOSTDRVNT_IO_ADDR, (UCHAR)(hostdrvInfoAddr));
+	    WRITE_PORT_UCHAR((PUCHAR)HOSTDRVNT_IO_ADDR, (UCHAR)(hostdrvInfoAddr >> 8));
+	    WRITE_PORT_UCHAR((PUCHAR)HOSTDRVNT_IO_ADDR, (UCHAR)(hostdrvInfoAddr >> 16));
+	    WRITE_PORT_UCHAR((PUCHAR)HOSTDRVNT_IO_ADDR, (UCHAR)(hostdrvInfoAddr >> 24));
+	    WRITE_PORT_UCHAR((PUCHAR)HOSTDRVNT_IO_CMD, (UCHAR)'H');
+	    WRITE_PORT_UCHAR((PUCHAR)HOSTDRVNT_IO_CMD, (UCHAR)'D');
+	    WRITE_PORT_UCHAR((PUCHAR)HOSTDRVNT_IO_CMD, (UCHAR)'R');
+	    WRITE_PORT_UCHAR((PUCHAR)HOSTDRVNT_IO_CMD, (UCHAR)'9');
+	    WRITE_PORT_UCHAR((PUCHAR)HOSTDRVNT_IO_CMD, (UCHAR)'8');
+	    WRITE_PORT_UCHAR((PUCHAR)HOSTDRVNT_IO_CMD, (UCHAR)'M');
 	    if(lpHostdrvInfo->pending.pendingCompleteCount > 0){
 	    	// 待機解除が存在する
 	    	completeIrpCount = lpHostdrvInfo->pending.pendingCompleteCount;

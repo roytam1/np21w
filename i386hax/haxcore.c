@@ -810,6 +810,25 @@ void i386hax_vm_exec_part(void) {
 		}
 	}
 
+	// XXX: 変なアドレスにぶっ飛ぶのを回避
+	switch (sigsetjmp(exec_1step_jmpbuf, 1))
+	{
+	case 0:
+		break;
+
+	case 1:
+		VERBOSE(("ia32: return from exception"));
+		break;
+
+	case 2:
+		VERBOSE(("ia32: return from panic"));
+		return;
+
+	default:
+		VERBOSE(("ia32: return from unknown cause"));
+		break;
+	}
+
 	// HAXMとのデータやりとり用
 	tunnel = (HAX_TUNNEL*)np2hax.tunnel.va;
 	iobuf = (UINT8*)np2hax.tunnel.io_va;

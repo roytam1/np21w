@@ -25,7 +25,10 @@ typedef struct
 	UINT32 hostdrvWinAPICreateDisposition;
 	UINT32 hostdrvFileAttributes;
 
-	UINT32 deleteOnClose;
+	UINT8 deleteOnClose;
+	UINT8 allowDeleteChild;
+	UINT8 reserved2;
+	UINT8 reserved3;
 } NP2HOSTDRVNT_FILEINFO;
 
 typedef struct

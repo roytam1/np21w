@@ -21,6 +21,7 @@
 #define HOSTDRVNTOPTIONS_USEREALCAPACITY	0x2
 #define HOSTDRVNTOPTIONS_USECHECKNOTIFY		0x4
 #define HOSTDRVNTOPTIONS_AUTOMOUNTDRIVE		0x8
+#define HOSTDRVNTOPTIONS_DISKDEVICE			0x10
 
 #define HOSTDRVNT_VERSION		4
 
@@ -151,6 +152,9 @@ VOID HostdrvCheckOptions(IN PUNICODE_STRING RegistryPath) {
 	    return;
 	}
 	
+	if (HostdrvReadDWORDReg(hKey, L"IsDiskDevice")){
+		g_hostdrvNTOptions |= HOSTDRVNTOPTIONS_DISKDEVICE;
+	}
 	if (HostdrvReadDWORDReg(hKey, L"IsRemovableDevice")){
 		g_hostdrvNTOptions |= HOSTDRVNTOPTIONS_REMOVABLEDEVICE;
 	}
@@ -282,8 +286,8 @@ NTSTATUS ReserveIoPortRange(PDRIVER_OBJECT DriverObject)
 NTSTATUS DriverEntry(IN PDRIVER_OBJECT DriverObject, IN PUNICODE_STRING RegistryPath) {
     UNICODE_STRING deviceNameUnicodeString, dosDeviceNameUnicodeString;
     PDEVICE_OBJECT deviceObject = NULL;
-    BOOLEAN isRemovableDevice = FALSE;
     DEVICE_TYPE deviceType = FILE_DEVICE_NETWORK_FILE_SYSTEM;
+    ULONG deviceCharacteristics = FILE_DEVICE_IS_MOUNTED;
     NTSTATUS status;
     int i;
     
@@ -317,16 +321,24 @@ NTSTATUS DriverEntry(IN PDRIVER_OBJECT DriverObject, IN PUNICODE_STRING Registry
     // オプションチェック
     HostdrvCheckOptions(RegistryPath);
     
-    // リムーバブルデバイスの振りをするモード
-    isRemovableDevice = (g_hostdrvNTOptions & HOSTDRVNTOPTIONS_REMOVABLEDEVICE);
-    if(isRemovableDevice){
+    // デバイスタイプなどの設定
+    if(g_hostdrvNTOptions & HOSTDRVNTOPTIONS_REMOVABLEDEVICE){
+    	// リムーバブルデバイスの振りをするモード
     	deviceType = FILE_DEVICE_DISK_FILE_SYSTEM;
+    	deviceCharacteristics |= FILE_REMOVABLE_MEDIA;
+    }else if(g_hostdrvNTOptions & HOSTDRVNTOPTIONS_DISKDEVICE){
+    	// ローカルディスクの振りをするモード
+    	deviceType = FILE_DEVICE_DISK_FILE_SYSTEM;
+    }else{
+    	// ネットワークファイルシステムの振りをするモード
+    	deviceType = FILE_DEVICE_NETWORK_FILE_SYSTEM;
+    	deviceCharacteristics |= FILE_REMOTE_DEVICE;
     }
     
     // デバイスを作成　ローカルディスクの振りをするならFILE_DEVICE_DISK_FILE_SYSTEM
     RtlInitUnicodeString(&deviceNameUnicodeString, DEVICE_NAME);
     status = IoCreateDevice(DriverObject, 0, &deviceNameUnicodeString,
-                            deviceType, 0, FALSE, &deviceObject);
+                            deviceType, deviceCharacteristics, FALSE, &deviceObject);
     if (!NT_SUCCESS(status)) {
         return status;
     }
@@ -379,14 +391,6 @@ NTSTATUS DriverEntry(IN PDRIVER_OBJECT DriverObject, IN PUNICODE_STRING Registry
     
     // キャッシュ未実装でもメモリマップトファイルが使えるようにするWORKAROUNDキャッシュを初期化
     MiniSOP_InitializeCache(DriverObject);
-    
-    if(isRemovableDevice){
-	    // ごみ箱を使わせないためにリムーバブルディスクの振りをする
-	    deviceObject->Characteristics |= FILE_REMOVABLE_MEDIA;
-    }else{
-	    // ごみ箱を使わせないためにネットワークデバイスの振りをする
-	    deviceObject->Characteristics |= FILE_REMOTE_DEVICE;
-    }
     
     // その他追加フラグを設定
     deviceObject->Flags |= DO_BUFFERED_IO; // データ受け渡しでSystemBufferを基本とする？指定しても他方式で来るときは来る気がする。

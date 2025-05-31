@@ -152,6 +152,10 @@ static void renewalclientsize(BOOL winloc) {
 		ddraw.rect.bottom = height;
 		scrnwidth = width;
 		scrnheight = height;
+		if ((np2oscfg.paddingx)/* && (multiple == 8)*/)
+		{
+			extend = min(scrnstat.extend, ddraw.extend);
+		}
 		fscrnmod = FSCRNCFG_fscrnmod & FSCRNMOD_ASPECTMASK;
 		switch(fscrnmod) {
 			default:
@@ -236,7 +240,7 @@ static void renewalclientsize(BOOL winloc) {
 		fscrnmod = FSCRNCFG_fscrnmod & FSCRNMOD_ASPECTMASK;
 		multiple = scrnstat.multiple;
 		if (!(ddraw.scrnmode & SCRNMODE_ROTATE)) {
-			if ((np2oscfg.paddingx) && (multiple == 8)) {
+			if ((np2oscfg.paddingx)/* && (multiple == 8)*/) {
 				extend = min(scrnstat.extend, ddraw.extend);
 			}
 			scrnwidth = (width * multiple) >> 3;
@@ -251,12 +255,13 @@ static void renewalclientsize(BOOL winloc) {
 				}
 			}
 			ddraw.rect.right = width + extend;
+			ddraw.rect.left = (multiple != 8 ? extend : 0);
 			ddraw.rect.bottom = height;
-			ddraw.scrn.left = np2oscfg.paddingx - extend;
+			ddraw.scrn.left = np2oscfg.paddingx - (multiple == 8 ? extend : 0);
 			ddraw.scrn.top = np2oscfg.paddingy;
 		}
 		else {
-			if ((np2oscfg.paddingy) && (multiple == 8)) {
+			if ((np2oscfg.paddingy)/* && (multiple == 8)*/) {
 				extend = min(scrnstat.extend, ddraw.extend);
 			}
 			scrnwidth = (height * multiple) >> 3;
@@ -271,9 +276,9 @@ static void renewalclientsize(BOOL winloc) {
 				}
 			}
 			ddraw.rect.right = height;
-			ddraw.rect.bottom = width + extend;
+			ddraw.rect.bottom = width + (multiple == 8 ? extend : 0);
 			ddraw.scrn.left = np2oscfg.paddingx;
-			ddraw.scrn.top = np2oscfg.paddingy - extend;
+			ddraw.scrn.top = np2oscfg.paddingy - (multiple == 8 ? extend : 0);
 		}
 		ddraw.scrn.right = np2oscfg.paddingx + scrnwidth;
 		ddraw.scrn.bottom = np2oscfg.paddingy + scrnheight;
@@ -774,6 +779,7 @@ BRESULT scrnmngDD_create(UINT8 scrnmode) {
 		ddraw2->CreateSurface(&ddsd, &ddraw.clocksurf, NULL);
 		DispClock::GetInstance()->Reset();
 #endif
+		ddraw.extend = 1;
 	}
 	else {
 		ddraw2->SetCooperativeLevel(g_hWndMain, DDSCL_NORMAL | DDSCL_MULTITHREADED);

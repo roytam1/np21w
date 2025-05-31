@@ -42,7 +42,7 @@ static BOOLEAN MiniSOP_ExpandSOPList(){
 	if(g_pendingSOPListCount == PENDING_SOP_MAX){
 		return FALSE; // 確保できない
 	}
-	newCount = oldCount + 1; // とりあえず1ファイルずつ拡張
+	newCount = oldCount + 8; // あまり頻繁だと大変なのでとりあえず8ファイルずつ拡張
 	if(newCount > PENDING_SOP_MAX){
 		newCount = PENDING_SOP_MAX;
 	}
@@ -89,8 +89,11 @@ LONG MiniSOP_GetSOPIndex(UNICODE_STRING path){
 	// なかったので新規作成
 	for(i=0;i<g_pendingSOPListCount;i++){
 		if(!g_pendingSOPList[i].path.Buffer){
+			ULONG allocSize = path.Length;
 			g_pendingSOPList[i].path.Length = path.Length;
-	        g_pendingSOPList[i].path.Buffer = ExAllocatePool(NonPagedPool, path.Length);
+			if(allocSize == 0) allocSize = 1; // 必ず1byteは確保
+			g_pendingSOPList[i].path.MaximumLength = allocSize;
+	        g_pendingSOPList[i].path.Buffer = ExAllocatePool(NonPagedPool, allocSize);
 	        if(g_pendingSOPList[i].path.Buffer == NULL){
 				return -1;
 	        }
@@ -100,6 +103,7 @@ LONG MiniSOP_GetSOPIndex(UNICODE_STRING path){
 	        	ExFreePool(g_pendingSOPList[i].path.Buffer);
 	        	g_pendingSOPList[i].path.Buffer = NULL;
 	        	g_pendingSOPList[i].path.Length = 0;
+	        	g_pendingSOPList[i].path.MaximumLength = 0;
 				return -1;
 	        }
 	        RtlZeroMemory(g_pendingSOPList[i].pSOP, sizeof(SECTION_OBJECT_POINTERS));
@@ -228,7 +232,8 @@ VOID MiniSOP_HandleMjCleanupCache(PIO_STACK_LOCATION irpSp){
 // 実際の処理は、指定されたファイル長さ以上で一旦WRITEされる→SetInformationで切り捨てる　という操作になる
 // irpSp: IRPスタックポインタ
 VOID MiniSOP_HandlePreMjSetInformationCache(PIO_STACK_LOCATION irpSp){
-    if(irpSp->Parameters.QueryFile.FileInformationClass == FileEndOfFileInformation){
+    if(irpSp->Parameters.QueryFile.FileInformationClass == FileEndOfFileInformation || 
+       irpSp->Parameters.QueryFile.FileInformationClass == FileAllocationInformation){
 		PFILE_OBJECT pFileObject = irpSp->FileObject;
     	if(pFileObject && pFileObject->SectionObjectPointer){
 			IO_STATUS_BLOCK iosb = {0};

@@ -83,6 +83,7 @@ static int s_fsContextUserDataOffset = 0;
 #define HOSTDRVNTOPTIONS_USEREALCAPACITY	0x2
 #define HOSTDRVNTOPTIONS_USECHECKNOTIFY		0x4
 #define HOSTDRVNTOPTIONS_AUTOMOUNTDRIVE		0x8
+#define HOSTDRVNTOPTIONS_DISKDEVICE			0x10
 
 // FSCONTEXTで固有データが格納されている位置オフセット（ver4以降）
 #define HOSTDRVNT_FSCONTEXT_USERDATA_OFFSET	40
@@ -173,7 +174,7 @@ void hostdrvNT_invokeMonitorChangeFS()
 	else
 	{
 		// 無効
-		if (s_hChangeFSStopEvent != NULL || s_hChangeFSStopEvent != INVALID_HANDLE_VALUE)
+		if (s_hChangeFSStopEvent != NULL && s_hChangeFSStopEvent != INVALID_HANDLE_VALUE)
 		{
 			hostdrvNT_stopMonitorChangeFS();
 		}
@@ -1110,8 +1111,18 @@ static void hostdrvNT_IRP_MJ_CREATE(HOSTDRVNT_INVOKEINFO *invokeInfo)
 		UINT32 hostPathLength;
 		DWORD attrs;
 
+		// パスに無効な文字が含まれる場合はSTATUS_OBJECT_NAME_INVALID　ここでSTATUS_OBJECT_NAME_NOT_FOUNDを返すとワイルドカード付きcopyコマンドなどがうまく動かない
+		if (wcschr(fileName, '?') || wcschr(fileName, '*') || wcschr(fileName, '\"') || wcschr(fileName, '|') || wcschr(fileName, '<') || wcschr(fileName, '>'))
+		{
+			TRACEOUTW((L"INVALID PATH", fileName));
+			cpu_kmemorywrite_d(invokeInfo->statusAddr, NP2_STATUS_OBJECT_NAME_INVALID); // Status STATUS_OBJECT_NAME_INVALID
+			cpu_kmemorywrite_d(invokeInfo->statusAddr + 4, 0); // Information
+			free(fileName);
+			return;
+		}
+
 		// バッファを溢れるくらいパスが長いときは無効
-		if (wcslen(fileName) > MAX_PATH || wcslen(hostPath) > MAX_PATH)
+		if (wcslen(fileName) > MAX_PATH || wcslen(s_hdrvRoot) > MAX_PATH)
 		{
 			TRACEOUTW((L"TOO LONG PATH", fileName));
 			cpu_kmemorywrite_d(invokeInfo->statusAddr, NP2_STATUS_OBJECT_NAME_INVALID); // Status STATUS_OBJECT_NAME_INVALID
@@ -1172,6 +1183,8 @@ static void hostdrvNT_IRP_MJ_CREATE(HOSTDRVNT_INVOKEINFO *invokeInfo)
 						free(fileName);
 						return;
 					}
+					// 初期属性も設定　失敗しても気にしない
+					SetFileAttributesW(hostPath, hostdrvFileAttributes);
 				}
 				else
 				{
@@ -1473,10 +1486,21 @@ static void hostdrvNT_IRP_MJ_QUERY_VOLUME_INFORMATION(HOSTDRVNT_INVOKEINFO* invo
 	}
 	else if (fsInfoClass == FileFsDeviceInformation)
 	{
-		FILE_FS_DEVICE_INFORMATION info = { 0 };
+		NP2_FILE_FS_DEVICE_INFORMATION info = { 0 };
 
-		info.DeviceType = FILE_DEVICE_DISK_FILE_SYSTEM; // XXX: FILE_DEVICE_NETWORK_FILE_SYSTEMを返すとCOPY CONとかがおかしくなる・・・
-		info.Characteristics = 0x00000010 | 0x00000020;
+		info.DeviceType = NP2_FILE_DEVICE_DISK_FILE_SYSTEM; // XXX: FILE_DEVICE_NETWORK_FILE_SYSTEMを返すとCOPY CONとかがおかしくなる・・・
+		if (s_hostdrvNTOptions & HOSTDRVNTOPTIONS_REMOVABLEDEVICE)
+		{
+			info.Characteristics = NP2_FILE_REMOVABLE_MEDIA | NP2_FILE_DEVICE_IS_MOUNTED;
+		}
+		else if (s_hostdrvNTOptions & HOSTDRVNTOPTIONS_DISKDEVICE)
+		{
+			info.Characteristics = NP2_FILE_DEVICE_IS_MOUNTED;
+		}
+		else
+		{
+			info.Characteristics = NP2_FILE_REMOTE_DEVICE | NP2_FILE_DEVICE_IS_MOUNTED;
+		}
 
 		dataLen = sizeof(info);
 		returnData = &info;
@@ -1838,7 +1862,7 @@ static void hostdrvNT_IRP_MJ_QUERY_INFORMATION(HOSTDRVNT_INVOKEINFO* invokeInfo)
 			stdInfo.EndOfFile = ((UINT64)fileInfo.nFileSizeHigh << 32) | fileInfo.nFileSizeLow;
 			stdInfo.AllocationSize = stdInfo.EndOfFile;
 			stdInfo.NumberOfLinks = 1;
-			stdInfo.DeletePending = 0;
+			stdInfo.DeletePending = fi->deleteOnClose ? 1 : 0;
 			stdInfo.Directory = (fileInfo.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) ? 1 : 0;
 
 			dataLen = sizeof(stdInfo);
@@ -2161,7 +2185,7 @@ static void hostdrvNT_IRP_MJ_SET_INFORMATION(HOSTDRVNT_INVOKEINFO* invokeInfo)
 		fileInfo.dwFileAttributes = basicInfo.FileAttributes;
 		if (fi->isDirectory)
 		{
-			fileInfo.dwFileAttributes = FILE_ATTRIBUTE_DIRECTORY;
+			fileInfo.dwFileAttributes &= ~FILE_ATTRIBUTE_DIRECTORY; // エラーになるので付けない
 		}
 		else if (fileInfo.dwFileAttributes == 0)
 		{
@@ -2207,6 +2231,7 @@ static void hostdrvNT_IRP_MJ_SET_INFORMATION(HOSTDRVNT_INVOKEINFO* invokeInfo)
 	{
 		NP2_FILE_END_OF_FILE_INFORMATION eofInfo = { 0 };
 		WIN32_FILE_ATTRIBUTE_DATA fileInfo;
+		LARGE_INTEGER liAllocationSize;
 		HANDLE fh;
 
 		// 入力データサイズが期待通りか確認
@@ -2248,7 +2273,8 @@ static void hostdrvNT_IRP_MJ_SET_INFORMATION(HOSTDRVNT_INVOKEINFO* invokeInfo)
 			cpu_kmemorywrite_d(invokeInfo->statusAddr + 4, 0); // Information
 			return;
 		}
-		SetFilePointer(fh, eofInfo.EndOfFile, NULL, FILE_BEGIN);
+		liAllocationSize.QuadPart = eofInfo.EndOfFile;
+		SetFilePointerEx(fh, liAllocationSize, NULL, FILE_BEGIN);
 		if (!SetEndOfFile(fh))
 		{
 			cpu_kmemorywrite_d(invokeInfo->statusAddr, NP2_STATUS_INVALID_PARAMETER);
@@ -2262,6 +2288,7 @@ static void hostdrvNT_IRP_MJ_SET_INFORMATION(HOSTDRVNT_INVOKEINFO* invokeInfo)
 	{
 		NP2_FILE_ALLOCATION_INFORMATION allocInfo = { 0 };
 		WIN32_FILE_ATTRIBUTE_DATA fileInfo;
+		LARGE_INTEGER currentFileSize;
 		HANDLE fh;
 
 		// 入力データサイズが期待通りか確認
@@ -2303,14 +2330,22 @@ static void hostdrvNT_IRP_MJ_SET_INFORMATION(HOSTDRVNT_INVOKEINFO* invokeInfo)
 			cpu_kmemorywrite_d(invokeInfo->statusAddr + 4, 0); // Information
 			return;
 		}
-		// 実際のサイズは変えない
-		//SetFilePointer(fh, allocInfo.AllocationSize, NULL, FILE_BEGIN);
-		//if (!SetEndOfFile(fh))
-		//{
-		//	cpu_kmemorywrite_d(invokeInfo->statusAddr, NP2_STATUS_INVALID_PARAMETER);
-		//	cpu_kmemorywrite_d(invokeInfo->statusAddr + 4, 0); // Information
-		//	return;
-		//}
+		// 実際のサイズは縮小する場合のみ変える
+		if (GetFileSizeEx(fh, &currentFileSize))
+		{
+			if (allocInfo.AllocationSize < currentFileSize.QuadPart)
+			{
+				LARGE_INTEGER liAllocationSize;
+				liAllocationSize.QuadPart = allocInfo.AllocationSize;
+				SetFilePointerEx(fh, liAllocationSize, NULL, FILE_BEGIN);
+				if (!SetEndOfFile(fh))
+				{
+					cpu_kmemorywrite_d(invokeInfo->statusAddr, NP2_STATUS_INVALID_PARAMETER);
+					cpu_kmemorywrite_d(invokeInfo->statusAddr + 4, 0); // Information
+					return;
+				}
+			}
+		}
 
 		hostdrvNT_notifyChange(fi->hostFileName, NP2_FILE_ACTION_MODIFIED, 0);
 	}
@@ -2372,7 +2407,7 @@ static void hostdrvNT_IRP_MJ_SET_INFORMATION(HOSTDRVNT_INVOKEINFO* invokeInfo)
 		// 読み込み
 		hostdrvNT_memread(invokeInfo->inBufferAddr, &disposeInfo, sizeof(disposeInfo));
 
-		// ファイル長さを設定
+		// 削除フラグをセット
 		if (disposeInfo.DeleteFileOnClose)
 		{
 			fi->deleteOnClose = 1;
@@ -2989,10 +3024,10 @@ static void hostdrvNT_IRP_MJ_FILE_SYSTEM_CONTROL(HOSTDRVNT_INVOKEINFO* invokeInf
 		else if (invokeInfo->stack.parameters.fileSystemControl.FsControlCode == FSCTL_IS_VOLUME_MOUNTED)
 		{
 			TRACEOUTW((L"FSCTL_IS_VOLUME_MOUNTED"));
-			//cpu_kmemorywrite_d(invokeInfo->statusAddr, NP2_STATUS_NOT_SUPPORTED); // Status STATUS_NOT_SUPPORTED
-			//cpu_kmemorywrite_d(invokeInfo->statusAddr + 4, 0); // Information
-			cpu_kmemorywrite_d(invokeInfo->statusAddr, NP2_STATUS_SUCCESS);
+			cpu_kmemorywrite_d(invokeInfo->statusAddr, NP2_STATUS_NOT_SUPPORTED); // Status STATUS_NOT_SUPPORTED
 			cpu_kmemorywrite_d(invokeInfo->statusAddr + 4, 0); // Information
+			//cpu_kmemorywrite_d(invokeInfo->statusAddr, NP2_STATUS_SUCCESS);
+			//cpu_kmemorywrite_d(invokeInfo->statusAddr + 4, 0); // Information
 		}
 		else if (invokeInfo->stack.parameters.fileSystemControl.FsControlCode == FSCTL_DISMOUNT_VOLUME)
 		{
@@ -3018,6 +3053,14 @@ static void hostdrvNT_IRP_MJ_FILE_SYSTEM_CONTROL(HOSTDRVNT_INVOKEINFO* invokeInf
 		cpu_kmemorywrite_d(invokeInfo->statusAddr, NP2_STATUS_NOT_IMPLEMENTED);
 		cpu_kmemorywrite_d(invokeInfo->statusAddr + 4, 0); // Information
 	}
+}
+
+static void hostdrvNT_IRP_MJ_DEVICE_CONTROL(HOSTDRVNT_INVOKEINFO* invokeInfo)
+{
+	UINT32 ioControlCode = invokeInfo->stack.parameters.deviceIoControl.IoControlCode;
+	TRACEOUTW((L"IoControlCode: %d(0x%08x)", ioControlCode, ioControlCode));
+	cpu_kmemorywrite_d(invokeInfo->statusAddr, NP2_STATUS_NOT_IMPLEMENTED);
+	cpu_kmemorywrite_d(invokeInfo->statusAddr + 4, 0); // Information
 }
 
 // ---------- Entry Function
@@ -3156,8 +3199,7 @@ static void hostdrvNT_invoke()
 	case NP2_IRP_MJ_DEVICE_CONTROL:
 	{
 		TRACEOUTW((L"IRP_MJ_DEVICE_CONTROL: %d (0x%02x)", invokeInfo.stack.majorFunction, invokeInfo.stack.majorFunction));
-		cpu_kmemorywrite_d(invokeInfo.statusAddr, NP2_STATUS_NOT_IMPLEMENTED);
-		cpu_kmemorywrite_d(invokeInfo.statusAddr + 4, 0); // Information
+		hostdrvNT_IRP_MJ_DEVICE_CONTROL(&invokeInfo);
 		break;
 	}
 	case NP2_IRP_MJ_LOCK_CONTROL:

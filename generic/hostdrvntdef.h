@@ -360,6 +360,7 @@ typedef struct
 	UINT32 Characteristics;
 } FILE_FS_DEVICE_INFORMATION;
 
+// 使う範囲で定義　OSバージョンが新しくなると新しい項目が増えていたりする
 typedef struct
 {
 	SINT16                                Type;
@@ -383,15 +384,7 @@ typedef struct
 	UINT32                                 Flags;
 	NP2_UNICODE_STRING                        FileName;
 	UINT64                         CurrentByteOffset;
-	UINT32                      Waiters;
-	UINT32                      Busy;
-	UINT32                                 LastLock;
-	NP2_KEVENT                                Lock;
-	NP2_KEVENT                                Event;
-	UINT32     CompletionContext;
-	UINT32                            IrpListLock;
-	NP2_LIST_ENTRY                            IrpList;
-	UINT32 FileObjectExtension;
+	// これ以降にもデータあるが、OSバージョンによって無かったりするので、読む範囲は最小限にする
 } NP2_FILE_OBJECT;
 typedef struct
 {

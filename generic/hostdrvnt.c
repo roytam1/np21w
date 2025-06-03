@@ -309,12 +309,27 @@ static int hostdrvNT_reopenFile(int index)
 	if (!fh || fh == INVALID_HANDLE_VALUE)
 	{
 		TRACEOUTW((L"REPOEN: %d %s", index, fi->hostFileName));
-		if ((fi->hFile = CreateFileW(fi->hostFileName, fi->hostdrvWinAPIDesiredAccess, fi->hostdrvShareAccess, NULL, fi->hostdrvWinAPICreateDisposition, fi->hostdrvFileAttributes, NULL)) == INVALID_HANDLE_VALUE)
+		if (fi->isDirectory)
 		{
-			DWORD error = GetLastError();
-			TRACEOUTW((L"OPEN FILE ERROR (code %d): %d %s", error, index, fi->hostFileName));
-			fi->hFile = NULL;
-			return 0;
+			// ディレクトリの場合の特例（実質的にディレクトリ日付変更専用）
+			if ((fi->hFile = CreateFileW(fi->hostFileName, FILE_WRITE_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL)) == INVALID_HANDLE_VALUE)
+			{
+				DWORD error = GetLastError();
+				TRACEOUTW((L"OPEN FILE ERROR (code %d): %d %s", error, index, fi->hostFileName));
+				fi->hFile = NULL;
+				return 0;
+			}
+		}
+		else
+		{
+			// ファイルの場合
+			if ((fi->hFile = CreateFileW(fi->hostFileName, fi->hostdrvWinAPIDesiredAccess, fi->hostdrvShareAccess, NULL, fi->hostdrvWinAPICreateDisposition, fi->hostdrvFileAttributes, NULL)) == INVALID_HANDLE_VALUE)
+			{
+				DWORD error = GetLastError();
+				TRACEOUTW((L"OPEN FILE ERROR (code %d): %d %s", error, index, fi->hostFileName));
+				fi->hFile = NULL;
+				return 0;
+			}
 		}
 	}
 	return 1;
@@ -3439,8 +3454,8 @@ int hostdrvNT_sfsave(STFLAGH sfh, const SFENTRY* tbl)
 			statflag_write(sfh, &fi->hostdrvFileAttributes, sizeof(fi->hostdrvFileAttributes));
 			statflag_write(sfh, &fi->deleteOnClose, sizeof(fi->deleteOnClose));
 			statflag_write(sfh, &fi->allowDeleteChild, sizeof(fi->allowDeleteChild));
-			statflag_write(sfh, &fi->reserved2, sizeof(fi->reserved2));
-			statflag_write(sfh, &fi->reserved3, sizeof(fi->reserved3));
+			fi->extendLength = 0;
+			statflag_write(sfh, &fi->extendLength, sizeof(fi->extendLength));
 
 			fi->deleteOnClose = 0; // XXX: ステートセーブ後の終了処理でファイル削除が行われないようにする。本当はレジュームではない普通のステートセーブの時はそのままにしなければならない。
 
@@ -3499,8 +3514,14 @@ int hostdrvNT_sfload(STFLAGH sfh, const SFENTRY* tbl)
 			statflag_read(sfh, &fi->hostdrvFileAttributes, sizeof(fi->hostdrvFileAttributes));
 			statflag_read(sfh, &fi->deleteOnClose, sizeof(fi->deleteOnClose));
 			statflag_read(sfh, &fi->allowDeleteChild, sizeof(fi->allowDeleteChild));
-			statflag_read(sfh, &fi->reserved2, sizeof(fi->reserved2));
-			statflag_read(sfh, &fi->reserved3, sizeof(fi->reserved3));
+			statflag_read(sfh, &fi->extendLength, sizeof(fi->extendLength));
+			if (fi->extendLength > 0)
+			{
+				// ダミーリード
+				char* dummyBuffer = malloc(fi->extendLength);
+				statflag_read(sfh, dummyBuffer, fi->extendLength);
+				free(dummyBuffer);
+			}
 			// ファイルロックがかかると不味いのでここで再オープンはしない
 		}
 	}

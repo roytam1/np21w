@@ -4,10 +4,17 @@ enum {
 	uPD8255A_RIGHTBIT	= 0x20
 };
 
+typedef struct
+{
+	UINT32	autohide;
+} MOUSEMNGSTAT;
+
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+extern MOUSEMNGSTAT	mousemngstat;
 
 BRESULT mousemng_checkdinput8();
 
@@ -47,9 +54,16 @@ UINT8 mousemng_supportrawinput(); // 生データ入力サポート
 void mousemng_updatespeed(); // 生データ入力サポート
 
 #ifdef __cplusplus
-extern "C" { // XXX: wab.c用。もっとスマートにすべき
+extern "C" {
 #endif
 void mousemng_updateclip();
+UINT8 mousemng_getabspos(int* x, int* y);
+void mousemng_setabspos(int x, int y);
+void mousemng_reset(void);
+void mousemng_setautohidecursor(int autohide);
+int mousemng_getautohidecursor(void);
+void mousemng_updateautohidecursor(void);
+void mousemng_updatemouseon(int mouseon);
 #ifdef __cplusplus
-} // XXX: wab.c用。もっとスマートにすべき
+}
 #endif

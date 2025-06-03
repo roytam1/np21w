@@ -27,13 +27,21 @@ typedef struct {
 } MOUSEMNG;
 
 static	MOUSEMNG	mousemng;
+MOUSEMNGSTAT		mousemngstat;
 static  int mousecaptureflg = 0;
+
+static  int mousecursorcurhide = 0;
+static  int lastmouseon = 0;
+static  int mousecursorhidepending = 0;
 
 static  int mouseMul = 1; // マウススピード倍率（分子）
 static  int mouseDiv = 1; // マウススピード倍率（分母）
 
 static  int mousebufX = 0; // マウス移動バッファ(X)
 static  int mousebufY = 0; // マウス移動バッファ(Y)
+
+static  int mouseposX = 0; // マウス絶対位置(X) 0～65535
+static  int mouseposY = 0; // マウス絶対位置 0～65535
 
 // RAWマウス入力対応 np21w ver0.86 rev13
 static  LPDIRECTINPUT8 dinput = NULL; 
@@ -122,6 +130,27 @@ void mousemng_updatespeed() {
 	np2_multithread_EnterCriticalSection();
 	mouseMul = np2oscfg.mousemul != 0 ? np2oscfg.mousemul : 1;
 	mouseDiv = np2oscfg.mousediv != 0 ? np2oscfg.mousediv : 1;
+	np2_multithread_LeaveCriticalSection();
+}
+
+UINT8 mousemng_getabspos(int* x, int* y)
+{
+	if (mousecaptureflg || !np2oscfg.mouse_nc)
+	{
+		return 0; // キャプチャ中やキャプチャなし操作無効の場合は絶対座標不可
+	}
+	np2_multithread_EnterCriticalSection();
+	*x = mouseposX;
+	*y = mouseposY;
+	mouseDiv = np2oscfg.mousediv != 0 ? np2oscfg.mousediv : 1;
+	np2_multithread_LeaveCriticalSection();
+	return 1;
+}
+void mousemng_setabspos(int x, int y)
+{
+	np2_multithread_EnterCriticalSection();
+	mouseposX = x;
+	mouseposY = y;
 	np2_multithread_LeaveCriticalSection();
 }
 
@@ -322,6 +351,11 @@ void mousemng_initialize(void) {
 	mousemng_updatespeed();
 }
 
+void mousemng_reset(void)
+{
+	mousemng_setautohidecursor(0);
+}
+
 void mousemng_destroy(void) {
 	if (mousemng_UIthreadID != GetCurrentThreadId()) return; // 別のスレッドからのアクセスは不可
 
@@ -347,6 +381,11 @@ void mousemng_UIThreadSync()
 			diRawMouse->Acquire();
 		}
 		LeaveCriticalSection(&mousemng_multithread_deviceinit_cs);
+	}
+	if (mousecursorhidepending)
+	{
+		mousecursorhidepending = 0;
+		mousemng_updatemouseon(lastmouseon);
 	}
 }
 
@@ -480,4 +519,46 @@ void mousemng_updateclip(){
 		mousecapture(TRUE); // キャプチャし直し
 	}
 	//np2_multithread_LeaveCriticalSection();
+}
+
+void mousemng_setautohidecursor(int autohide)
+{
+	mousemngstat.autohide = autohide ? 1 : 0;
+	mousecursorhidepending = 1;
+}
+int mousemng_getautohidecursor(void)
+{
+	return mousemngstat.autohide;
+}
+void mousemng_updateautohidecursor(void)
+{
+	mousecursorhidepending = 1;
+}
+
+void mousemng_updatemouseon(int mouseon)
+{
+	int newmousecursorcurhide = mousecursorcurhide;
+
+	lastmouseon = mouseon;
+	if (mouseon && mousemngstat.autohide && np2oscfg.mouse_nc)
+	{
+		newmousecursorcurhide = 1;
+	}
+	else
+	{
+		newmousecursorcurhide = 0;
+	}
+
+	if (mousecursorcurhide != newmousecursorcurhide)
+	{
+		mousecursorcurhide = newmousecursorcurhide;
+		if (mousecursorcurhide)
+		{
+			ShowCursor(FALSE);
+		}
+		else
+		{
+			ShowCursor(TRUE);
+		}
+	}
 }

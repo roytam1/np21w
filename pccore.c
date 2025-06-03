@@ -12,6 +12,7 @@
 #include	"soundmng.h"
 #include	"sysmng.h"
 #include	"timemng.h"
+#include	"mousemng.h"
 #include	"cpucore.h"
 #include	"pccore.h"
 #include	"iocore.h"
@@ -852,7 +853,9 @@ void pccore_reset(void) {
 	}
 #endif
 #endif
-	
+
+	// マウスリセット
+	mousemng_reset();
 }
 
 static void drawscreen(void) {
@@ -1312,6 +1315,9 @@ void pccore_exec(BOOL draw) {
 				np2haxcore.hltflag = 0;
 			}
 #endif
+			// マウスリセット
+			mousemng_reset();
+
 			CPU_SHUT();
 		}
 #if defined(SUPPORT_IA32_HAXM)

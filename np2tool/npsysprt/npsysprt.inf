@@ -19,7 +19,7 @@ HKLM,"System\CurrentControlSet\Services\npsysprt","Type",0x00010001,1
 HKLM,"System\CurrentControlSet\Services\npsysprt","Start",0x00010001,2
 HKLM,"System\CurrentControlSet\Services\npsysprt","ErrorControl",0x00010001,1
 HKLM,"System\CurrentControlSet\Services\npsysprt","ImagePath",0x00020000,"system32\drivers\npsysprt.sys"
-HKLM, System\CurrentControlSet\Services\npsysprt","DisplayName",0x00000000,"Neko Project II System Port"
+HKLM,"System\CurrentControlSet\Services\npsysprt","DisplayName",0x00000000,"Neko Project II System Port"
 
 [SourceDisksNames]
 1=%DiskName%,,,

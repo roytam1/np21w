@@ -1793,6 +1793,7 @@ static void OnCommand(HWND hWnd, WPARAM wParam)
 #ifdef SUPPORT_WACOM_TABLET
 			cmwacom_setNCControl(!!np2oscfg.mouse_nc);
 #endif
+			mousemng_updateautohidecursor();
 			break;
 
 		case IDM_MOUSEWHEELCTL:
@@ -2717,7 +2718,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 					scrnmng_fullscrnmenu(p.y);
 				}
 			}
-			if(np2oscfg.mouse_nc/* && !scrnmng_isfullscreen()*/){
+			if(np2oscfg.mouse_nc){
+				RECT rectClient;
+				int xPos, yPos;
+				int mouseon = 1;
 				static int mousebufX = 0; // マウス移動バッファ(X)
 				static int mousebufY = 0; // マウス移動バッファ(Y)
 				int x = LOWORD(lParam);
@@ -2775,9 +2779,42 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 					mousemng_setstat(dx, dy, btn);
 					lastmx = x;
 					lastmy = y;
+
+					// 絶対座標マウス
+					scrnmng_getrect(&rectClient);
+					xPos = x - rectClient.left;
+					yPos = y - rectClient.top;
+					if (xPos < 0)
+					{
+						xPos = 0;
+						mouseon = 0;
+					}
+					if (xPos > (rectClient.right - rectClient.left))
+					{
+						xPos = (rectClient.right - rectClient.left);
+						mouseon = 0;
+					}
+					if (yPos < 0)
+					{
+						yPos = 0;
+						mouseon = 0;
+					}
+					if (yPos > (rectClient.bottom - rectClient.top))
+					{
+						yPos = (rectClient.bottom - rectClient.top);
+						mouseon = 0;
+					}
+					mousemng_updatemouseon(mouseon);
+					xPos = xPos * 65535 / (rectClient.right - rectClient.left);
+					yPos = yPos * 65535 / (rectClient.bottom - rectClient.top);
+					mousemng_setabspos(xPos, yPos);
 				}
 			}
 			np2_multithread_LeaveCriticalSection();
+			break;
+
+		case WM_NCMOUSEMOVE:
+			mousemng_updatemouseon(false);
 			break;
 
 		case WM_LBUTTONDOWN:

@@ -35,6 +35,7 @@
 #include	"i386hax/haxcore.h"
 #endif
 #include	"dosio.h"
+#include	"mousemng.h"
 
 #include <shlwapi.h>
 
@@ -112,6 +113,7 @@ static const OEMCHAR str_mhz[] = OEMTEXT("%uMHz");
 #define NP21W_SWITCH_DISABLESOUNDROM	6
 #define NP21W_SWITCH_SETIDEWAIT_R		7
 #define NP21W_SWITCH_SETIDEWAIT_W		8
+#define NP21W_SWITCH_AUTOHIDECURSOR		9
 
 
 static void setoutstr(const OEMCHAR *str) {
@@ -265,6 +267,9 @@ static void np2sysp_getconfig(const void *arg1, long arg2) {
 		configvalue = (UINT8)(ideio.wwait >> 8);
 		break;
 #endif
+	case NP21W_SWITCH_AUTOHIDECURSOR:
+		configvalue = mousemng_getautohidecursor();
+		break;
 	case NP21W_SWITCH_DUMMY:
 	default:
 		break;
@@ -405,6 +410,9 @@ static void np2sysp_cngconfig(const void *arg1, long arg2) {
 		ideio.wwait = configvalue << 8;
 		break;
 #endif
+	case NP21W_SWITCH_AUTOHIDECURSOR:
+		mousemng_setautohidecursor(configvalue);
+		break;
 	case NP21W_SWITCH_DUMMY:
 	default:
 		break;
@@ -412,6 +420,36 @@ static void np2sysp_cngconfig(const void *arg1, long arg2) {
 
 	OEMSPRINTF(str, OEMTEXT("%u"), configvalue);
 	setoutstr(str);
+	(void)arg1;
+	(void)arg2;
+}
+static void np2sysp_getmpos(const void* arg1, long arg2)
+{
+	OEMCHAR	str[16] = { 0 };
+	int mouseX, mouseY;
+	UINT8 mode = (np2sysp.outval >> 24) & 0xff; // 今は未使用
+
+	if (mode == 0)
+	{
+		if (mousemng_getabspos(&mouseX, &mouseY))
+		{
+			if (mouseX < 0) mouseX = 0;
+			if (mouseX > 65535) mouseX = 65535;
+			if (mouseY < 0) mouseY = 0;
+			if (mouseY > 65535) mouseY = 65535;
+
+			OEMSPRINTF(str, OEMTEXT("%d,%d"), mouseX, mouseY);
+			setoutstr(str);
+		}
+		else
+		{
+			setoutstr(str); // 空文字列（エラー）
+		}
+	}
+	else
+	{
+		setoutstr(str); // 空文字列（エラー）
+	}
 	(void)arg1;
 	(void)arg2;
 }
@@ -448,6 +486,7 @@ static const OEMCHAR rep_hdrvcheck[] = OEMTEXT("0.74");
 static const char cmd_cngclkmul[] = "changeclockmul"; // np21w ver0.86 rev44
 static const char cmd_cngconfig[] = "changeconfig"; // np21w ver0.86 rev44
 static const char cmd_getconfig[] = "getconfig"; // np21w ver0.86 rev44
+static const char cmd_getmpos[] = "getmpos"; // np21w ver0.86 rev94
 
 #if defined(NP2SYSP_VER)
 static const OEMCHAR str_syspver[] = OEMTEXT(NP2SYSP_VER);
@@ -496,6 +535,7 @@ static const SYSPCMD np2spcmd[] = {
 			{cmd_cngclkmul,	np2sysp_cngclkmul,	NULL,			0},
 			{cmd_getconfig,	np2sysp_getconfig,	NULL,			0},
 			{cmd_cngconfig,	np2sysp_cngconfig,	NULL,			0},
+			{cmd_getmpos,	np2sysp_getmpos,	NULL,			0},
 };
 
 

@@ -39,7 +39,7 @@
 
 #include <shlwapi.h>
 
-#if 1
+#if 0
 #undef	TRACEOUT
 static void trace_fmt_ex(const char* fmt, ...)
 {
@@ -429,7 +429,7 @@ static void np2sysp_getmpos(const void* arg1, long arg2)
 	int mouseX, mouseY;
 	UINT8 mode = (np2sysp.outval >> 24) & 0xff; // 今は未使用
 
-	if (mode == 0)
+	if (mode == 0 || mode == 1 || mode == 2 || mode == 3)
 	{
 		if (mousemng_getabspos(&mouseX, &mouseY))
 		{
@@ -438,13 +438,59 @@ static void np2sysp_getmpos(const void* arg1, long arg2)
 			if (mouseY < 0) mouseY = 0;
 			if (mouseY > 65535) mouseY = 65535;
 
-			OEMSPRINTF(str, OEMTEXT("%d,%d"), mouseX, mouseY);
+			if (mode == 1)
+			{
+				// Win3.1向け 強制レジスタ書き換えモード
+				CPU_DI |= 0x8000; // 絶対座標モード　本当はAXレジスタだが触れないのでDIで
+				CPU_BX = mouseX; // X座標
+				CPU_CX = mouseY; // Y座標
+				OEMSPRINTF(str, OEMTEXT("OK"));
+			}
+			else if (mode == 2)
+			{
+				// 一般向け 強制レジスタ書き換えモード
+				CPU_BX = mouseX; // X座標
+				CPU_CX = mouseY; // Y座標
+				CPU_FLAG |= C_FLAG; // 成功ならC_FLAGを立てる
+				OEMSPRINTF(str, OEMTEXT("OK"));
+			}
+			else if (mode == 3)
+			{
+				// 一般向け 強制レジスタ書き換えモード ボタンも取得
+				SINT16 x, y;
+				UINT8 btn = mousemng_getstat(&x, &y, 0);
+				CPU_BX = mouseX; // X座標
+				CPU_CX = mouseY; // Y座標
+				CPU_DI = btn; // ボタンの状態
+				CPU_FLAG |= C_FLAG; // 成功ならC_FLAGを立てる
+				OEMSPRINTF(str, OEMTEXT("OK"));
+			}
+			else
+			{
+				OEMSPRINTF(str, OEMTEXT("%d,%d"), mouseX, mouseY);
+			}
 			setoutstr(str);
 		}
 		else
 		{
+			if (mode == 2 || mode == 3)
+			{
+				// 一般向け 強制レジスタ書き換えモード
+				CPU_FLAG &= ~C_FLAG; // 失敗ならC_FLAGを消す
+			}
 			setoutstr(str); // 空文字列（エラー）
 		}
+	}
+	else if (mode == 4 || mode == 5)
+	{
+		// 一般向け 強制レジスタ書き換えモード 相対座標とボタンの取得
+		SINT16 x, y;
+		UINT8 btn = mousemng_getstat(&x, &y, mode == 5 ? 1 : 0); // モード5は取得した座標をクリアする
+		CPU_BX = x; // X座標
+		CPU_CX = y; // Y座標
+		CPU_DI = btn; // ボタンの状態
+		CPU_FLAG |= C_FLAG; // 成功ならC_FLAGを立てる
+		OEMSPRINTF(str, OEMTEXT("OK"));
 	}
 	else
 	{

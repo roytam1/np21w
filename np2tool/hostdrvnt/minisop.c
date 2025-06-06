@@ -17,7 +17,7 @@
 #include "miniifs.h"
 #endif  /* USE_CACHEHACK */
 
-#define PENDING_SOP_MAX	4096
+#define PENDING_SOP_MAX	65535
 
 static VOID MiniSOP_ReleaseAllSOP(void);
 static BOOLEAN MiniSOP_ExpandSOPList(void);
@@ -173,6 +173,19 @@ static VOID MiniSOP_ReleaseAllSOP(){
     }
 }
 
+VOID MiniSOP_SendFlushSOP(){
+	int i;
+	IO_STATUS_BLOCK iosb = {0};
+    for (i = 0; i < g_pendingSOPListCount; i++) {
+        if (g_pendingSOPList[i].pSOP != NULL) {
+			if(g_pendingSOPList[i].pSOP->DataSectionObject){
+				CcFlushCache(g_pendingSOPList[i].pSOP, NULL, 0, &iosb);
+				MmFlushImageSection(g_pendingSOPList[i].pSOP, MmFlushForDelete);
+			}
+        }
+    }
+}
+
 
 // HACK: おまけ機能　キャッシュ未実装でもメモリマップトファイルが使えるようにする。
 #ifdef USE_CACHEHACK
@@ -227,6 +240,8 @@ VOID MiniSOP_HandleMjCleanupCache(PIO_STACK_LOCATION irpSp){
 	
 	// キャッシュの内容を強制的にディスクへ書き戻させる
 	CcFlushCache(pFileObject->SectionObjectPointer, NULL, 0, &iosb);
+	//MmFlushImageSection(pFileObject->SectionObjectPointer, MmFlushForDelete);
+	//CcUninitializeCacheMap(pFileObject, NULL, NULL);
 }
 // IRP_MJ_SET_INFORMATIONで実際のファイルサイズを変更する 前に 呼ぶ。キャッシュのファイル長さ変更を通知。
 // 実際の処理は、指定されたファイル長さ以上で一旦WRITEされる→SetInformationで切り捨てる　という操作になる

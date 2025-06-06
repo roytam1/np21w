@@ -14,11 +14,11 @@ BEGIN
         BLOCK "041103a4"
         BEGIN
             VALUE "CompanyName",      "Neko Project II\0"
-            VALUE "FileDescription",  "Neko Project II シームレスマウスドライバ for Win2k\0"
+            VALUE "FileDescription",  "Neko Project II シームレスマウスドライバ for WinNT\0"
             VALUE "FileVersion",      "1.0.0.0\0"
             VALUE "InternalName",     "npmouse.sys\0"
             VALUE "OriginalFilename", "npmouse.sys\0"
-            VALUE "ProductName",      "Neko Project II Seamless Mouse Driver for Win2k\0"
+            VALUE "ProductName",      "Neko Project II Seamless Mouse Driver for WinNT\0"
             VALUE "ProductVersion",   "1.0.0.0\0"
             VALUE "LegalCopyright",   "ねこさん開発ちーむ\0"
         END

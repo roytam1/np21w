@@ -217,6 +217,7 @@ static	TCHAR		szClassName[] = _T("NP2-MainWindow");
 #if defined(SUPPORT_MULTITHREAD)
 						1,
 #endif	// defined(SUPPORT_MULTITHREAD)
+						0, 200,
 					};
 
 		OEMCHAR		fddfolder[MAX_PATH];

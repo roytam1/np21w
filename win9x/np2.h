@@ -138,6 +138,9 @@ typedef struct {
 #if defined(SUPPORT_MULTITHREAD)
 	UINT8	multithread; // Multi Thread Mode
 #endif
+
+	UINT8	midiasns; // MIDI Active Sensing‚ğ‘—‚é
+	UINT32	midiaint; // MIDI Active Sensing‚ğ‘—‚éŠÔŠuiƒ~ƒŠ•bj
 } NP2OSCFG;
 
 

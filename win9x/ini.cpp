@@ -840,6 +840,9 @@ static const PFTBL s_IniItems[] =
 #if defined(SUPPORT_MULTITHREAD)
 	PFVAL("MTENABLE", PFTYPE_BOOL,		&np2oscfg.multithread), // マルチスレッドモード
 #endif
+
+	PFVAL("midiasns", PFRO_BOOL,		&np2oscfg.midiasns), // MIDI Active Sensingを送る
+	PFVAL("midiaint", PFRO_SINT32,		&np2oscfg.midiaint), // MIDI Active Sensingを送る間隔（ミリ秒）
 };
 
 //! .ini 拡張子

@@ -3,6 +3,8 @@
  * @brief	MIDI クラスの動作の定義を行います
  */
 
+#include <process.h>
+
 #include "compiler.h"
 #include "cmmidi.h"
 #include "np2.h"
@@ -83,6 +85,21 @@ static const UINT8 midictrltbl[] = { 0, 1, 5, 7, 10, 11, 64,
 
 static	UINT8	midictrlindex[128];
 
+static unsigned int __stdcall ccommidi_activesenseThreadFroc(LPVOID vdParam)
+{
+	CComMidi* midi = (CComMidi*)vdParam;
+	if (midi != NULL)
+	{
+		const UINT32 interval = midi->m_activesenseInterval;
+		while (WaitForSingleObject(midi->m_activesenseExitRequestEvent, interval) == WAIT_TIMEOUT)
+		{
+			midi->SendActive();
+		}
+		SetEvent(midi->m_activesenseExitEvent);
+	}
+
+	return 0;
+}
 
 /**
  * モジュール番号を得る
@@ -251,6 +268,11 @@ CComMidi::CComMidi()
 	, m_nRecvSize(0)
 	, m_cLastData(0)
 	, m_bMimpiDef(false)
+	, m_useactivesense(1)
+	, m_activesenseInterval(200)
+	, m_activesenseThread(NULL)
+	, m_activesenseExitEvent(NULL)
+	, m_activesenseExitRequestEvent(NULL)
 {
 	ZeroMemory(&m_mimpiDef, sizeof(m_mimpiDef));
 	FillMemory(m_midich, sizeof(m_midich), 0xff);
@@ -272,6 +294,20 @@ CComMidi::~CComMidi()
 	{
 		delete m_pMidiIn;
 		m_pMidiIn = NULL;
+	}
+	if (m_activesenseExitRequestEvent && m_activesenseExitEvent)
+	{
+		SetEvent(m_activesenseExitRequestEvent);
+		if (WaitForSingleObject(m_activesenseExitEvent, 10000) == WAIT_TIMEOUT)
+		{
+			TerminateThread(m_activesenseThread, 0); // ゾンビスレッド死すべし
+		}
+		CloseHandle(m_activesenseThread);
+		CloseHandle(m_activesenseExitRequestEvent);
+		CloseHandle(m_activesenseExitEvent);
+		m_activesenseThread = NULL;
+		m_activesenseExitRequestEvent = NULL;
+		m_activesenseExitEvent = NULL;
 	}
 }
 
@@ -306,11 +342,20 @@ bool CComMidi::Initialize(LPCTSTR lpMidiOut, LPCTSTR lpMidiIn, LPCTSTR lpModule)
 	if (m_pMidiOut == NULL)
 	{
 		m_pMidiOut = CComMidiOut32::CreateInstance(lpMidiOut);
-		// WORKAROUND: 一部のソフトウェアMIDIシンセはオープン時にノートオフを送らないとCPUを使い潰す
-		if (m_pMidiOut)
+
+		// MIDI Active Sensingを送る
+		// WORKAROUND: 一部のソフトMIDIシンセで何らかのメッセージを送らないとCPUを異常に使う問題の対策に使用
+		m_useactivesense = np2oscfg.midiasns;
+		m_activesenseInterval = np2oscfg.midiaint;
+		if (m_useactivesense && m_activesenseInterval > 0)
 		{
-			Sleep(1); // 若干待つ
-			midiallnoteoff();
+			unsigned int dwID;
+			m_activesenseExitEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
+			m_activesenseExitRequestEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
+			if (m_activesenseExitEvent && m_activesenseExitRequestEvent)
+			{
+				m_activesenseThread = (HANDLE)_beginthreadex(NULL, 0, ccommidi_activesenseThreadFroc, this, 0, &dwID);
+			}
 		}
 	}
 
@@ -648,4 +693,15 @@ INTPTR CComMidi::Message(UINT nMessage, INTPTR nParam)
 			break;
 	}
 	return 0;
+}
+
+/**
+ * Active Sensingを送る
+ */
+void CComMidi::SendActive()
+{
+	if (m_pMidiOut)
+	{
+		m_pMidiOut->Short(0xFE);
+	}
 }

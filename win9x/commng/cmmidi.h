@@ -30,6 +30,12 @@ class CComMidi : public CComBase
 {
 public:
 	static CComMidi* CreateInstance(LPCTSTR lpMidiOut, LPCTSTR lpMidiIn, LPCTSTR lpModule);
+	virtual void SendActive();
+
+	UINT8 m_useactivesense;			/*!< ACTIVESENSEを送り続ける */
+	UINT32 m_activesenseInterval;	/*!< ACTIVESENSEを送り続ける間隔 */
+	HANDLE m_activesenseExitRequestEvent; /*!< ACTIVESENSE送信スレッド終了リクエスト */
+	HANDLE m_activesenseExitEvent; /*!< ACTIVESENSE送信スレッド終了イベント */
 
 protected:
 	CComMidi();
@@ -80,6 +86,8 @@ private:
 	MIMPIDEF m_mimpiDef;			/*!< MIMPIDEF */
 	MIDICH m_midich[16];			/*!< MIDI CH */
 	UINT8 m_sBuffer[MIDI_BUFFER];	/*!< バッファ */
+
+	HANDLE m_activesenseThread;		/*!< ACTIVESENSE送信スレッド */
 
 	bool Initialize(LPCTSTR lpMidiOut, LPCTSTR lpMidiIn, LPCTSTR lpModule);
 	static UINT module2number(LPCTSTR lpModule);

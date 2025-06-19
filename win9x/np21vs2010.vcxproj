@@ -441,7 +441,14 @@
     <ClCompile Include="..\generic\cmndraw.c" />
     <ClCompile Include="..\generic\dipswbmp.c" />
     <ClCompile Include="..\generic\hostdrv.c" />
-    <ClCompile Include="..\generic\hostdrvnt.c" />
+    <ClCompile Include="..\generic\hostdrvnt.c">
+      <InlineFunctionExpansion Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">OnlyExplicitInline</InlineFunctionExpansion>
+      <InlineFunctionExpansion Condition="'$(Configuration)|$(Platform)'=='ReleaseHAXM|x64'">OnlyExplicitInline</InlineFunctionExpansion>
+      <InlineFunctionExpansion Condition="'$(Configuration)|$(Platform)'=='Release|x64'">OnlyExplicitInline</InlineFunctionExpansion>
+      <InlineFunctionExpansion Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">OnlyExplicitInline</InlineFunctionExpansion>
+      <InlineFunctionExpansion Condition="'$(Configuration)|$(Platform)'=='ReleaseHAXM|Win32'">OnlyExplicitInline</InlineFunctionExpansion>
+      <InlineFunctionExpansion Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">OnlyExplicitInline</InlineFunctionExpansion>
+    </ClCompile>
     <ClCompile Include="..\generic\hostdrvs.c" />
     <ClCompile Include="..\generic\keydisp.c" />
     <ClCompile Include="..\generic\memdbg32.c" />

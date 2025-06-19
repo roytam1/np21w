@@ -306,6 +306,12 @@ bool CComMidi::Initialize(LPCTSTR lpMidiOut, LPCTSTR lpMidiIn, LPCTSTR lpModule)
 	if (m_pMidiOut == NULL)
 	{
 		m_pMidiOut = CComMidiOut32::CreateInstance(lpMidiOut);
+		// WORKAROUND: 一部のソフトウェアMIDIシンセはオープン時にノートオフを送らないとCPUを使い潰す
+		if (m_pMidiOut)
+		{
+			Sleep(1); // 若干待つ
+			midiallnoteoff();
+		}
 	}
 
 	m_pMidiIn = CComMidiIn32::CreateInstance(lpMidiIn);
@@ -321,6 +327,8 @@ bool CComMidi::Initialize(LPCTSTR lpMidiOut, LPCTSTR lpMidiIn, LPCTSTR lpModule)
 	}
 
 	m_nModule = module2number(lpModule);
+
+
 	return true;
 }
 

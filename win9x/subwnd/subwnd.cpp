@@ -9,6 +9,7 @@
 #include "np2.h"
 #include "np2mt.h"
 #include "soundmng.h"
+#include "mousemng.h"
 #include "winloc.h"
 #include "dialog/np2class.h"
 #include "misc\tstring.h"
@@ -159,6 +160,11 @@ LRESULT CSubWndBase::WindowProc(UINT nMsg, WPARAM wParam, LPARAM lParam)
 			{
 				CSoundMng::GetInstance()->Enable(SNDPROC_SUBWIND);
 			}
+			break;
+
+		case WM_MOUSEMOVE:
+		case WM_NCMOUSEMOVE:
+			mousemng_updatemouseon(false);
 			break;
 
 		case WM_CLOSE:

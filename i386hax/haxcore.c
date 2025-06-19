@@ -35,7 +35,7 @@
 
 #if defined(SUPPORT_IA32_HAXM)
 
-#if 1
+#if 0
 #undef	TRACEOUT
 //#define USE_TRACEOUT_VS
 #ifdef USE_TRACEOUT_VS

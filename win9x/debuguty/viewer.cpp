@@ -9,6 +9,7 @@
 #include "viewer.h"
 #include "viewitem.h"
 #include "cpucore.h"
+#include "mousemng.h"
 
 //! インスタンス
 static CDebugUtyView* g_np2view[NP2VIEW_MAX];
@@ -278,6 +279,11 @@ LRESULT CDebugUtyView::WindowProc(UINT message, WPARAM wParam, LPARAM lParam)
 
 		case WM_ACTIVATE:
 			OnActivate(LOWORD(wParam), reinterpret_cast<HWND>(lParam), HIWORD(wParam));
+			break;
+
+		case WM_MOUSEMOVE:
+		case WM_NCMOUSEMOVE:
+			mousemng_updatemouseon(false);
 			break;
 
 		case WM_CLOSE:

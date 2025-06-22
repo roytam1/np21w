@@ -1,7 +1,6 @@
 [Version]
 Signature="$Windows NT$"
-Class=Mouse
-ClassGuid={4D36E96F-E325-11CE-BFC1-08002BE10318}
+Class=LegacyDriver
 Provider=%ProviderName%
 DriverVer=05/03/2025,0.1.0.0
 

@@ -1,81 +1,83 @@
-■■■ Neko Project II シームレスマウスドライバ for WinNT ■■■
+������ Neko Project II �V�[�����X�}�E�X�h���C�o for WinNT ������
 
-Windows上においてNeko Project II上でのシームレスマウス操作を実現します。
-【注意！！！】
-手順を間違えるとマウスが使えなくなったりブルースクリーンで起動不能になったりします。
-マウスが使えない分はキーボード操作で回復できますが、ブルースクリーンの場合は別OSで起動して、
-WINNT\System32\driversにあるnpmouse.sysを削除する必要があり、復旧が大変です。
-先にイメージ毎バックアップを取っておくのが簡単でおすすめです。
+Windows��ɂ�����Neko Project II��ł̃V�[�����X�}�E�X������������܂��B
+�y���ӁI�I�I�z
+�菇���ԈႦ��ƃ}�E�X���g���Ȃ��Ȃ�����u���[�X�N���[���ŋN���s�\�ɂȂ����肵�܂��B
+�}�E�X���g���Ȃ����̓L�[�{�[�h����ŉ񕜂ł��܂����A�u���[�X�N���[���̏ꍇ�͕�OS�ŋN�����āA
+WINNT\System32\drivers�ɂ���npmouse.sys���폜����K�v������A��������ςł��B
+��ɃC���[�W���o�b�N�A�b�v������Ă����̂��ȒP�ł������߂ł��B
 
-●動作環境
-【ゲスト】
+�������
+�y�Q�X�g�z
 Windows NT3.51, NT4.0, 2000
-【ホスト】
-Neko Project 21/W ver0.86 rev94β11以降
-Device->Mouse->Non-capture Controlが有効な環境
+�y�z�X�g�z
+Neko Project 21/W ver0.86 rev94��11�ȍ~
+Device->Mouse->Non-capture Control���L���Ȋ�
 
 
-●インストール
-・Windows 2000の場合
-サービスのインストールとマウスドライバへのフィルタ登録が必要です。
-サービスはwnt\npmouse.infを右クリック→インストール
-でインストールできます。
-アップデートも同じ操作でできますが、反映にはシステムの再起動が必要です。
-マウスドライバへのフィルタ登録（必須）は、regedt32（regeditではない）を起動し、
+���C���X�g�[��
+�EWindows 2000�̏ꍇ
+�T�[�r�X�̃C���X�g�[���ƃ}�E�X�h���C�o�ւ̃t�B���^�o�^���K�v�ł��B
+�T�[�r�X��wnt\npmouse.inf���E�N���b�N���C���X�g�[��
+�ŃC���X�g�[���ł��܂��B
+�A�b�v�f�[�g����������łł��܂����A���f�ɂ̓V�X�e���̍ċN�����K�v�ł��B
+�}�E�X�h���C�o�ւ̃t�B���^�o�^�i�K�{�j�́Aregedt32�iregedit�ł͂Ȃ��j���N�����A
 HKEY_LOCAL_MACHINE\SYSTEM\ControlSet001\Control\Class\{4D36E96F-E325-11CE-BFC1-08002BE10318}
-へ移動します。その中にあるUpperFiltersがmouclassであることを確認します。
-そうでない環境は危ないので中断してください。
-問題なさそうなら、UpperFiltersの項目をダブルクリックし、以下の2行の内容にします
+�ֈړ����܂��B���̒��ɂ���UpperFilters��mouclass�ł��邱�Ƃ��m�F���܂��B
+�����łȂ����͊�Ȃ��̂Œ��f���Ă��������B
+���Ȃ������Ȃ�AUpperFilters�̍��ڂ��_�u���N���b�N���A�ȉ���2�s�̓��e�ɂ��܂�
 mouclass
 npmouse
-順番も大事ですので、逆にしないでください。
-これで再起動すればシームレスマウス操作が有効になります。
+���Ԃ��厖�ł��̂ŁA�t�ɂ��Ȃ��ł��������B
+����ōċN������΃V�[�����X�}�E�X���삪�L���ɂȂ�܂��B
 
-・Windows NT4.0の場合
-レガシードライバ扱いでインストールします。
-wnt\npmouse.infを右クリック→インストール
-でインストールできます。
-アップデートも同じ操作でできますが、反映にはシステムの再起動が必要です。
+�EWindows NT4.0�̏ꍇ
+���K�V�[�h���C�o�����ŃC���X�g�[�����܂��B
+wnt\npmouse.inf���E�N���b�N���C���X�g�[��
+�ŃC���X�g�[���ł��܂��B
+�A�b�v�f�[�g����������łł��܂����A���f�ɂ̓V�X�e���̍ċN�����K�v�ł��B
 
-・Windows NT3.51の場合
-wnt\npmouse.inf内に記載の[NP2Mouse.AddReg]セクションの内容を参考に、
-regedt32を使用して手動で打ち込んでください。
-WINNT\System32\driversにwnt\npmouse.sysをコピーするのを忘れずに。
+�EWindows NT3.51�̏ꍇ
+�t����wnt\instinf.exe�����s���Ă��������B
+�蓮�ŃC���X�g�[���������ꍇ�A
+wnt\npmouse.inf���ɋL�ڂ�[NP2Mouse.AddReg]�Z�N�V�����̓��e���Q�l�ɁA
+regedt32���g�p���Ď蓮�őł�����ł��������B
+WINNT\System32\drivers��wnt\npmouse.sys���R�s�[����̂�Y�ꂸ�ɁB
 
 
-●アンインストール
-・Windows 2000の場合
-必ずマウスドライバへのフィルタ登録解除を先に行ってください。
-順番を逆にするとマウスドライバがエラーになり、マウス操作ができなくなります。
-（キーボード操作だけで頑張れば復旧は出来ます）
-regedt32（regeditではない）を起動し、
+���A���C���X�g�[��
+�EWindows 2000�̏ꍇ
+�K���}�E�X�h���C�o�ւ̃t�B���^�o�^�������ɍs���Ă��������B
+���Ԃ��t�ɂ���ƃ}�E�X�h���C�o���G���[�ɂȂ�A�}�E�X���삪�ł��Ȃ��Ȃ�܂��B
+�i�L�[�{�[�h���삾���Ŋ撣��Ε����͏o���܂��j
+regedt32�iregedit�ł͂Ȃ��j���N�����A
 HKEY_LOCAL_MACHINE\SYSTEM\ControlSet001\Control\Class\{4D36E96F-E325-11CE-BFC1-08002BE10318}
-へ移動します。その中にあるUpperFiltersをmouclassの1行だけに戻します。
-その後、一旦再起動してシームレス操作が無効化されていることを確認してください。
-シームレス操作が無効化されていることを確認したら、レジストリの
+�ֈړ����܂��B���̒��ɂ���UpperFilters��mouclass��1�s�����ɖ߂��܂��B
+���̌�A��U�ċN�����ăV�[�����X���삪����������Ă��邱�Ƃ��m�F���Ă��������B
+�V�[�����X���삪����������Ă��邱�Ƃ��m�F������A���W�X�g����
 HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\npmouse
-を削除し、WINNT\System32\driversにあるnpmouse.sysを削除すればアンインストール完了です。
+���폜���AWINNT\System32\drivers�ɂ���npmouse.sys���폜����΃A���C���X�g�[�������ł��B
 
-・Windows NT3.51，NT4.0の場合
-レジストリの
+�EWindows NT3.51�CNT4.0�̏ꍇ
+���W�X�g����
 HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\npmouse
-を削除し、WINNT\System32\driversにあるnpmouse.sysを削除すればアンインストール完了です。
+���폜���AWINNT\System32\drivers�ɂ���npmouse.sys���폜����΃A���C���X�g�[�������ł��B
 
 
-●使い方
-シームレス操作は以下の条件を満たす場合に自動的に有効になります。
-①マウスキャプチャ状態ではない
-②Device→Mouse→Non-capture ControlがON
-上記の条件以外では、通常のマウスドライバと同じ相対座標の動作になります。
-つまり、シームレスマウスの絶対座標で問題を起こすソフトでは、マウス中ボタンか
-F12キーで通常のマウスキャプチャ操作を行えば問題なく使えると思います。
+���g����
+�V�[�����X����͈ȉ��̏����𖞂����ꍇ�Ɏ����I�ɗL���ɂȂ�܂��B
+�@�}�E�X�L���v�`����Ԃł͂Ȃ�
+�ADevice��Mouse��Non-capture Control��ON
+��L�̏����ȊO�ł́A�ʏ�̃}�E�X�h���C�o�Ɠ������΍��W�̓���ɂȂ�܂��B
+�܂�A�V�[�����X�}�E�X�̐�΍��W�Ŗ����N�����\�t�g�ł́A�}�E�X���{�^����
+F12�L�[�Œʏ�̃}�E�X�L���v�`��������s���Ζ��Ȃ��g����Ǝv���܂��B
 
 
-●ソースコード
-srcフォルダにソースコードがあります。
-いちおう猫本体と同じ修正BSDライセンスとしますが、実質的に自由に使っていただいて大丈夫です。
+���\�[�X�R�[�h
+src�t�H���_�Ƀ\�[�X�R�[�h������܂��B
+���������L�{�̂Ɠ����C��BSD���C�Z���X�Ƃ��܂����A�����I�Ɏ��R�Ɏg���Ă��������đ��v�ł��B
 
 
 ------------------------
-Neko Project 21/W 開発者
+Neko Project 21/W �J����
 SimK

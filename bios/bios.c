@@ -419,7 +419,7 @@ void bios_initialize(void) {
 #if defined(USE_CUSTOM_HOOKINST)
 #if defined(SUPPORT_IA32_HAXM)
 	if (np2hax.enable) {
-		bioshookinfo.hookinst = 0xCC;//0xF4;//;0xCC;//HOOKINST_DEFAULT; // BIOSフックに使う命令（デフォルトはNOP命令をフック）
+		bioshookinfo.hookinst = 0xF4;//;0xCC;//HOOKINST_DEFAULT; // BIOSフックに使う命令（デフォルトはNOP命令をフック）
 	}else
 #endif
 	{

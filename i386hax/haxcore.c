@@ -252,14 +252,15 @@ void i386hax_createVM(void) {
 		goto error2;
 	}
 	
-	// デバッグ機能を有効にする（HAX_DEBUG_USE_SW_BPは仮想マシンがINT3 CChを呼ぶと無条件で仮想マシンモニタに移行できる）
-	np2hax.bioshookenable = 1;
-	hax_dbg.control = HAX_DEBUG_ENABLE|HAX_DEBUG_USE_SW_BP;//|HAX_DEBUG_USE_HW_BP|HAX_DEBUG_STEP;
-	if(i386haxfunc_vcpu_debug(&hax_dbg)==FAILURE){
-		TRACEOUT(("HAXM: HAX VCPU debug setting failed."));
-		msgbox("HAXM VM", "HAX VCPU debug setting failed.");
-		goto error2;
-	}
+	//// デバッグ機能を有効にする（HAX_DEBUG_USE_SW_BPは仮想マシンがINT3 CChを呼ぶと無条件で仮想マシンモニタに移行できる）
+	//np2hax.bioshookenable = 1;
+	//hax_dbg.control = HAX_DEBUG_ENABLE|HAX_DEBUG_USE_SW_BP;//|HAX_DEBUG_USE_HW_BP|HAX_DEBUG_STEP;
+	//if(i386haxfunc_vcpu_debug(&hax_dbg)==FAILURE){
+	//	TRACEOUT(("HAXM: HAX VCPU debug setting failed."));
+	//	msgbox("HAXM VM", "HAX VCPU debug setting failed.");
+	//	goto error2;
+	//}
+	np2hax.bioshookenable = 0; // もう使用しなくなった np21w ver0.86 rev95
 	
 	TRACEOUT(("HAXM: HAX VM initialized."));
     //msgbox("HAXM VM", "HAX VM initialized.");
@@ -350,12 +351,12 @@ ia32hax_bioscall(void)
 		if ((adrs >= 0xf8000) && (adrs < 0x100000)) {
 			if (biosfunc(adrs)) {
 				/* Nothing to do */
-				ret = 1;
 			}
 			LOAD_SEGREG(CPU_ES_INDEX, CPU_ES);
 			LOAD_SEGREG(CPU_CS_INDEX, CPU_CS);
 			LOAD_SEGREG(CPU_SS_INDEX, CPU_SS);
 			LOAD_SEGREG(CPU_DS_INDEX, CPU_DS);
+			ret = 1;
 		}
 	}
 	return ret;
@@ -858,35 +859,6 @@ coutinue_cpu:
 		np2haxcore.lastVGA256linear = (vramop.mio2[0x2]==0x1 && (gdc.analog & (1 << GDCANALOG_256))!=0);
 	}
 	
-	// プロテクトモードが続いたらBIOSエミュレーション用のデバッグ設定を無効にする（デバッグレジスタを使うソフト用）
-	if(CPU_STAT_PM && CPU_STAT_PAGING && !CPU_STAT_VM86){
-		if(pmcounter < PMCOUNTER_THRESHOLD){
-			pmcounter++;
-		}else{
-			if(np2hax.bioshookenable){
-				HAX_DEBUG hax_dbg = {0};
-				hax_dbg.control = 0;
-				i386haxfunc_vcpu_debug(&hax_dbg);
-				np2hax.bioshookenable = 0;
-			}
-		}
-	}else{
-		if(pmcounter > 0){
-			if(!CPU_STAT_PM && !CPU_STAT_PAGING && !CPU_STAT_VM86){
-				// リアルモードっぽいのでカウンタリセット
-				pmcounter = 0;
-			}else{
-				pmcounter--;
-			}
-		}
-		if(!np2hax.bioshookenable){
-			HAX_DEBUG hax_dbg = {0};
-			hax_dbg.control = HAX_DEBUG_ENABLE|HAX_DEBUG_USE_SW_BP;//|HAX_DEBUG_USE_HW_BP|HAX_DEBUG_STEP;
-			i386haxfunc_vcpu_debug(&hax_dbg);
-			np2hax.bioshookenable = 1;
-		}
-	}
-
 	// 割り込みを処理
 	if(np2haxstat.irq_reqidx_cur != np2haxstat.irq_reqidx_end){
 		if (tunnel->ready_for_interrupt_injection) { // 割り込み準備OK？
@@ -1134,6 +1106,24 @@ coutinue_cpu_imm:
 		//printf("HAX_EXIT_HLT\n");
 		// リセット可能フラグを立てる
 		np2haxcore.ready_for_reset = 1;
+		// リアルモード or 仮想86
+		if (!CPU_STAT_PM || CPU_STAT_VM86)
+		{
+			CPU_PREV_EIP = CPU_EIP - 1; // HLTの次の命令に移ってしまっているので･･･
+			addr = CPU_PREV_EIP + (CPU_CS << 4);
+			// BIOSコール
+			if (memp_read8(addr) == bioshookinfo.hookinst)
+			{
+				if (ia32hax_bioscall())
+				{
+					np2haxstat.update_regs = 1;
+					np2haxstat.update_segment_regs = 1;
+					// カウンタリセット
+					pmcounter = 0;
+					np2haxcore.hltflag = 0; // すぐに再開
+				}
+			}
+		}
 		break;
 	case HAX_EXIT_STATECHANGE: // CPU状態が変わったとき･･･と言いつつ、事実上CPUが実行不能(panic)になったときしか呼ばれない
 		//printf("HAX_EXIT_STATECHANGE\n");
@@ -1180,20 +1170,6 @@ coutinue_cpu_imm:
 		//printf("HAX_EXIT_DEBUG\n");
 		// リセット可能フラグを立てる
 		np2haxcore.ready_for_reset = 1;
-		// リアルモード or 仮想86
-		if(!CPU_STAT_PM || CPU_STAT_VM86){
-			addr = CPU_EIP + (CPU_CS << 4);
-			// BIOSコール
-			if(memp_read8(addr)==bioshookinfo.hookinst){
-				CPU_EIP++;
-				if(ia32hax_bioscall()){
-				}
-				np2haxstat.update_regs = 1;
-				np2haxstat.update_segment_regs = 1;
-				// カウンタリセット
-				pmcounter = 0;
-			}
-		}
 		break;
 	default:
 		break;

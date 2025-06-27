@@ -187,21 +187,14 @@ ReadCompletionRoutine(
 		if(count > 0 && SendNP2GetMousePos(&x, &y)){
         	ULONG i;
 	        PMOUSE_INPUT_DATA data = (PMOUSE_INPUT_DATA)Irp->AssociatedIrp.SystemBuffer;
+	        // WORKAROUND: 0だと無視されることがあるので最低でも1を入れておく
+	        if(x < 1) x = 1;
+	        if(y < 1) y = 1;
 	        for (i = 0; i < count; i++) {
 	            data[i].LastX = x;
 	            data[i].LastY = y;
 	            data[i].Flags = (data[i].Flags & ~MOUSE_MOVE_RELATIVE) | MOUSE_MOVE_ABSOLUTE;
 	        	//KdPrint("Mouse X:%d Y:%d Buttons:%x\n", data[i].LastX, data[i].LastY, data[i].ButtonFlags);
-	            // 右ボタンを無効化（右クリック抑制）
-	            //data[i].ButtonFlags &= ~MOUSE_RIGHT_BUTTON_DOWN;
-	            //data[i].ButtonFlags &= ~MOUSE_RIGHT_BUTTON_UP;
-
-	            // 例: すべてのマウス移動を 2 倍に
-	            //data[i].LastX *= 2;
-	            //data[i].LastY *= 2;
-
-	            // 例: 左ボタンを押下状態にする
-	            // data[i].ButtonFlags |= MOUSE_LEFT_BUTTON_DOWN;
 	        }
     	}
     }

@@ -30,6 +30,10 @@
 
 #include "system_inst.h"
 
+#if defined(USE_CUSTOM_HOOKINST)
+#include "bios/bios.h"
+#endif
+
 
 void CPUCALL
 LGDT_Ms(UINT32 op)
@@ -1043,6 +1047,21 @@ _LOCK(void)
 void
 HLT(void)
 {
+#if defined(USE_CUSTOM_HOOKINST)
+	if (bioshookinfo.hookinst == 0xF4)
+	{
+		if (!CPU_STAT_PM || CPU_STAT_VM86)
+		{
+			UINT32 adrs;
+			adrs = CPU_PREV_EIP + (CPU_CS << 4);
+			if ((adrs >= 0xf8000) && (adrs < 0x100000))
+			{
+				ia32_bioscall();
+				return;
+			}
+		}
+	}
+#endif
 
 	if (CPU_STAT_PM && CPU_STAT_CPL != 0) {
 		VERBOSE(("HLT: CPL(%d) != 0", CPU_STAT_CPL));

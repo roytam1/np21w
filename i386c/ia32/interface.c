@@ -101,17 +101,37 @@ ia32_initreg(void)
 void
 ia32reset(void)
 {
-
 	memset(&i386core.s, 0, sizeof(i386core.s));
 	ia32_initreg();
+#if defined(SUPPORT_IA32_HAXM)
+	i386hax_resetVMCPU();
+	i386haxfunc_vcpu_getREGs(&np2haxstat.state);
+	i386haxfunc_vcpu_getFPU(&np2haxstat.fpustate);
+	if (!np2hax.emumode)
+	{
+		np2haxstat.update_regs = np2haxstat.update_fpu = 0;
+		// HAXMレジスタ→猫レジスタにコピー
+		ia32hax_copyregHAXtoNP2();
+	}
+#endif
 }
 
 void
 ia32shut(void)
 {
-
 	memset(&i386core.s, 0, offsetof(I386STAT, cpu_type));
 	ia32_initreg();
+#if defined(SUPPORT_IA32_HAXM)
+	i386hax_resetVMCPU();
+	i386haxfunc_vcpu_getREGs(&np2haxstat.state);
+	i386haxfunc_vcpu_getFPU(&np2haxstat.fpustate);
+	if (!np2hax.emumode)
+	{
+		np2haxstat.update_regs = np2haxstat.update_fpu = 0;
+		// HAXMレジスタ→猫レジスタにコピー
+		ia32hax_copyregHAXtoNP2();
+	}
+#endif
 }
 
 void

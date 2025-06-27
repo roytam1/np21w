@@ -4028,6 +4028,11 @@ uint32_t_ vga_convert_ioport(uint32_t_ addr){
 			cirrusvga->device_id = CIRRUS_ID_CLGD5446;
 			cirrusvga->cr[0x27] = cirrusvga->device_id;
 			cirrusvga->bustype = CIRRUS_BUSTYPE_PCI;
+#if defined(SUPPORT_IA32_HAXM)
+			i386hax_vm_removememoryarea(vramptr, mmio_mode_region2, lastlinmmio ? cirrusvga->linear_mmio_mask : cirrusvga->real_vram_size);
+			i386hax_vm_removememoryarea(vramptr, np2clvga.pciLFB_Addr, lastlinmmio ? cirrusvga->linear_mmio_mask : cirrusvga->real_vram_size);
+			lastlinmmio = 0;
+#endif
 			cirrus_update_memory_access(cirrusvga);
 			pc98_cirrus_vga_setvramsize();
 			pc98_cirrus_vga_initVRAMWindowAddr();
@@ -7236,6 +7241,10 @@ void pc98_cirrus_vga_reset(const NP2CFG *pConfig)
 		i386hax_vm_allocmemoryex(vramptr, CIRRUS_VRAM_SIZE*2);
 		np2haxcore.allocwabmem = 1;
 	}
+	mmio_mode = MMIO_MODE_MMIO; // 0==MMIO, 1==VRAM
+	mmio_mode_region1 = 0; // 0==MMIO, 1==VRAM
+	mmio_mode_region2 = 0; // 0==MMIO, 1==VRAM
+	lastlinmmio = 0;
 #endif
 	
 #if defined(SUPPORT_VGA_MODEX)

@@ -1846,7 +1846,7 @@ STRINGTABLE
 BEGIN
     IDS_SCSITITLE           "Select SCSI image"
     IDS_SCSIEXT             "hdd"
-    IDS_SCSIFILTER          "Virtual98 harddisk image files (*.hdd)|*.hdd|RaSCSI harddisk image files (*.hdn;*.hds)|*.hdn;*.hds|All supported files|*.hdd;*.hdn;*.hds|"
+    IDS_SCSIFILTER          "Virtual98 harddisk image files (*.hdd)|*.hdd|RaSCSI harddisk image files (*.hdn;*.hds)|*.hdn;*.hds|Anex86 harddisk image files (*.hdi)|*.hdi|T98-Next harddisk image files (*.nhd)|*.nhd|VirtualPC harddisk image files (*.vhd)|*.vhd|All supported files|*.hdd;*.hdn;*.hds;*.hdi;*.nhd;*.vhd|All files (*.*)|*.*|"
     IDS_NEWDISKTITLE        "Create disk image"
 END
 

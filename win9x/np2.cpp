@@ -1214,40 +1214,48 @@ static void OnCommand(HWND hWnd, WPARAM wParam)
 			winuienter();
 			dialog_changehdd(hWnd, 0x20);
 			winuileave();
+			sysmng_updatecaption(SYS_UPDATECAPTION_FDD);
 			break;
 
 		case IDM_SCSI0EJECT:
 			diskdrv_setsxsi(0x20, NULL);
+			sysmng_updatecaption(SYS_UPDATECAPTION_FDD);
 			break;
 
 		case IDM_SCSI1OPEN:
 			winuienter();
 			dialog_changehdd(hWnd, 0x21);
 			winuileave();
+			sysmng_updatecaption(SYS_UPDATECAPTION_FDD);
 			break;
 
 		case IDM_SCSI1EJECT:
 			diskdrv_setsxsi(0x21, NULL);
+			sysmng_updatecaption(SYS_UPDATECAPTION_FDD);
 			break;
 
 		case IDM_SCSI2OPEN:
 			winuienter();
 			dialog_changehdd(hWnd, 0x22);
 			winuileave();
+			sysmng_updatecaption(SYS_UPDATECAPTION_FDD);
 			break;
 
 		case IDM_SCSI2EJECT:
 			diskdrv_setsxsi(0x22, NULL);
+			sysmng_updatecaption(SYS_UPDATECAPTION_FDD);
 			break;
 
 		case IDM_SCSI3OPEN:
 			winuienter();
 			dialog_changehdd(hWnd, 0x23);
 			winuileave();
+			sysmng_updatecaption(SYS_UPDATECAPTION_FDD);
 			break;
 
 		case IDM_SCSI3EJECT:
 			diskdrv_setsxsi(0x23, NULL);
+			sysmng_updatecaption(SYS_UPDATECAPTION_FDD);
 			break;
 			
 		case IDM_SCSI0STATE:

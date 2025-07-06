@@ -173,6 +173,9 @@ static const SFENTRY np2tbl[] = {
 #endif
 #if defined(SUPPORT_SCSI)
 	{"SCSI",		0,	STATFLAG_BIN,	&scsiio,		sizeof(scsiio)},
+#if defined(SUPPORT_NP2SCSI)
+	{"NP2STOR",		0,	STATFLAG_BIN|STATFLAG_BWD_COMPATIBLE,	&np2stor,		sizeof(np2stor)},
+#endif
 #endif
 #if defined(SUPPORT_PC9861K)
 	{"PC9861K",		0,	STATFLAG_BIN,	&pc9861k,		sizeof(pc9861k)},

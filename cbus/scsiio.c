@@ -209,6 +209,8 @@ static REG8 IOINPCALL scsiio_icc6(UINT port) {
 
 #if defined(SUPPORT_NP2SCSI)
 
+_NP2STOR		np2stor;
+
 #if 0
 #undef	TRACEOUT2
 static void trace_fmt_ex(const char* fmt, ...)
@@ -267,16 +269,12 @@ static void np2stor_memwrite(UINT32 vaddr, void* buffer, UINT32 size)
 	}
 }
 
-static int np2stor_enabled = 0;
-static UINT32 np2stor_maddr = 0;
-static UINT32 np2stor_busyflag = 0;
-
 // StartIoの処理
 static void np2stor_startIo()
 {
 	NP2STOR_INVOKEINFO invokeInfo;
 
-	if (np2stor_maddr == 0) return;
+	if (np2stor.maddr == 0) return;
 
 #if defined(SUPPORT_IA32_HAXM)
 	// HAXMレジスタを読み取り
@@ -288,16 +286,16 @@ static void np2stor_startIo()
 #endif
 
 	// ドライバから渡されたメモリアドレスからデータを直接読み取り
-	invokeInfo.version = cpu_kmemoryread_d(np2stor_maddr);
+	invokeInfo.version = cpu_kmemoryread_d(np2stor.maddr);
 	if (invokeInfo.version == 1)
 	{
-		invokeInfo.cmd = cpu_kmemoryread_d(np2stor_maddr + 4);
-		if (invokeInfo.cmd == 0)
+		invokeInfo.cmd = cpu_kmemoryread_d(np2stor.maddr + 4);
+		if (invokeInfo.cmd == NP2STOR_INVOKECMD_DEFAULT || invokeInfo.cmd == NP2STOR_INVOKECMD_NOBUSY)
 		{
 			UINT8 drv = 0;
 			SXSIDEV	sxsi = NULL;
 			NP2_SCSI_REQUEST_BLOCK srb = { 0 };
-			invokeInfo.srbAddr = cpu_kmemoryread_d(np2stor_maddr + 8);
+			invokeInfo.srbAddr = cpu_kmemoryread_d(np2stor.maddr + 8);
 			np2stor_memread(invokeInfo.srbAddr, &srb, sizeof(srb));
 			if (srb.PathId == 0 && 0 <= srb.TargetId && srb.TargetId < 4 && srb.Lun == 0)
 			{
@@ -347,13 +345,14 @@ static void np2stor_startIo()
 				{
 					UINT32 dataLength = sizeof(NP2_READ_CAPACITY_DATA);
 					NP2_READ_CAPACITY_DATA cap = { 0 };
+					UINT32 lastSector;
 					if (srb.DataTransferLength < dataLength)
 					{
 						srb.SrbStatus = NP2_SRB_STATUS_INVALID_REQUEST;
 						break;
 					}
 					np2stor_memread(srb.DataBuffer, &cap, dataLength);
-					UINT32 lastSector = sxsi->totals - 1;
+					lastSector = sxsi->totals - 1;
 					cap.LogicalBlockAddress = (((lastSector) & 0xff) << 24) | (((lastSector >> 8) & 0xff) << 16) | (((lastSector >> 16) & 0xff) << 8) | ((lastSector >> 24) & 0xff);
 					cap.BytesPerBlock = (((NP2STOR_SECTOR_SIZE) & 0xff) << 24) | (((NP2STOR_SECTOR_SIZE >> 8) & 0xff) << 16) | (((NP2STOR_SECTOR_SIZE >> 16) & 0xff) << 8) | ((NP2STOR_SECTOR_SIZE >> 24) & 0xff);
 
@@ -395,12 +394,16 @@ static void np2stor_startIo()
 					}
 					else
 					{
-						np2stor_busyflag += lengthInBytes;
-						if (np2stor_busyflag > 1024 * 1024 * 20)
+						if (invokeInfo.cmd != NP2STOR_INVOKECMD_NOBUSY)
 						{
-							np2stor_busyflag = 0;
-							srb.SrbStatus = NP2_SRB_STATUS_BUSY;
-							break;
+							// WORKAROUND: Win2KがEDBx.LOGを大量生成してしまうので、20MB書き込む毎にBUSYを返す
+							np2stor.busyflag += lengthInBytes;
+							if (np2stor.busyflag > 1024 * 1024 * 20)
+							{
+								np2stor.busyflag = 0;
+								srb.SrbStatus = NP2_SRB_STATUS_BUSY;
+								break;
+							}
 						}
 						np2stor_memread(srb.DataBuffer, lpBuffer, lengthInBytes);
 						if (sxsi_write(drv, offset, lpBuffer, lengthInBytes))
@@ -662,23 +665,25 @@ static void np2stor_startIo()
 
 static void IOOUTCALL np2stor_o7ea(UINT port, REG8 dat)
 {
-	np2stor_maddr = (dat << 24) | (np2stor_maddr >> 8);
+	np2stor.maddr = (dat << 24) | (np2stor.maddr >> 8);
 	(void)port;
 }
 
 static void IOOUTCALL np2stor_o7eb(UINT port, REG8 dat)
 {
+	// データ格納先の仮想メモリアドレスをI/Oポート7EAhへ書き込み、
+	// 7EBhに0x98→0x01の順で書き込むと猫本体が処理を実行する。
 	if (dat == NP2STOR_CMD_ACTIVATE)
 	{
-		np2stor_enabled = 1;
+		np2stor.ioenable = 1;
 	}
-	else if (dat == NP2STOR_CMD_STARTIO && np2stor_enabled)
+	else if (dat == NP2STOR_CMD_STARTIO && np2stor.ioenable)
 	{
 		np2stor_startIo();
 	}
 	else
 	{
-		np2stor_enabled = 0;
+		np2stor.ioenable = 0;
 	}
 	(void)port;
 }
@@ -726,6 +731,14 @@ void scsiio_reset(const NP2CFG *pConfig) {
 		CopyMemory(mem + 0xd2000, scsiio.bios[0], 0x2000);
 	}
 
+#if defined(SUPPORT_NP2SCSI)
+	ZeroMemory(&np2stor, sizeof(np2stor));
+	if (np2cfg.usenp2stor)
+	{
+		np2stor.enable = 1;
+	}
+#endif
+
 	(void)pConfig;
 }
 
@@ -742,10 +755,13 @@ void scsiio_bind(void) {
 		iocore_attachinp(0x0cc6, scsiio_icc6);
 
 #if defined(SUPPORT_NP2SCSI)
-		iocore_attachout(0x07ea, np2stor_o7ea);
-		iocore_attachout(0x07eb, np2stor_o7eb);
-		iocore_attachinp(0x07ea, np2stor_i7ea);
-		iocore_attachinp(0x07eb, np2stor_i7eb);
+		if (np2stor.enable)
+		{
+			iocore_attachout(0x07ea, np2stor_o7ea);
+			iocore_attachout(0x07eb, np2stor_o7eb);
+			iocore_attachinp(0x07ea, np2stor_i7ea);
+			iocore_attachinp(0x07eb, np2stor_i7eb);
+		}
 #endif
 	}
 }

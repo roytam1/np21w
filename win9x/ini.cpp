@@ -700,6 +700,9 @@ static const PFTBL s_IniItems[] =
 	PFVAL("RASCSI92", PFRO_BOOL,		&np2cfg.rascsi92),
 	PFVAL("NBEEPOFS", PFTYPE_BOOL,		&np2cfg.nbeepofs),
 	PFVAL("CAL_VOFS", PFTYPE_SINT64,	&np2cfg.cal_vofs),
+#if defined(SUPPORT_NP2SCSI)
+	PFVAL("USENP2ST", PFRO_BOOL,		&np2cfg.usenp2stor),
+#endif
 
 	
 

@@ -397,7 +397,7 @@ public:
 		
 		//hddsize = GetDlgItemInt(IDC_HDDSIZE, NULL, FALSE);
 
-		if (s_hddHtblSCSI)
+		if (m_isSCSI)
 		{
 			if (m_nHddSize < 8192)
 			{

@@ -191,6 +191,9 @@ const OEMCHAR np2version[] = OEMTEXT(NP2VER_CORE);
 #endif
 				0, 0, 0, 0,
 				0,
+#if defined(SUPPORT_NP2SCSI)
+				1,
+#endif
 	};
 
 	PCCORE	pccore = {	PCBASECLOCK25, PCBASEMULTIPLE,

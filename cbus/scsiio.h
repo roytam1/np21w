@@ -37,8 +37,22 @@ void scsiio_bind(void);
 
 #if defined(SUPPORT_NP2SCSI)
 
+typedef struct
+{
+	UINT32 enable;
+	UINT32 ioenable;
+	UINT32 maddr;
+	UINT32 busyflag;
+	UINT32 reserved;
+} _NP2STOR, *NP2STOR;
+
+extern	_NP2STOR	np2stor;
+
 #define NP2STOR_CMD_ACTIVATE	0x98
 #define NP2STOR_CMD_STARTIO		0x01
+
+#define NP2STOR_INVOKECMD_DEFAULT		0x00
+#define NP2STOR_INVOKECMD_NOBUSY		0x01
 
 #define NP2STOR_SECTOR_SIZE		512
 
@@ -257,38 +271,38 @@ typedef struct _NP2_READ_CAPACITY_DATA
 
 typedef struct
 {
-	UINT32 version;
-	UINT32 cmd;
-	UINT32 srbAddr; // SCSI_REQUEST_BLOCKへのアドレス
+	UINT32 version; // バージョン 今のところ1のみ
+	UINT32 cmd; // コマンド NP2STOR_INVOKECMD_xxx
+	UINT32 srbAddr; // SCSI_REQUEST_BLOCKへの仮想メモリアドレス
 } NP2STOR_INVOKEINFO;
 
 typedef struct _NP2_SCSI_REQUEST_BLOCK
 {
-	UINT16 Length;                  // offset 0
-	UINT8 Function;                 // offset 2
-	UINT8 SrbStatus;                // offset 3
-	UINT8 ScsiStatus;               // offset 4
-	UINT8 PathId;                   // offset 5
-	UINT8 TargetId;                 // offset 6
-	UINT8 Lun;                      // offset 7
-	UINT8 QueueTag;                 // offset 8
-	UINT8 QueueAction;              // offset 9
-	UINT8 CdbLength;                // offset a
-	UINT8 SenseInfoBufferLength;    // offset b
-	UINT32 SrbFlags;                 // offset c
-	UINT32 DataTransferLength;       // offset 10
-	UINT32 TimeOutValue;             // offset 14
-	UINT32 DataBuffer;               // offset 18
-	UINT32 SenseInfoBuffer;          // offset 1c
+	UINT16 Length;                
+	UINT8 Function;               
+	UINT8 SrbStatus;              
+	UINT8 ScsiStatus;             
+	UINT8 PathId;                 
+	UINT8 TargetId;               
+	UINT8 Lun;                    
+	UINT8 QueueTag;               
+	UINT8 QueueAction;            
+	UINT8 CdbLength;              
+	UINT8 SenseInfoBufferLength;  
+	UINT32 SrbFlags;              
+	UINT32 DataTransferLength;    
+	UINT32 TimeOutValue;          
+	UINT32 DataBuffer;            
+	UINT32 SenseInfoBuffer;       
 	UINT32 NextSrb; // offset 20
-	UINT32 OriginalRequest;          // offset 24
-	UINT32 SrbExtension;             // offset 28
+	UINT32 OriginalRequest;       
+	UINT32 SrbExtension;          
 	union
 	{
-		UINT32 InternalStatus;       // offset 2c
-		UINT32 QueueSortKey;         // offset 2c
+		UINT32 InternalStatus;    
+		UINT32 QueueSortKey;      
 	};
-	UINT8 Cdb[16];                  // offset 30
+	UINT8 Cdb[16];                
 } NP2_SCSI_REQUEST_BLOCK;
 
 typedef struct _NP2_SRB_IO_CONTROL

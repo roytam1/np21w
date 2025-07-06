@@ -326,7 +326,7 @@ static void np2stor_startIo()
 					UINT32 dataLength = sizeof(NP2_INQUIRYDATA);
 					NP2_INQUIRYDATA inquiryData = { 0 };
 					if (srb.DataTransferLength < dataLength) dataLength = srb.DataTransferLength;
-					np2stor_memread(srb.DataBuffer, &inquiryData, dataLength);
+					//np2stor_memread(srb.DataBuffer, &inquiryData, dataLength); // NT4では初期値は0にしておかないとだめ　なので現在のメモリのデータは読まない
 					inquiryData.DeviceType = 0x00; // DIRECT_ACCESS_DEVICE
 					inquiryData.RemovableMedia = FALSE;
 					RtlCopyMemory(inquiryData.VendorId, "NP2     ", 8);
@@ -370,6 +370,7 @@ static void np2stor_startIo()
 				{
 					UINT64 offset = (((UINT64)srb.Cdb[2] << 24) | ((UINT64)srb.Cdb[3] << 16) | ((UINT64)srb.Cdb[4] << 8) | (UINT64)srb.Cdb[5]);
 					UINT64 lengthInBytes = (((UINT64)srb.Cdb[7] << 8) | (UINT64)srb.Cdb[8]) * NP2STOR_SECTOR_SIZE;
+					UINT8* lpBuffer;
 
 					if (offset * NP2STOR_SECTOR_SIZE + lengthInBytes > sxsi->totals * NP2STOR_SECTOR_SIZE)
 					{
@@ -377,7 +378,7 @@ static void np2stor_startIo()
 						break;
 					}
 
-					UINT8* lpBuffer = (UINT8*)malloc(lengthInBytes);
+					lpBuffer = (UINT8*)malloc(lengthInBytes);
 					if (!lpBuffer)
 					{
 						srb.SrbStatus = NP2_SRB_STATUS_INVALID_REQUEST;
@@ -401,6 +402,56 @@ static void np2stor_startIo()
 							srb.SrbStatus = NP2_SRB_STATUS_BUSY;
 							break;
 						}
+						np2stor_memread(srb.DataBuffer, lpBuffer, lengthInBytes);
+						if (sxsi_write(drv, offset, lpBuffer, lengthInBytes))
+						{
+							srb.SrbStatus = NP2_SRB_STATUS_INVALID_REQUEST;
+							break;
+						}
+					}
+
+					free(lpBuffer);
+
+					srb.ScsiStatus = NP2_SCSISTAT_GOOD;
+					srb.SrbStatus = NP2_SRB_STATUS_SUCCESS;
+					srb.DataTransferLength = lengthInBytes;
+					break;
+				}
+
+				case NP2_SCSIOP_READ6:
+				case NP2_SCSIOP_WRITE6:
+				{
+					UINT64 offset = (((UINT64)srb.Cdb[1] & 0x1F) << 16) | ((UINT64)srb.Cdb[2] << 8) | ((UINT64)srb.Cdb[3]);
+					UINT64 lengthInBytes = srb.Cdb[4] * NP2STOR_SECTOR_SIZE;
+					UINT8* lpBuffer;
+					if (lengthInBytes == 0)
+					{
+						lengthInBytes = 256 * NP2STOR_SECTOR_SIZE;
+					}
+
+					if (offset * NP2STOR_SECTOR_SIZE + lengthInBytes > sxsi->totals * NP2STOR_SECTOR_SIZE)
+					{
+						srb.SrbStatus = NP2_SRB_STATUS_INVALID_REQUEST;
+						break;
+					}
+
+					lpBuffer = (UINT8*)malloc(lengthInBytes);
+					if (!lpBuffer)
+					{
+						srb.SrbStatus = NP2_SRB_STATUS_INVALID_REQUEST;
+						break;
+					}
+					if (srb.Cdb[0] == NP2_SCSIOP_READ6)
+					{
+						if (sxsi_read(drv, offset, lpBuffer, lengthInBytes))
+						{
+							srb.SrbStatus = NP2_SRB_STATUS_INVALID_REQUEST;
+							break;
+						}
+						np2stor_memwrite(srb.DataBuffer, lpBuffer, lengthInBytes);
+					}
+					else
+					{
 						np2stor_memread(srb.DataBuffer, lpBuffer, lengthInBytes);
 						if (sxsi_write(drv, offset, lpBuffer, lengthInBytes))
 						{

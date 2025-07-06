@@ -4869,7 +4869,14 @@ void pc98_cirrus_vga_load()
 	uint32_t_ state_ver = 0;
 	uint32_t_ intbuf;
 	//int width, height;
-	
+
+#if defined(SUPPORT_IA32_HAXM)
+	// HAXMはレジューム前にPCIメモリ割り当て解除
+	i386hax_vm_removememoryarea(vramptr, mmio_mode_region2, lastlinmmio ? cirrusvga->linear_mmio_mask : cirrusvga->real_vram_size);
+	i386hax_vm_removememoryarea(vramptr, np2clvga.pciLFB_Addr, lastlinmmio ? cirrusvga->linear_mmio_mask : cirrusvga->real_vram_size);
+	lastlinmmio = 0;
+#endif
+
 	array_read(f, pos, &state_ver, sizeof(state_ver)); // バージョン番号
 	switch(state_ver){
 	case 0:
@@ -5052,9 +5059,17 @@ void pc98_cirrus_vga_load()
 	// 関数アドレス入れ直し
 	pcidev.devices[pcidev_cirrus_deviceid].regwfn = &pcidev_cirrus_cfgreg_w;
 #endif
-		
+
 	pc98_cirrus_vga_updatePCIaddr();
 
+#if defined(SUPPORT_IA32_HAXM)
+	mmio_mode = MMIO_MODE_MMIO; // 0==MMIO, 1==VRAM
+	mmio_mode_region1 = 0; // 0==MMIO, 1==VRAM
+	mmio_mode_region2 = 0; // 0==MMIO, 1==VRAM
+	lastlinmmio = 0;
+	//i386hax_vm_removememoryarea(vramptr, np2clvga.pciLFB_Addr, lastlinmmio ? cirrusvga->linear_mmio_mask : cirrusvga->real_vram_size);
+#endif
+		
     cirrus_update_memory_access(s);
     
     s->graphic_mode = -1;
@@ -6617,6 +6632,13 @@ void pc98_cirrus_vga_initVRAMWindowAddr(){
 
 // ボード種類からVRAMサイズを決定する
 void pc98_cirrus_vga_setvramsize(){
+#if defined(SUPPORT_IA32_HAXM)
+	// PCIメモリ割り当て解除
+	i386hax_vm_removememoryarea(vramptr, mmio_mode_region2, lastlinmmio ? cirrusvga->linear_mmio_mask : cirrusvga->real_vram_size);
+	i386hax_vm_removememoryarea(vramptr, np2clvga.pciLFB_Addr, lastlinmmio ? cirrusvga->linear_mmio_mask : cirrusvga->real_vram_size);
+	lastlinmmio = 0;
+#endif
+
 	if((np2clvga.gd54xxtype & CIRRUS_98ID_AUTOMSK) == CIRRUS_98ID_AUTOMSK){
 		cirrusvga->real_vram_size = CIRRUS_VRAM_SIZE;
 	}else if(np2clvga.gd54xxtype == CIRRUS_98ID_96){
@@ -6650,6 +6672,9 @@ void pc98_cirrus_vga_setvramsize(){
 	cirrusvga->cirrus_addr_mask = cirrusvga->real_vram_size - 1;
 	cirrusvga->linear_mmio_mask = cirrusvga->real_vram_size - 256;
 
+#if defined(SUPPORT_IA32_HAXM)
+	cirrus_linear_mmio_update(cirrusvga);
+#endif
 }
 void pc98_cirrus_vga_setVRAMWindowAddr3(UINT32 addr)
 {
@@ -6708,7 +6733,6 @@ static void pc98_cirrus_init_common(CirrusVGAState * s, int device_id, int is_pc
     s->bustype = CIRRUS_BUSTYPE_ISA;
 
 	cirrusvga_wab_46e8 = 0x18; // デフォルトで有効
-	
 	if((np2clvga.gd54xxtype & CIRRUS_98ID_AUTOMSK) == CIRRUS_98ID_AUTOMSK || np2clvga.gd54xxtype <= 0xff){
 		// ONBOARD
 #if defined(SUPPORT_PCI)

@@ -382,7 +382,9 @@
     <ClCompile Include="..\cbus\pcm86io.c" />
     <ClCompile Include="..\cbus\sasiio.c" />
     <ClCompile Include="..\cbus\scsicmd.c" />
-    <ClCompile Include="..\cbus\scsiio.c" />
+    <ClCompile Include="..\cbus\scsiio.c">
+      <InlineFunctionExpansion Condition="'$(Configuration)|$(Platform)'=='Release|x64'">OnlyExplicitInline</InlineFunctionExpansion>
+    </ClCompile>
     <ClCompile Include="..\cbus\smpu98.c" />
     <ClCompile Include="..\codecnv\sjisucs2.c" />
     <ClCompile Include="..\codecnv\tcswap16.c" />

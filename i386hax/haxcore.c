@@ -1193,7 +1193,7 @@ void i386hax_vm_exec(void) {
 		CPU_REMCLOCK = 0;
 		return;
 	}
-	if(!np2haxcore.hltflag || !CPU_isEI){
+	if(!np2haxcore.hltflag || !CPU_isEI || np2haxstat.irq_reqidx_cur != np2haxstat.irq_reqidx_end){
 		CPU_REMCLOCK += remain_clk;
 		np2haxcore.lastclock = GetTickCounter_Clock();
 		while(CPU_REMCLOCK > 0){

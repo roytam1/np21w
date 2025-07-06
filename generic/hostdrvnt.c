@@ -1090,7 +1090,7 @@ static void hostdrvNT_IRP_MJ_CREATE(HOSTDRVNT_INVOKEINFO *invokeInfo)
 		if (hostdrvDesiredAccess & FILE_READ_EA) hostdrvWinAPIDesiredAccess |= GENERIC_READ;
 		if (hostdrvDesiredAccess & FILE_TRAVERSE) hostdrvWinAPIDesiredAccess |= GENERIC_READ;
 		if (hostdrvDesiredAccess & READ_CONTROL) hostdrvWinAPIDesiredAccess |= GENERIC_READ;
-		if (hostdrvDesiredAccess & FILE_WRITE_ATTRIBUTES) hostdrvWinAPIDesiredAccess |= GENERIC_WRITE;
+		//if (hostdrvDesiredAccess & FILE_WRITE_ATTRIBUTES) hostdrvWinAPIDesiredAccess |= GENERIC_WRITE; // ëÆê´ïœçXÇÕèëÇ´çûÇ›å†å¿óvÇÁÇ»Ç¢
 		if (hostdrvDesiredAccess & FILE_WRITE_EA) hostdrvWinAPIDesiredAccess |= GENERIC_WRITE;
 		if (hostdrvDesiredAccess & FILE_WRITE_DATA) hostdrvWinAPIDesiredAccess |= GENERIC_WRITE;
 	}

@@ -327,6 +327,9 @@ static void np2stor_startIo()
 					//np2stor_memread(srb.DataBuffer, &inquiryData, dataLength); // NT4では初期値は0にしておかないとだめ　なので現在のメモリのデータは読まない
 					inquiryData.DeviceType = 0x00; // DIRECT_ACCESS_DEVICE
 					inquiryData.RemovableMedia = FALSE;
+					inquiryData.Versions = 0x04;
+					inquiryData.ResponseDataFormat = 0x02;
+					inquiryData.AdditionalLength = 0x1f;
 					RtlCopyMemory(inquiryData.VendorId, "NP2     ", 8);
 					RtlCopyMemory(inquiryData.ProductId, "FASTSTORAGE     ", 16);
 					RtlCopyMemory(inquiryData.ProductRevisionLevel, "1.00", 4);

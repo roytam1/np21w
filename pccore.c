@@ -1304,13 +1304,16 @@ void pccore_exec(BOOL draw) {
 #if defined(SUPPORT_PCI)
 			pcidev_basereset(); // XXX: Win9xの再起動で必要
 #endif
+			// マウスリセット
+			mousemng_reset();
+
 #if defined(SUPPORT_IA32_HAXM)
 			if (!np2hax.emumode && np2hax.enable) {
 				i386hax_resetVMCPU();
 				i386haxfunc_vcpu_setREGs(&np2haxstat.state);
 				i386haxfunc_vcpu_setFPU(&np2haxstat.fpustate);
 				ia32hax_copyregHAXtoNP2();
-				CPU_SHUT();
+				i386hax_resetVMMem();
 				np2haxstat.update_regs = np2haxstat.update_fpu = 1;
 				np2haxstat.update_segment_regs = 1;
 				np2haxstat.irq_reqidx_cur = np2haxstat.irq_reqidx_end = 0;
@@ -1318,9 +1321,6 @@ void pccore_exec(BOOL draw) {
 				np2haxcore.hltflag = 0;
 			}
 #endif
-			// マウスリセット
-			mousemng_reset();
-
 			CPU_SHUT();
 		}
 #if defined(SUPPORT_IA32_HAXM)

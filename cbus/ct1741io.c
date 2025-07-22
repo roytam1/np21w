@@ -16,6 +16,21 @@
  *
  */
 
+#if 0
+#undef	TRACEOUT
+static void trace_fmt_ex(const char* fmt, ...)
+{
+	char stmp[2048];
+	va_list ap;
+	va_start(ap, fmt);
+	vsprintf(stmp, fmt, ap);
+	strcat(stmp, "\n");
+	va_end(ap);
+	OutputDebugStringA(stmp);
+}
+#define	TRACEOUT(s)	trace_fmt_ex s
+#endif	/* 1 */
+
 #define CT1741_WAVE_VOL_SHIFT	13
 
 static char * const copyright_string = "COPYRIGHT (C) CREATIVE TECHNOLOGY LTD, 1992.";
@@ -184,6 +199,8 @@ static void ct1741_reset(void)
     g_sb16.dsp_info.dmairq = g_sb16.dmairq;
     g_sb16.dsp_info.dmach = g_sb16.dmach;
 	g_sb16.dsp_info.uartmode = 0;
+	g_sb16.dsp_info.dma.autoinit = FALSE;		//Should stop itself
+	g_sb16.dsp_info.dma.lastautoinit = FALSE;		//Should stop itself
 }
 
 static void ct1741_flush_data(void)
@@ -364,6 +381,7 @@ static void ct1741_exec_command()
 	case 0x40:	/* Set Timeconstant */
 		g_sb16.dsp_info.freq=(1000000 / (256 - g_sb16.dsp_info.in.data[0]));
 		/* Nasty kind of hack to allow runtime changing of frequency */
+		TRACEOUT(("Set Timeconstant DMA_MODE=%d", g_sb16.dsp_info.dma.mode));
 		if (g_sb16.dsp_info.dma.mode != DSP_DMA_NONE && g_sb16.dsp_info.dma.autoinit) {
 			ct1741_prepare_dma_old(g_sb16.dsp_info.dma.mode, g_sb16.dsp_info.dma.autoinit);
 		}
@@ -647,10 +665,13 @@ printf("read 2ed2 g_sb16.dsp_info.out.used =%x mixer[82] = %x cmd = %x\n",g_sb16
 	if(g_sb16.mixreg[0x82] & 2){ // 一定量の転送が終わると割り込みが来るらしい。bit1は16-bit用
 		g_sb16.mixreg[0x82] &= ~2;
 		ct1741_resetpicirq(g_sb16.dmairq);
+		TRACEOUT(("ct1741_read_rstatus16 lastautoinit=%d autoinit=%d", g_sb16.dsp_info.dma.lastautoinit, g_sb16.dsp_info.dma.autoinit));
 		if(g_sb16.dsp_info.dma.lastautoinit || g_sb16.dsp_info.dma.autoinit){ // 自動でDMA転送を繰り返すらしい
+			TRACEOUT(("ct1741_read_rstatus16 g_sb16.dsp_info.dma.chan->leng.w=%d", g_sb16.dsp_info.dma.chan->leng.w));
 			if (!(g_sb16.dsp_info.dma.chan->leng.w)) {
 				g_sb16.dsp_info.dma.laststartaddr = g_sb16.dsp_info.dma.chan->startaddr;
 				g_sb16.dsp_info.dma.laststartcount = g_sb16.dsp_info.dma.chan->startcount;
+				TRACEOUT(("ct1741_read_rstatus16 DMA_MODE=%d", g_sb16.dsp_info.dma.mode));
 				if((g_sb16.dsp_info.dmach & 0xe0) && g_sb16.dsp_info.dma.mode==DSP_DMA_16){
 					// なぞの1ビットずらし
 					testflag = !testflag;
@@ -854,12 +875,13 @@ REG8 DMACCALL ct1741dmafunc(REG8 func)
 	switch(func) {
 		case DMAEXT_START:
 			// DMA転送開始
+			TRACEOUT(("DMAEXT_START DMA_MODE=%d", g_sb16.dsp_info.dma.mode));
 #if defined(SUPPORT_MULTITHREAD)
 			ct1741cs_enter_criticalsection();
 #endif
 			g_sb16.dsp_info.dma.laststartaddr = g_sb16.dsp_info.dma.chan->startaddr;
 			g_sb16.dsp_info.dma.laststartcount = g_sb16.dsp_info.dma.chan->startcount;
-			if((g_sb16.dsp_info.dmach & 0xe0) && (g_sb16.dsp_info.dma.mode==DSP_DMA_16 || g_sb16.dsp_info.dma.mode==DSP_DMA_NONE)){
+			if((g_sb16.dsp_info.dmach & 0xe0) && (g_sb16.dsp_info.dma.mode==DSP_DMA_16)){
 				// なぞの1ビットずらし
 				testflag = 1;
 				g_sb16.dsp_info.dma.chan->startcount *= 2; // データ数も2倍
@@ -867,7 +889,7 @@ REG8 DMACCALL ct1741dmafunc(REG8 func)
 				g_sb16.dsp_info.dma.chan->lastaddr = g_sb16.dsp_info.dma.chan->adrs.d + g_sb16.dsp_info.dma.chan->startcount;
 				g_sb16.dsp_info.dma.chan->leng.w = g_sb16.dsp_info.dma.chan->startcount; // 戻す
 			}
-			g_sb16.dsp_info.dma.last16mode = (g_sb16.dsp_info.dma.mode==DSP_DMA_16 || g_sb16.dsp_info.dma.mode==DSP_DMA_NONE) ? 1 : 0; // 16bit転送モードフラグ
+			g_sb16.dsp_info.dma.last16mode = (g_sb16.dsp_info.dma.mode==DSP_DMA_16) ? 1 : 0; // 16bit転送モードフラグ
 			g_sb16.mixreg[0x82] &= ~3;
 			ct1741_resetpicirq(g_sb16.dmairq);
 			g_sb16.dsp_info.write_busy = 0;

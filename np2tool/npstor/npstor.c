@@ -36,6 +36,7 @@ BOOLEAN HwResetBus(PVOID DeviceExtension, ULONG PathId);
 BOOLEAN HwInterrupt(PVOID DeviceExtension);
 
 KSPIN_LOCK g_spinLock; // I/O‚Ì”r‘¼ƒƒbƒN—p
+BOOLEAN g_isNT4 = FALSE; // NT4.0 mode
 
 ULONG DriverEntry(PVOID DriverObject, PVOID RegistryPath) {
     HW_INITIALIZATION_DATA hwInit = {0};
@@ -78,6 +79,11 @@ ULONG DriverEntry(PVOID DriverObject, PVOID RegistryPath) {
     hwInit.HwAdapterControl = NULL;
 
     status = ScsiPortInitialize(DriverObject, RegistryPath, &hwInit, NULL);
+    if(status != STATUS_SUCCESS){
+    	g_isNT4 = TRUE;
+    	hwInit.HwInitializationDataSize -= 4;
+    	status = ScsiPortInitialize(DriverObject, RegistryPath, &hwInit, NULL);
+    }
 	//DbgPrint("  status = 0x%08x\n", status);
     return status;
 }
@@ -98,7 +104,9 @@ ULONG HwFindAdapter(PVOID DeviceExtension, PVOID Context,
     ConfigInfo->BusInterruptLevel = 0;
     ConfigInfo->BusInterruptVector = 0;
     ConfigInfo->DmaChannel = SP_UNINITIALIZED_VALUE;
-    ConfigInfo->MaximumNumberOfLogicalUnits = 1;
+    if(!g_isNT4){
+   		ConfigInfo->MaximumNumberOfLogicalUnits = 1;
+    }
     
     (*ConfigInfo->AccessRanges)[0].RangeStart = ScsiPortConvertUlongToPhysicalAddress(0x7EA);
     (*ConfigInfo->AccessRanges)[0].RangeLength = 2;

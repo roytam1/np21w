@@ -172,7 +172,8 @@ static REG8 IOINPCALL sb16_i2500(UINT port) {
 			return ct1741_get_dma_irq();
 		case 0x81:			// Read dma num
 			return ct1741_get_dma_ch();
-		case 0x82:			// Irq pending(98には不要)　diagnose用　他よくわからず
+		case 0x82:			// Irq pending(98には不要)　diagnose用　他よくわからず 
+			// PC/ATでは割り込み発生元が何かを表している　 bit 0x04 MPU, bit 0x02 DMA16ACK, bit 0x01 AVAIL
 			if(g_sb16.mixreg[0x82] == 0x41)return 0x1;
 			if(g_sb16.mixreg[0x82] == 0x42)return 0x2;
 			if(g_sb16.mixreg[0x82] == 0x43)return 0x3;

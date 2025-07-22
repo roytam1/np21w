@@ -1072,9 +1072,17 @@ REG8 IOINPCALL mpu98ii_i2(UINT port) {
 		if ((mpu98.r.cnt == 0) && (mpu98.intreq == 0)) {
 			ret |= MIDIIN_AVAIL;
 		}
-// TRACEOUT(("mpu98ii inp %.4x %.2x", port, ret));
-TRACEOUT(("mpu98ii inp %.4x %.2x", port, mpu98.data));
-		return(ret);
+		// TRACEOUT(("mpu98ii inp %.4x %.2x", port, ret));
+		TRACEOUT(("mpu98ii inp %.4x %.2x", port, mpu98.data));
+		if ((port & 0xff00) == 0x8100)
+		{
+			// SB16のMPU互換ポートではMIDIIN_AVAILとMIDIOUT_BUSY以外のビットが常に1らしい
+			return(ret | ~(MIDIIN_AVAIL | MIDIOUT_BUSY));
+		}
+		else
+		{
+			return(ret);
+		}
 	}
 	(void)port;
 	return(0xff);

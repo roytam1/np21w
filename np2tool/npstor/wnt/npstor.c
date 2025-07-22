@@ -19,15 +19,6 @@ typedef struct _CCB {
 } CCB, *PCCB;
 
 typedef struct
-必要であれば、Windows 2000/NT テキストモードセットアップ用の txtsetup.oem / OEMSETUP.INF の完全テンプレートも提供できます。
-
-すべての検索に ChatGPTを使用
-Chrome の拡張機能をダウロードしてデフォルトの検索エンジンを ChatGPTに切り替えると、すべての検索で信頼できるソースから即座に回答を得られます。
-
-拡張機能を取得
-
-
-
 {
 	ULONG version;
 	ULONG cmd;

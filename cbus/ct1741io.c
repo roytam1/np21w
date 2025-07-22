@@ -64,6 +64,8 @@ static void SOUNDCALL nomake(DMA_INFO *ct, SINT32 *pcm, UINT count);
 
 typedef void (SOUNDCALL * CT1741FN)(DMA_INFO *ct, SINT32 *pcm, UINT count);
 
+static void ct1741dmastart();
+
 static CT1741FN last_ct1741fn = nomake;
 static int playwaitcounter = 0;
 static int testflag = 0;
@@ -256,6 +258,11 @@ static void ct1741_dma_transfer(DMA_MODES mode, UINT32 freq, BOOL stereo) {
 //	PIC_RemoveEvents(END_DMA_Event);
 //	g_sb16.dsp_info.dma.chan->Register_Callback(DSP_DMA_CallBack);
 	g_sb16.dsp_info.dma.chan->ready = 1;
+	if (g_sb16.dsp_info.dma.mode != DSP_DMA_NONE)
+	{
+		// DMA開始後に設定を変えてくる場合があるので、その時は設定し直し
+		ct1741dmastart();
+	}
 	dmac_check();
 }
 
@@ -868,6 +875,36 @@ void ct1741_dma(NEVENTITEM item)
 
 }
 
+static void ct1741dmastart()
+{
+#if defined(SUPPORT_MULTITHREAD)
+	ct1741cs_enter_criticalsection();
+#endif
+	g_sb16.dsp_info.dma.laststartaddr = g_sb16.dsp_info.dma.chan->startaddr;
+	g_sb16.dsp_info.dma.laststartcount = g_sb16.dsp_info.dma.chan->startcount;
+	if ((g_sb16.dsp_info.dmach & 0xe0) && (g_sb16.dsp_info.dma.mode == DSP_DMA_16))
+	{
+		// なぞの1ビットずらし
+		testflag = 1;
+		g_sb16.dsp_info.dma.chan->startcount *= 2; // データ数も2倍
+		g_sb16.dsp_info.dma.chan->adrs.d = (g_sb16.dsp_info.dma.chan->startaddr & 0xffff0000) | ((g_sb16.dsp_info.dma.chan->startaddr << 1) & 0xffff);
+		g_sb16.dsp_info.dma.chan->lastaddr = g_sb16.dsp_info.dma.chan->adrs.d + g_sb16.dsp_info.dma.chan->startcount;
+		g_sb16.dsp_info.dma.chan->leng.w = g_sb16.dsp_info.dma.chan->startcount; // 戻す
+	}
+	g_sb16.dsp_info.dma.last16mode = (g_sb16.dsp_info.dma.mode == DSP_DMA_16) ? 1 : 0; // 16bit転送モードフラグ
+	g_sb16.mixreg[0x82] &= ~3;
+	ct1741_resetpicirq(g_sb16.dmairq);
+	g_sb16.dsp_info.write_busy = 0;
+	g_sb16.dsp_info.smpcounter = 0;
+	g_sb16.dsp_info.smpcounter2 = 0;
+	g_sb16.dsp_info.dma.bufdatas = 0;
+	g_sb16.dsp_info.dma.bufpos = 0;
+	playwaitcounter = DMA_BUFSIZE * BUF_ALIGN[g_sb16.dsp_info.dma.mode | g_sb16.dsp_info.dma.stereo << 3] * g_sb16.dsp_info.freq / 44100 / 16;
+#if defined(SUPPORT_MULTITHREAD)
+	ct1741cs_leave_criticalsection();
+#endif
+}
+
 REG8 DMACCALL ct1741dmafunc(REG8 func)
 {
 	SINT32	cnt;
@@ -876,31 +913,7 @@ REG8 DMACCALL ct1741dmafunc(REG8 func)
 		case DMAEXT_START:
 			// DMA転送開始
 			TRACEOUT(("DMAEXT_START DMA_MODE=%d", g_sb16.dsp_info.dma.mode));
-#if defined(SUPPORT_MULTITHREAD)
-			ct1741cs_enter_criticalsection();
-#endif
-			g_sb16.dsp_info.dma.laststartaddr = g_sb16.dsp_info.dma.chan->startaddr;
-			g_sb16.dsp_info.dma.laststartcount = g_sb16.dsp_info.dma.chan->startcount;
-			if((g_sb16.dsp_info.dmach & 0xe0) && (g_sb16.dsp_info.dma.mode==DSP_DMA_16)){
-				// なぞの1ビットずらし
-				testflag = 1;
-				g_sb16.dsp_info.dma.chan->startcount *= 2; // データ数も2倍
-				g_sb16.dsp_info.dma.chan->adrs.d = (g_sb16.dsp_info.dma.chan->startaddr & 0xffff0000) | ((g_sb16.dsp_info.dma.chan->startaddr << 1) & 0xffff);
-				g_sb16.dsp_info.dma.chan->lastaddr = g_sb16.dsp_info.dma.chan->adrs.d + g_sb16.dsp_info.dma.chan->startcount;
-				g_sb16.dsp_info.dma.chan->leng.w = g_sb16.dsp_info.dma.chan->startcount; // 戻す
-			}
-			g_sb16.dsp_info.dma.last16mode = (g_sb16.dsp_info.dma.mode==DSP_DMA_16) ? 1 : 0; // 16bit転送モードフラグ
-			g_sb16.mixreg[0x82] &= ~3;
-			ct1741_resetpicirq(g_sb16.dmairq);
-			g_sb16.dsp_info.write_busy = 0;
-			g_sb16.dsp_info.smpcounter = 0;
-			g_sb16.dsp_info.smpcounter2 = 0;
-			g_sb16.dsp_info.dma.bufdatas = 0;
-			g_sb16.dsp_info.dma.bufpos = 0;
-#if defined(SUPPORT_MULTITHREAD)
-			ct1741cs_leave_criticalsection();
-#endif
-			playwaitcounter = DMA_BUFSIZE * BUF_ALIGN[g_sb16.dsp_info.dma.mode|g_sb16.dsp_info.dma.stereo <<3] * g_sb16.dsp_info.freq / 44100 / 16;
+			ct1741dmastart();
 			cnt = pccore.realclock / g_sb16.dsp_info.freq * g_sb16.dsp_info.dma.rate2 / g_sb16.dsp_info.freq * (DMAPLAY_ADJUST_VALUE * g_sb16.dsp_info.freq / 44100);
 			if(cnt != 0){
 				nevent_set(NEVENT_CT1741, cnt, ct1741_dma, NEVENT_RELATIVE);
@@ -1204,6 +1217,10 @@ static void SOUNDCALL ct1741_getpcm(DMA_INFO *ct, SINT32 *pcm, UINT count) {
 		}
 		else
 		{
+			if (g_sb16.dsp_info.dma.mode == DSP_DMA_NONE)
+			{
+				ct->bufdatas = 0; // 全部捨てる
+			}
 			if (idx != 0)
 			{
 				(*ct1741fn[idx])(ct, pcm, count);

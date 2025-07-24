@@ -3,6 +3,7 @@ signature="$CHICAGO$"
 Class=SCSIAdapter
 ClassGUID={4D36E97B-E325-11CE-BFC1-08002BE10318}
 Provider=%INF_PROVIDER%
+LayoutFile=layout.inf
 DriverVer=06/21/2025
 
 [SourceDisksNames]
@@ -10,12 +11,19 @@ DriverVer=06/21/2025
 
 [SourceDisksFiles]
 npstor.sys = 1
+npstor.mpd = 1
+SCSIPORT.PDR = 2
 
 [Manufacturer]
 %NP2%=NP2
 
 [NP2]
 %*NPSTOR.DeviceDesc%= NPSTOR,*NPSTOR
+
+[NPSTOR]
+CopyFiles=@npstor.mpd,@SCSIPORT.PDR
+LogConfig=*NPSTOR.LogConfig
+AddReg = ios, win98.reg
 
 [NPSTOR.NTx86]
 CopyFiles=@npstor.sys
@@ -48,6 +56,13 @@ HKR,,TypesSupported,0x00010001,7
 
 [DestinationDirs]
 DefaultDestDir = 12
+
+[IOS]
+HKR,,DevLoader,,*IOS
+HKR,,DontLoadIfConflict,,"Y"
+
+[WIN98.REG]
+HKR,,PortDriver,,npstor.mpd
 
 [Strings]
 INF_PROVIDER="ÇÀÇ±Ç≥ÇÒäJî≠ÇøÅ[Çﬁ"

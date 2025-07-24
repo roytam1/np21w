@@ -35,7 +35,6 @@ BOOLEAN HwStartIo(PVOID DeviceExtension, PSCSI_REQUEST_BLOCK Srb);
 BOOLEAN HwResetBus(PVOID DeviceExtension, ULONG PathId);
 BOOLEAN HwInterrupt(PVOID DeviceExtension);
 
-KSPIN_LOCK g_spinLock; // I/Oの排他ロック用
 BOOLEAN g_isNT4 = FALSE; // NT4.0 mode
 
 ULONG DriverEntry(PVOID DriverObject, PVOID RegistryPath) {
@@ -45,13 +44,10 @@ ULONG DriverEntry(PVOID DriverObject, PVOID RegistryPath) {
     ULONG status;
     
     // 対応かを簡易チェック
-    if(READ_PORT_UCHAR((PUCHAR)NPSTOR_IO_ADDR) != 98 || READ_PORT_UCHAR((PUCHAR)NPSTOR_IO_CMD) != 21){
+    if(ScsiPortReadPortUchar((PUCHAR)NPSTOR_IO_ADDR) != 98 || ScsiPortReadPortUchar((PUCHAR)NPSTOR_IO_CMD) != 21){
         return STATUS_NO_SUCH_DEVICE;
 	}
 	
-    // 排他ロック初期化　初期化のみで破棄処理はいらない
-    KeInitializeSpinLock(&g_spinLock);
-    
 	//DbgPrint("DriverEntry\n");
     hwInit.HwInitializationDataSize = sizeof(HW_INITIALIZATION_DATA);
     hwInit.AdapterInterfaceType = Isa;
@@ -139,15 +135,13 @@ BOOLEAN HwStartIo(PVOID DeviceExtension, PSCSI_REQUEST_BLOCK Srb) {
 	invokeInfo.version = 1;
 	invokeInfo.cmd = 0;
 	invokeInfo.srbAddr = Srb;
-	KeAcquireSpinLock(&g_spinLock, &oldIrql);
 	invokeInfoAddr = (ULONG)(&invokeInfo);
-    WRITE_PORT_UCHAR((PUCHAR)NPSTOR_IO_ADDR, (UCHAR)(invokeInfoAddr));
-    WRITE_PORT_UCHAR((PUCHAR)NPSTOR_IO_ADDR, (UCHAR)(invokeInfoAddr >> 8));
-    WRITE_PORT_UCHAR((PUCHAR)NPSTOR_IO_ADDR, (UCHAR)(invokeInfoAddr >> 16));
-    WRITE_PORT_UCHAR((PUCHAR)NPSTOR_IO_ADDR, (UCHAR)(invokeInfoAddr >> 24));
-    WRITE_PORT_UCHAR((PUCHAR)NPSTOR_IO_CMD, (UCHAR)0x98);
-    WRITE_PORT_UCHAR((PUCHAR)NPSTOR_IO_CMD, (UCHAR)0x01);
-	KeReleaseSpinLock(&g_spinLock, oldIrql);
+    ScsiPortWritePortUchar((PUCHAR)NPSTOR_IO_ADDR, (UCHAR)(invokeInfoAddr));
+    ScsiPortWritePortUchar((PUCHAR)NPSTOR_IO_ADDR, (UCHAR)(invokeInfoAddr >> 8));
+    ScsiPortWritePortUchar((PUCHAR)NPSTOR_IO_ADDR, (UCHAR)(invokeInfoAddr >> 16));
+    ScsiPortWritePortUchar((PUCHAR)NPSTOR_IO_ADDR, (UCHAR)(invokeInfoAddr >> 24));
+    ScsiPortWritePortUchar((PUCHAR)NPSTOR_IO_CMD, (UCHAR)0x98);
+    ScsiPortWritePortUchar((PUCHAR)NPSTOR_IO_CMD, (UCHAR)0x01);
     
     ScsiPortNotification(RequestComplete, DeviceExtension, Srb);
     ScsiPortNotification(NextRequest, DeviceExtension, NULL);

@@ -197,7 +197,10 @@ typedef	signed __int64		SINT64;
 
 #define	SUPPORT_TEXTCNV
 
+#if (_MSC_VER + 0) <= 1600
+// VS2017 ‚æ‚èŒÃ‚¢ê‡
 #define SUPPORT_WIN2000HOST
+#endif
 
 #if defined(SUPPORT_IA32_HAXM)
 #define USE_CUSTOM_HOOKINST

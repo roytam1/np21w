@@ -890,39 +890,42 @@ void bios0x1b(void) {
 	REG8	flag;
 
 #if 1			// bypass to disk bios
-	REG8	seg;
-	UINT	sp;
+	if ((CPU_AL & 0xf0) != 0x20 && (CPU_AL & 0xf0) != 0xa0 && (CPU_AL & 0xf0) != 0xc0) // SCSI‚ÍœŠO
+	{
+		REG8	seg;
+		UINT	sp;
 
-	seg = mem[MEMX_DISK_XROM + (CPU_AL >> 4)];
-	if (seg) {
-		sp = CPU_SP;
-		MEMR_WRITE16(CPU_SS, sp - 2, CPU_DS);
-		MEMR_WRITE16(CPU_SS, sp - 4, CPU_SI);
-		MEMR_WRITE16(CPU_SS, sp - 6, CPU_DI);
-		MEMR_WRITE16(CPU_SS, sp - 8, CPU_ES);		// +a
-		MEMR_WRITE16(CPU_SS, sp - 10, CPU_BP);		// +8
-		MEMR_WRITE16(CPU_SS, sp - 12, CPU_DX);		// +6
-		MEMR_WRITE16(CPU_SS, sp - 14, CPU_CX);		// +4
-		MEMR_WRITE16(CPU_SS, sp - 16, CPU_BX);		// +2
-		MEMR_WRITE16(CPU_SS, sp - 18, CPU_AX);		// +0
+		seg = mem[MEMX_DISK_XROM + (CPU_AL >> 4)];
+		if (seg) {
+			sp = CPU_SP;
+			MEMR_WRITE16(CPU_SS, sp - 2, CPU_DS);
+			MEMR_WRITE16(CPU_SS, sp - 4, CPU_SI);
+			MEMR_WRITE16(CPU_SS, sp - 6, CPU_DI);
+			MEMR_WRITE16(CPU_SS, sp - 8, CPU_ES);		// +a
+			MEMR_WRITE16(CPU_SS, sp - 10, CPU_BP);		// +8
+			MEMR_WRITE16(CPU_SS, sp - 12, CPU_DX);		// +6
+			MEMR_WRITE16(CPU_SS, sp - 14, CPU_CX);		// +4
+			MEMR_WRITE16(CPU_SS, sp - 16, CPU_BX);		// +2
+			MEMR_WRITE16(CPU_SS, sp - 18, CPU_AX);		// +0
 #if 0
-		TRACEOUT(("call by %.4x:%.4x",
-							MEMR_READ16(CPU_SS, CPU_SP+2),
-							MEMR_READ16(CPU_SS, CPU_SP)));
-		TRACEOUT(("bypass to %.4x:0018", seg << 8));
-		TRACEOUT(("AX=%04x BX=%04x %02x:%02x:%02x:%02x ES=%04x BP=%04x",
-							CPU_AX, CPU_BX, CPU_CL, CPU_DH, CPU_DL, CPU_CH,
-							CPU_ES, CPU_BP));
+			TRACEOUT(("call by %.4x:%.4x",
+								MEMR_READ16(CPU_SS, CPU_SP+2),
+								MEMR_READ16(CPU_SS, CPU_SP)));
+			TRACEOUT(("bypass to %.4x:0018", seg << 8));
+			TRACEOUT(("AX=%04x BX=%04x %02x:%02x:%02x:%02x ES=%04x BP=%04x",
+								CPU_AX, CPU_BX, CPU_CL, CPU_DH, CPU_DL, CPU_CH,
+								CPU_ES, CPU_BP));
 #endif
-		sp -= 18;
-		CPU_SP = sp;
-		CPU_BP = sp;
-		CPU_DS = 0x0000;
-		CPU_BX = 0x04B0;
-		CPU_AX = seg << 8;
-		CPU_CS = seg << 8;
-		CPU_IP = 0x18;
-		return;
+			sp -= 18;
+			CPU_SP = sp;
+			CPU_BP = sp;
+			CPU_DS = 0x0000;
+			CPU_BX = 0x04B0;
+			CPU_AX = seg << 8;
+			CPU_CS = seg << 8;
+			CPU_IP = 0x18;
+			return;
+		}
 	}
 #endif
 

@@ -226,6 +226,7 @@ void keystat_ctrlsend(REG8 dat) {
 				break;
 #endif
 			case 0x9c:
+				keyctrl.keyrep = dat;
 				keyboard_ctrl(0xfa);
 				break;
 
@@ -261,7 +262,8 @@ void keystat_down(const UINT8 *key, REG8 keys, REG8 ref) {
 		if (keycode < 0x70) {
 #if 1												// 05/02/04
 			if (keystat.ref[keycode] != NKEYREF_NC) {
-				if (!(kbexflag[keycode] & KBEX_NONREP)) {
+				// 0x70 = STOP AUTO REPEAT
+				if (keyctrl.keyrep != 0x70 && !(kbexflag[keycode] & KBEX_NONREP)) {
 					keyboard_send((REG8)(keycode + 0x80));
 					keystat.ref[keycode] = NKEYREF_NC;
 				}

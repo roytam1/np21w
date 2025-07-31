@@ -2815,9 +2815,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 						mouseon = 0;
 					}
 					mousemng_updatemouseon(mouseon);
-					xPos = xPos * 65535 / (rectClient.right - rectClient.left);
-					yPos = yPos * 65535 / (rectClient.bottom - rectClient.top);
-					mousemng_setabspos(xPos, yPos);
+					if (rectClient.right - rectClient.left > 0 && rectClient.bottom - rectClient.top > 0)
+					{
+						xPos = xPos * 65535 / (rectClient.right - rectClient.left);
+						yPos = yPos * 65535 / (rectClient.bottom - rectClient.top);
+						mousemng_setabspos(xPos, yPos);
+					}
 				}
 			}
 			np2_multithread_LeaveCriticalSection();

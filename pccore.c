@@ -859,6 +859,9 @@ void pccore_reset(void) {
 
 	// マウスリセット
 	mousemng_reset();
+
+	// キーボードリセット
+	keystat_initialize();
 }
 
 static void drawscreen(void) {

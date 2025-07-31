@@ -45,6 +45,14 @@ typedef struct {
 	LISTARRAY	flist;
 } HOSTDRV;
 
+typedef struct
+{
+	LISTARRAY	flist;
+	UINT		flistpos; // 検索列挙位置
+	UINT16		flistidx; // 仮想クラスタ番号
+} HOSTDRV_FINDHANDLE;
+
+
 
 #ifdef __cplusplus
 extern "C" {

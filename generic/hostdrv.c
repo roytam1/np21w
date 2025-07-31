@@ -29,6 +29,82 @@ static const HDRVFILE hdd_volume = {{'_','H','O','S','T','D','R','I','V','E','_'
 
 	HOSTDRV		hostdrv;
 
+// XXX: DTA単位の複数検索に対応　本当はステートセーブすべき
+#define HOSTDRV_FINDHANDLE_INVALID	0xffffffff
+#define HOSTDRV_FINDHANDLE_MAX	1024 // さすがに同時に1024検索出来れば十分でしょう…
+static UINT32 hostdrv_findhandle_currentindex = HOSTDRV_FINDHANDLE_INVALID; // 現在有効なハンドルが格納されているインデックス
+static HOSTDRV_FINDHANDLE hostdrv_findhandles[HOSTDRV_FINDHANDLE_MAX] = { 0 }; // 検索ハンドルリスト
+
+static void hostdrv_findhandles_add(LISTARRAY flist, UINT flistpos)
+{
+	static UINT32 writepos = 0; // リストへの書き込み位置
+	static UINT16 flistidx = 0; // 仮想的なクラスタ番号
+	// 新規
+	if (writepos == hostdrv_findhandle_currentindex)
+	{
+		// 現在使用中の場所は破棄できないのでずらす
+		writepos = (writepos + 1) % HOSTDRV_FINDHANDLE_MAX;
+	}
+	if (hostdrv_findhandles[writepos].flist != NULL)
+	{
+		listarray_destroy(hostdrv_findhandles[writepos].flist); // ハンドル閉じる
+	}
+	hostdrv_findhandles[writepos].flist = flist;
+	hostdrv_findhandles[writepos].flistpos = flistpos;
+	hostdrv_findhandles[writepos].flistidx = flistidx;
+	flistidx++;
+
+	// 現在有効なハンドルにする
+	hostdrv_findhandle_currentindex = writepos;
+
+	// 次の書き込み位置を指定
+	writepos = (writepos + 1) % HOSTDRV_FINDHANDLE_MAX;
+}
+static void hostdrv_findhandles_setcurrentbyflistidx(UINT16 flistidx)
+{
+	int i;
+	// 仮想クラスタ番号から検索ハンドルを選択
+	for (i = 0; i < HOSTDRV_FINDHANDLE_MAX; i++)
+	{
+		if (hostdrv_findhandles[i].flist && hostdrv_findhandles[i].flistidx == flistidx)
+		{
+			hostdrv_findhandle_currentindex = i;
+			return;
+		}
+	}
+	hostdrv_findhandle_currentindex = HOSTDRV_FINDHANDLE_INVALID;
+}
+static HOSTDRV_FINDHANDLE* hostdrv_findhandles_getcurrent()
+{
+	if (hostdrv_findhandle_currentindex == HOSTDRV_FINDHANDLE_INVALID) return NULL;
+
+	// 現在有効なハンドルを取得
+	return &hostdrv_findhandles[hostdrv_findhandle_currentindex];
+}
+static void hostdrv_findhandles_close()
+{
+	if (hostdrv_findhandle_currentindex == HOSTDRV_FINDHANDLE_INVALID) return;
+
+	// 現在有効なハンドルを閉じる
+	hostdrv_findhandles[hostdrv_findhandle_currentindex].flist = NULL;
+	hostdrv_findhandles[hostdrv_findhandle_currentindex].flistpos = 0;
+	hostdrv_findhandle_currentindex = HOSTDRV_FINDHANDLE_INVALID;
+}
+static void hostdrv_findhandles_clear()
+{
+	int i;
+	for (i = 0; i < HOSTDRV_FINDHANDLE_MAX; i++)
+	{
+		if (hostdrv_findhandles[i].flist && i != hostdrv_findhandle_currentindex)
+		{
+			listarray_destroy(hostdrv_findhandles[i].flist); // ハンドル閉じる
+			hostdrv_findhandles[i].flist = NULL;
+			hostdrv_findhandles[i].flistpos = 0;
+			hostdrv_findhandles[i].flistidx = 0;
+		}
+	}
+}
+
 // ---- i/f
 
 static void succeed(INTRST intrst) {
@@ -150,7 +226,7 @@ static void store_srch(INTRST is) {
 	CopyMemory(srchrec->srch_mask, is->fcbname_ptr, 11);
 	srchrec->attr_mask = *is->srch_attr_ptr;
 	STOREINTELWORD(srchrec->dir_entry_no, ((UINT16)-1));
-	STOREINTELWORD(srchrec->dir_sector, ((UINT16)-1));
+	STOREINTELWORD(srchrec->dir_sector, hostdrv_findhandle_currentindex == HOSTDRV_FINDHANDLE_INVALID ? 0xffff : (UINT16)hostdrv_findhandles[hostdrv_findhandle_currentindex].flistidx); // 仮想クラスタ番号
 }
 
 static void store_dir(INTRST is, const HDRVFILE *phdf) {
@@ -1202,18 +1278,9 @@ static void create_file(INTRST intrst)
 /* 1B */
 static void find_first(INTRST intrst) {
 
-	LISTARRAY flist;
 	_SDACDS sc;
 	HDRVPATH hdp;
 	char fcbname[11];
-
-	flist = hostdrv.flist;
-	if (flist)
-	{
-		hostdrv.flist = NULL;
-		hostdrv.stat.flistpos = 0;
-		listarray_destroy(flist);
-	}
 
 	if (pathishostdrv(intrst, &sc) != SUCCESS)
 	{
@@ -1236,6 +1303,7 @@ static void find_first(INTRST intrst) {
 		TRACEOUT(("find_first %s -> %s", intrst->filename_ptr, hdp.szPath));
 		hostdrv.flist = hostdrvs_getpathlist(&hdp, intrst->fcbname_ptr, *intrst->srch_attr_ptr);
 		hostdrv.stat.flistpos = 0;
+		hostdrv_findhandles_add(hostdrv.flist, hostdrv.stat.flistpos);
 		if (find_file(intrst) != SUCCESS)
 		{
 			fail(intrst, ERR_PATHNOTFOUND);
@@ -1251,9 +1319,26 @@ static void find_next(INTRST intrst) {
 
 	_SDACDS		sc;
 	SRCHREC		srchrec;
+	UINT16 flistidx;
+	HOSTDRV_FINDHANDLE* findHandle;
 
 	fetch_sda_currcds(&sc);
 	setup_ptrs(intrst, &sc);
+
+	// DTAを読み取ってクラスタ番号を取得
+	flistidx = MEMR_READ16(LOADINTELWORD(sc.ver3.sda.current_dta.seg), LOADINTELWORD(sc.ver3.sda.current_dta.off) + 0x0f);
+	findHandle = hostdrv_findhandles_getcurrent();
+
+	// 現在対象の場所と違う場所でfind_nextされたとき、検索ハンドルリストにあるか確認してそれを使用
+	if (!hostdrv.flist || findHandle == NULL || findHandle->flistidx != flistidx) {
+		hostdrv_findhandles_setcurrentbyflistidx(flistidx);
+		findHandle = hostdrv_findhandles_getcurrent();
+		if (findHandle) {
+			// 退避していた検索ハンドルに置き換え
+			hostdrv.flist = findHandle->flist;
+			hostdrv.stat.flistpos = findHandle->flistpos;
+		}
+	}
 
 	srchrec = intrst->srchrec_ptr;
 	if ((!(srchrec->drive_no & 0x40)) ||
@@ -1262,8 +1347,12 @@ static void find_next(INTRST intrst) {
 		return;
 	}
 	if (find_file(intrst) != SUCCESS) {
+		hostdrv_findhandles_close(); // 列挙が終わったならハンドル閉じる
 		fail(intrst, ERR_NOMOREFILES);
 		return;
+	}
+	if (findHandle) {
+		findHandle->flistpos = hostdrv.stat.flistpos; // 検索位置更新
 	}
 	store_sda_currcds(&sc);
 	succeed(intrst);
@@ -1435,7 +1524,8 @@ static void ext_openfile(INTRST intrst)
 					break;
 
 				default:
-					nResult = ERR_ACCESSDENIED;
+					nResult = ERR_FILE_EXISTS;
+					fail(intrst, (UINT16)nResult);
 					return;
 			}
 		}
@@ -1582,6 +1672,7 @@ void hostdrv_deinitialize(void) {
 	listarray_destroy(hostdrv.flist);
 	hostdrvs_fhdlallclose(hostdrv.fhdl);
 	listarray_destroy(hostdrv.fhdl);
+	hostdrv_findhandles_clear();
 	TRACEOUT(("hostdrv_deinitialize"));
 }
 

@@ -21,6 +21,9 @@ void keystat_initialize(void) {
 	keyctrl.keyrep = 0x21;
 	keyctrl.capsref = NKEYREF_NC;
 	keyctrl.kanaref = NKEYREF_NC;
+#if defined(SUPPORT_PC9801_119)
+	keyctrl.kbdtype = 1; // KEYBOARD MODE WIN95
+#endif
 
 	ZeroMemory(&keystat, sizeof(keystat));
 	FillMemory(keystat.ref, sizeof(keystat.ref), NKEYREF_NC);
@@ -281,13 +284,20 @@ void keystat_down(const UINT8 *key, REG8 keys, REG8 ref) {
 		}
 		else {
 #if defined(SUPPORT_PC9801_119)
-			if (keyctrl.kbdtype != 0x03)
+			if (keyctrl.kbdtype < 2) // KEYBOARD MODE SHIFT SEPARATE DISABLE
 #endif
 			{
-				if (keycode == 0x7d) {
+				if (keycode == 0x7d) 
+				{
 					keycode = 0x70;
 				}
-				else if (keycode >= 0x75) {
+			}
+#if defined(SUPPORT_PC9801_119)
+			if (keyctrl.kbdtype < 3) // KEYBOARD MODE WINKEYS DISABLE
+#endif
+			{
+				if (keycode >= 0x75) 
+				{
 					continue;
 				}
 			}
@@ -337,13 +347,20 @@ void keystat_up(const UINT8 *key, REG8 keys, REG8 ref) {
 		}
 		else {
 #if defined(SUPPORT_PC9801_119)
-			if (keyctrl.kbdtype != 0x03)
+			if (keyctrl.kbdtype < 2) // KEYBOARD MODE SHIFT SEPARATE DISABLE
 #endif
 			{
-				if (keycode == 0x7d) {
+				if (keycode == 0x7d)
+				{
 					keycode = 0x70;
 				}
-				else if (keycode >= 0x75) {
+			}
+#if defined(SUPPORT_PC9801_119)
+			if (keyctrl.kbdtype < 3) // KEYBOARD MODE WINKEYS DISABLE
+#endif
+			{
+				if (keycode >= 0x75)
+				{
 					continue;
 				}
 			}

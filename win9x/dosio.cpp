@@ -225,6 +225,18 @@ short DOSIOCALL file_attr(const OEMCHAR* lpPathName)
 }
 
 /**
+ * ファイルの属性を設定
+ * @param[in] lpPathName ファイル名
+ * @param[in] attr ファイル属性
+ * @retval 0 成功
+ * @retval -1 失敗
+ */
+short DOSIOCALL file_setattr(const OEMCHAR* lpPathName, short attr)
+{
+	return (::SetFileAttributes(lpPathName, attr) ? 0 : -1);
+}
+
+/**
  * ファイルの移動
  * @param[in] lpExistFile ファイル名
  * @param[in] lpNewFile ファイル名

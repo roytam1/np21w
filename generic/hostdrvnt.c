@@ -8,6 +8,7 @@
 */
 
 #include	<shlwapi.h>
+#include	<process.h>
 
 #include	"pccore.h"
 #include	"iocore.h"
@@ -739,7 +740,7 @@ static int hostdrvNT_getOneEntry(NP2HOSTDRVNT_FILEINFO* fi, NP2_FILE_BOTH_DIR_IN
 
 	if (fi->hFindFile == NULL || fi->hFindFile == INVALID_HANDLE_VALUE)
 	{
-		WCHAR defaultPattern = L"*";
+		WCHAR defaultPattern[] = L"*";
 		WCHAR findPath[MAX_PATH * 2];
 		UINT32 findPathLen = 0;
 		if (pattern == NULL)

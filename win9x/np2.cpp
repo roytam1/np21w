@@ -239,6 +239,7 @@ static	WINLOCEX	smwlex;
 static	HMODULE		s_hModResource;
 static  UINT		lateframecount; // ÉtÉåÅ[ÉÄíxÇÍêî
 static  int			mousecapturemode = 0;
+static  int			screenChanging = 0;
 
 static void np2_SetUserPause(UINT8 pause){
 	if(np2userpause && !pause){
@@ -602,6 +603,8 @@ static void changescreen(UINT8 newmode) {
 	UINT8		renewal;
 	WINLOCEX	wlex;
 
+	screenChanging = 1;
+
 	np2_multithread_Suspend();
 	np2_multithread_EnterCriticalSection();
 
@@ -650,6 +653,7 @@ static void changescreen(UINT8 newmode) {
 				//PostQuitMessage(0);
 				np2_multithread_LeaveCriticalSection();
 				np2_multithread_Resume();
+				screenChanging = 0;
 				return;
 			}
 		}
@@ -677,6 +681,8 @@ static void changescreen(UINT8 newmode) {
 	
 	np2_multithread_LeaveCriticalSection();
 	np2_multithread_Resume();
+
+	screenChanging = 0;
 }
 
 static void wincentering(HWND hWnd) {
@@ -3086,13 +3092,13 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 			
 #if defined(SUPPORT_SCRN_DIRECT3D)
 		case WM_SETFOCUS:
-			if (scrnmng_isfullscreen() && scrnmng_current_drawtype==DRAWTYPE_DIRECT3D && !np2oscfg.d3d_exclusive && !winui_en) {
+			if (!screenChanging && scrnmng_isfullscreen() && scrnmng_current_drawtype==DRAWTYPE_DIRECT3D && !np2oscfg.d3d_exclusive && !winui_en) {
 				ShowWindow( hWnd, SW_RESTORE );
 			}
 			break;
 
 		case WM_KILLFOCUS:
-			if (scrnmng_isfullscreen() && scrnmng_current_drawtype==DRAWTYPE_DIRECT3D && !np2oscfg.d3d_exclusive && !winui_en) {
+			if (!screenChanging && scrnmng_isfullscreen() && scrnmng_current_drawtype==DRAWTYPE_DIRECT3D && !np2oscfg.d3d_exclusive && !winui_en) {
 				ShowWindow( hWnd, SW_MINIMIZE );
 			}
 			break;

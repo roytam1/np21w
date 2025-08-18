@@ -141,6 +141,13 @@ UINT8 mousemng_getabspos(int* x, int* y)
 	{
 		return 0; // キャプチャ中やキャプチャなし操作無効の場合は絶対座標不可
 	}
+#ifdef SUPPORT_WACOM_TABLET
+	if (cmwacom_skipMouseEvent())
+	{
+		mousemng.x = 0;
+		mousemng.y = 0;
+	}
+#endif
 	np2_multithread_EnterCriticalSection();
 	*x = mouseposX;
 	*y = mouseposY;

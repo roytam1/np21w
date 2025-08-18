@@ -110,6 +110,48 @@ LRESULT CALLBACK tabletWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 			break;
 		case WM_MOUSEMOVE:
 			if(g_cmwacom->HandleMouseMoveMessage(hWnd, msg, wParam, lParam)){
+				// フルスクリーンメニュー
+				if (scrnmng_isfullscreen())
+				{
+					POINT p;
+					if (GetCursorPos(&p))
+					{
+						scrnmng_fullscrnmenu(p.y);
+					}
+				}
+				if (np2oscfg.mouse_nc)
+				{
+					// 絶対座標マウス
+					RECT rectClient;
+					int xPos, yPos;
+					int mouseon = 1;
+					int x = (short)LOWORD(lParam);
+					int y = (short)HIWORD(lParam);
+					scrnmng_getrect(&rectClient);
+					xPos = x - rectClient.left;
+					yPos = y - rectClient.top;
+					if (xPos < 0)
+					{
+						xPos = 0;
+						mouseon = 0;
+					}
+					if (xPos > (rectClient.right - rectClient.left))
+					{
+						xPos = (rectClient.right - rectClient.left);
+						mouseon = 0;
+					}
+					if (yPos < 0)
+					{
+						yPos = 0;
+						mouseon = 0;
+					}
+					if (yPos > (rectClient.bottom - rectClient.top))
+					{
+						yPos = (rectClient.bottom - rectClient.top);
+						mouseon = 0;
+					}
+					mousemng_updatemouseon(mouseon);
+				}
 				return FALSE;
 			}
 			break;

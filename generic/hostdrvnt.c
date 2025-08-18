@@ -22,6 +22,8 @@
 #include	"hostdrvnt.h"
 #include	"hostdrvntdef.h"
 
+// 性能上最適化で優先しない方がいいコードなのでわざと別セグメントに置く
+#pragma code_seg(".MISCCODE")
 #if !defined(CPUCORE_IA32)
 #define	cpu_kmemorywrite(a,v)	memp_write8(a,v)
 #define	cpu_kmemorywrite_w(a,v)	memp_write16(a,v)
@@ -3531,4 +3533,6 @@ int hostdrvNT_sfload(STFLAGH sfh, const SFENTRY* tbl)
 	}
 	return(ret);
 }
+#pragma code_seg()
+
 #endif

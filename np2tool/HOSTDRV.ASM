@@ -86,87 +86,106 @@ errexit_lv1:	sti
 				mov		ax, 4c01h
 				int		21h
 
-main:			cld
-				push	cs
-				pop		ds
-				mov		ah, 9
-				mov		dx, title_msg
-				int		21h
+main:			cld ; カウンタインクリメント指示
+				push	cs ; CSをスタックに
+				pop		ds ; スタックからDSにセット(CS -> DS)
+				mov		ah, 9 ; $ 終端文字列表示
+				mov		dx, title_msg ; タイトル
+				int		21h ; 実行
 
 				; 機種チェック
-				cli
-				call	np2_check
-				mov		dx, macerr_msg
-				jne		short errexit_lv2
+				cli ; 割り込み禁止
+				call	np2_check ; np2確認
+				mov		dx, macerr_msg ; 機種エラーメッセージ用意
+				jne		short errexit_lv2 ; エラーなら終了
 
-				mov		ax, 352fh
-				int		21h
-				mov		si, id
+				mov		ax, 352fh ; 現在のINT 2Fh のベクタを取得
+				int		21h ; 実行
+				mov		si, id ; IDがHOSTDRVのものかを確認
 				mov		di, si
-				mov		cl, 4
-				repe cmpsw
-				jne		short stay
-				jmp		release
+				mov		cl, 4 ; WORDx4つまり8文字比較
+				repe cmpsw ; 文字列比較
+				jne		short stay ; 常駐処理へ飛ぶ
+				jmp		release ; 既に常駐済み
 
 
-stay:			mov		si, 0080h
-				mov		dx, usage_msg
+stay:			mov		si, 0080h ; コマンドライン引数取得
+				mov		dx, usage_msg ; コマンドライン引数エラーメッセージ用意
 				xor		cx, cx
 				lodsb
-				add		cl, al
-				je		short stay_error
+				add		cl, al ; 引数の長さ　-> CL
+				je		short stay_error ; 引数指定がない（0文字）のでエラー
 cmdlnchk:		lodsb
 				cmp		al, 20h
-				ja		short drvcheck
+				ja		short drvcheck ; スペース文字以外が現れたら処理続行
 				loop	cmdlnchk
-stay_error:		jmp		errexit_lv1
+stay_error:		jmp		errexit_lv1 ; スペースが現れないのでエラー
 
-drvcheck:		and		al, 0dfh
-				sub		al, 'A'
-				cmp		al, 26
-				mov		dx, drverr0_msg
-				jae		short stay_error
+drvcheck:		and		al, 0dfh ; 小文字 -> 大文字へ変換
+				sub		al, 'A' ; Aから順に0, 1, 2, ...
+				cmp		al, 26 ; Zより後ならエラー
+				mov		dx, drverr0_msg ; ドライブ文字エラーメッセージ
+				jae		short stay_error ; エラーなら終了
 
-				mov		[inf + HDRVIF.drive_no], al
-				mov		ah, 30h
-				int		21h
-				mov		[inf + HDRVIF.dosver], ax
+				mov		[inf + HDRVIF.drive_no], al ; ドライブ番号保存
+				mov		ah, 30h ; DOSバージョン取得
+				int		21h ; 実行
+				mov		[inf + HDRVIF.dosver], ax ; DOSバージョン保存
 				xchg	al, ah
-				cmp		ax, 030ah
-				mov		dx, doserr_msg
-				jc		short stay_error
-				mov		ax, 1100h					; inst check
+				cmp		ax, 030ah ; DOSバージョンが3.1以上か？
+				mov		dx, doserr_msg ; DOSバージョンエラーメッセージ
+				jc		short stay_error ; DOSバージョンが駄目ならエラー
+				mov		ax, 1100h					; HOSTDRV常駐前応答チェック
 				int		2fh
-				cmp		ax, 1
-				mov		dx, cntsty_msg
-				je		short stay_error
-				mov		ax, 5d06h					; get SDA addr
+				cmp		ax, 1 ; not installed, not OK to install かを判定
+				mov		dx, cntsty_msg ; インストール不可エラーメッセージ
+				je		short stay_error ; エラーなら終了
+				mov		ax, 5d06h					; SDAアドレス取得
 				int		21h
-				mov		[cs:inf + HDRVIF.sda_off], si
-				mov		[cs:inf + HDRVIF.sda_seg], ds
+				mov		[cs:inf + HDRVIF.sda_off], si ; SDA offset保存
+				mov		[cs:inf + HDRVIF.sda_seg], ds ; SDA segment保存
 				push	cs
 				pop		ds
 
+				; バージョンチェック
 				mov		si, stay_param
-				call	sendnp2port
-				call	checknp2port
-				mov		dx, np2err_msg
-				jne		short stay_error
+				call	sendnp2port ; NULL文字まで送る（文字列check_hostdrvが送られる）
+				call	checknp2port ; NULL文字まで比較（文字列0.74と比較）
+				mov		dx, np2err_msg ; バージョンエラーメッセージ準備
+				jne		short stay_error ; エラーなら終了
 
-				; assign_cds
+				; assign_cds CDSの必要項目を格納
 				call	getcds
 				mov		dx, drverr1_msg
-				jc		short stay_error
+				jc		short stay_error ; ドライブ番号管理外エラー
 				test	byte [es:di + CDS.flag + 1], 0c0h
 				mov		dx, drverr2_msg
-				jne		short stay_error
+				jne		short stay_error ; ドライブ番号使用中エラー
 
-				xor		cx, cx
+				; 新プロトコルサポート確認　マウント前は新プロトコル有効化せずに文字列pokだけが返る
+				mov		si, enable_newp
+				call	sendnp2port ; NULL文字まで送る（文字列setn_hostdrvが送られる）
+				call	checknp2port ; NULL文字まで比較（文字列pokと比較）
+				jne		short protocol_old ; エラーなら旧プロトコル
+				
+				; 新プロトコル
+				mov		al, [inf + HDRVIF.drive_no]
+				add		al, 'A'
+				mov		byte [stay_type2 + 1], al
+				mov		si, stay_type2 ; SIを新プロトコル用に設定
+				jmp		protocol_end
+				
+				; 旧プロトコル
+protocol_old:	mov		si, stay_type1 ; SIを旧プロトコル用に設定
+				
+				; CDS設定の続き
+protocol_end:	xor		cx, cx
 				lodsb
 				mov		cl, al
 				or		word [es:di + CDS.flag], 0c080h
 				mov		[es:di + CDS.root], cx
 				rep movsb
+				mov		si, stay_param2
 				movsw
 
 				mov		bx, inf
@@ -194,12 +213,24 @@ drvcheck:		and		al, 0dfh
 				mov		ax, 5e01h
 				int		21h
 
-				sti
-				mov		al, [inf + HDRVIF.drive_no]
-				add		byte [sty_drive], al
-				mov		ah, 9
-				mov		dx, si
+				; 新プロトコル有効化
+				push	si
+				mov		si, enable_newp
+				call	sendnp2port ; NULL文字まで送る（文字列setn_hostdrvが送られる）
+				call	checknp2port ; NULL文字まで比較（文字列pokと比較）失敗しても無視
+				jne		short protocol_skip ; エラーなら旧プロトコル
+				mov		ah, 9 ; $ 終端文字列表示
+				mov		dx, newpro_msg ; 新プロトコル表示文字列
 				int		21h
+protocol_skip:	pop		si
+				
+				sti
+				mov		al, [inf + HDRVIF.drive_no] ; ドライブ番号 -> AL
+				add		byte [sty_drive], al ; ドライブ文字書き込み
+				mov		ah, 9 ; $ 終端文字列表示
+				mov		dx, si ; 割当先ドライブ表示文字列
+				int		21h
+				
 				mov		ax, 3100h
 				mov		dx, keep_addr + 15
 				mov		cl, 4
@@ -268,12 +299,16 @@ str_user		db	"NekoProjectII  "
 
 stay_param		db	13, "check_hostdrv"
 				db	 5, "0.74",0
-				db	 9, "\\HOSTDRV"
-				db		"\", 0
+stay_type1		db	 9, "\\HOSTDRV" ; 旧np2互換
+stay_type2		db	 2, "A:" ; 新プロトコル
+stay_param2		db		"\", 0
 				db	12, "open_hostdrv"
 				db	 3, "ok",0
 				db	"assigned host-drive to "
 sty_drive		db	"A:", 13, 10, "$"
+
+enable_newp		db	12, "setn_hostdrv"
+				db	 4, "pok",0
 
 
 rel_param		db	13, "close_hostdrv"
@@ -289,6 +324,8 @@ drverr0_msg		db	"drive is bad$"
 drverr1_msg		db	"drive higher than last drive$"
 drverr2_msg		db	"drive already assigned$"
 styerr_msg		db	"cannot assign$"
+newpro_msg		db	"new protocol enabled"
+				db	13, 10, "$"
 
 	ends
 

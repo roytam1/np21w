@@ -17,6 +17,9 @@
 #include	"hostdrvs.h"
 #include	"hostdrv.tbl"
 
+// 性能上最適化で優先しない方がいいコードなのでわざと別セグメントに置く
+#pragma code_seg(".MISCCODE")
+
 #if 0
 #undef	TRACEOUT
 static void trace_fmt_ex(const char* fmt, ...)
@@ -37,10 +40,13 @@ static void trace_fmt_ex(const char* fmt, ...)
 #define IS_PERMITWRITE		(np2cfg.hdrvacc & HDFMODE_WRITE)
 #define IS_PERMITDELETE		(np2cfg.hdrvacc & HDFMODE_DELETE)
 
-#define ROOTPATH_NAME		"\\\\HOSTDRV\\"
-#define ROOTPATH_SIZE		(sizeof(ROOTPATH_NAME) - 1)
+#define ROOTPATH_NAME_NEW	"A:\\"
+#define ROOTPATH_NAME_OLD	"\\\\HOSTDRV\\"
+#define ROOTPATH_SIZE_NEW	(sizeof(ROOTPATH_NAME_NEW) - 1)
+#define ROOTPATH_SIZE_OLD	(sizeof(ROOTPATH_NAME_OLD) - 1)
 
-static const char ROOTPATH[ROOTPATH_SIZE + 1] = ROOTPATH_NAME;
+static int ROOTPATH_SIZE = ROOTPATH_SIZE_OLD;
+static char ROOTPATH[] = ROOTPATH_NAME_OLD;
 static const HDRVFILE hdd_volume = {{'_','H','O','S','T','D','R','I','V','E','_'}, 0, 0, 0x08, {0}, {0}};
 
 	HOSTDRV		hostdrv;
@@ -662,7 +668,7 @@ static void change_currdir(INTRST intrst) {
 
 	ptr = intrst->filename_ptr;
 	TRACEOUT(("change_currdir %s", intrst->filename_ptr));
-	if (ptr[0] == '\0') {							// るーと
+	if (ptr[0] == '\0' || (ptr[0] == '\\' && ptr[1] == '\0')) {							// るーと
 		strcpy(intrst->filename_ptr, "\\");
 		strcpy(intrst->current_path, intrst->filename_ptr);
 		store_sda_currcds(&sc);
@@ -944,15 +950,17 @@ static void get_fileattr(INTRST intrst) {
 	HDRVPATH	hdp;
 	UINT16		ax;
 	FILEH fh;
+	int isRoot;
 
 	if (pathishostdrv(intrst, &sc) != SUCCESS) {
 		return;
 	}
 
 	TRACEOUT(("get_fileattr: ->%s", intrst->fcbname_ptr));
-	if(strcmp(intrst->fcbname_ptr, "???????????") || intrst->filename_ptr[0]){ // XXX: Win用特例
-		if ((is_wildcards(intrst->fcbname_ptr)) ||
-			(hostdrvs_getrealpath(&hdp, intrst->filename_ptr) != ERR_NOERROR)) {
+	isRoot = intrst->filename_ptr[0] == '\0' || (intrst->filename_ptr[0] == '\\' && intrst->filename_ptr[1] == '\0');
+	if(!isRoot && (strcmp(intrst->fcbname_ptr, "???????????") || intrst->filename_ptr[0])){ // XXX: Win用特例
+		if (is_wildcards(intrst->fcbname_ptr) || (hostdrvs_getrealpath(&hdp, intrst->filename_ptr) != ERR_NOERROR))
+		{
 			fail(intrst, ERR_FILENOTFOUND);
 			return;
 		}
@@ -977,11 +985,11 @@ static void get_fileattr(INTRST intrst) {
 		DOSTIME time;
 		UINT16 datestamp;
 		UINT16 timestamp;
-		UINT32 size = file_getsize(fh);
+		UINT32 size = (UINT32)file_getsize(fh);
 		STOREINTELWORD(intrst->r.w.bx, (UINT16)(size >> 16));
 		STOREINTELWORD(intrst->r.w.di, (UINT16)(size));
 		file_getdatetime(fh, &date, &time);
-		datestamp = ((UINT16)date.year << 9) | ((UINT16)date.month << 5) | ((UINT16)date.day);
+		datestamp = ((UINT16)(date.year - 1980) << 9) | ((UINT16)date.month << 5) | ((UINT16)date.day);
 		timestamp = ((UINT16)time.hour << 11) | ((UINT16)time.minute << 5) | ((UINT16)time.second / 2);
 		STOREINTELWORD(intrst->r.w.dx, datestamp);
 		STOREINTELWORD(intrst->r.w.cx, timestamp);
@@ -1846,6 +1854,12 @@ void hostdrv_initialize(void) {
 
 	ZeroMemory(&hostdrv, sizeof(hostdrv));
 	hostdrv.fhdl = listarray_new(sizeof(_HDRVHANDLE), 16);
+
+	// 旧プロトコル互換セット
+	ROOTPATH_SIZE = ROOTPATH_SIZE_OLD;
+	strcpy(ROOTPATH, ROOTPATH_NAME_OLD);
+	TRACEOUT(("hostdrv: Switch to old protocol"));
+
 	TRACEOUT(("hostdrv_initialize"));
 }
 
@@ -1880,7 +1894,8 @@ void hostdrv_mount(const void *arg1, long arg2) {
 		np2sysp_outstr(OEMTEXT("ng"), 0);
 		return;
 	}
-	hostdrv.stat.is_mount = TRUE;
+	hostdrv.stat.is_mount = 1;
+	hostdrv.stat.newprotocol = 0;
 	fetch_if4dos();
 	np2sysp_outstr(OEMTEXT("ok"), 0);
 	(void)arg1;
@@ -1928,6 +1943,26 @@ void hostdrv_intr(const void *arg1, long arg2) {
 	(void)arg1;
 	(void)arg2;
 }
+
+void hostdrv_setn(const void* arg1, long arg2)
+{
+	if (hostdrv.stat.is_mount)
+	{
+		// マウント中の場合新プロトコル有効化
+		hostdrv.stat.newprotocol = 1;
+
+		// 新プロトコルセット
+		ROOTPATH_SIZE = ROOTPATH_SIZE_NEW;
+		strcpy(ROOTPATH, ROOTPATH_NAME_NEW);
+		ROOTPATH[0] = 'A' + hostdrv.stat.drive_no;
+	}
+
+	np2sysp_outstr(OEMTEXT("pok"), 0);
+
+	(void)arg1;
+	(void)arg2;
+}
+
 
 
 // ---- for statsave
@@ -2023,15 +2058,39 @@ int hostdrv_sfload(STFLAGH sfh, const SFENTRY *tbl) {
 			hdf->hdl = (INTPTR)fh;
 		}
 	}
-	for (i=0; i<sfhdrv.flists; i++) {
-		hdl = (HDRVLST)listarray_append(hostdrv.flist, NULL);
-		if (hdl == NULL) {
-			return(STATFLAG_FAILURE);
+	if (sfhdrv.flists > 0)
+	{
+		hostdrv.flist = listarray_new(sizeof(_HDRVLST), 64);
+		for (i = 0; i < sfhdrv.flists; i++)
+		{
+			hdl = (HDRVLST)listarray_append(hostdrv.flist, NULL);
+			if (hdl == NULL)
+			{
+				return(STATFLAG_FAILURE);
+			}
+			ret |= statflag_read(sfh, hdl, sizeof(_HDRVLST));
 		}
-		ret |= statflag_read(sfh, hdl, sizeof(_HDRVLST));
+	}
+	if (hostdrv.stat.newprotocol == 1)
+	{
+		// 新プロトコルセット
+		ROOTPATH_SIZE = ROOTPATH_SIZE_NEW;
+		strcpy(ROOTPATH, ROOTPATH_NAME_NEW);
+		ROOTPATH[0] = 'A' + hostdrv.stat.drive_no;
+		TRACEOUT(("hostdrv: Switch to new protocol"));
+	}
+	else
+	{
+		// 旧プロトコル互換セット
+		ROOTPATH_SIZE = ROOTPATH_SIZE_OLD;
+		strcpy(ROOTPATH, ROOTPATH_NAME_OLD);
+		TRACEOUT(("hostdrv: Switch to old protocol"));
 	}
 	(void)tbl;
 	return(ret);
 }
+
+#pragma code_seg()
+
 #endif
 

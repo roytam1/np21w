@@ -525,6 +525,7 @@ static const char cmd_hdrvcheck[] = "check_hostdrv";
 static const char cmd_hdrvopen[] = "open_hostdrv";
 static const char cmd_hdrvclose[] = "close_hostdrv";
 static const char cmd_hdrvintr[] = "intr_hostdrv";
+static const char cmd_hdrvsetn[] = "setn_hostdrv"; // Set new protocol np21w ver0.86 rev95 
 static const OEMCHAR rep_hdrvcheck[] = OEMTEXT("0.74");
 #endif
 
@@ -577,6 +578,7 @@ static const SYSPCMD np2spcmd[] = {
 			{cmd_hdrvopen,	hostdrv_mount,		NULL,			0},
 			{cmd_hdrvclose,	hostdrv_unmount,	NULL,			0},
 			{cmd_hdrvintr,	hostdrv_intr,		NULL,			0},
+			{cmd_hdrvsetn,	hostdrv_setn,		NULL,			0},
 #endif
 			{cmd_cngclkmul,	np2sysp_cngclkmul,	NULL,			0},
 			{cmd_getconfig,	np2sysp_getconfig,	NULL,			0},

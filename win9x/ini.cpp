@@ -713,6 +713,7 @@ static const PFTBL s_IniItems[] =
 	PFVAL("Joystick", PFTYPE_BOOL,		&np2oscfg.JOYPAD1),
 	PFEXT("Joy1_btn", PFTYPE_BIN,		np2oscfg.JOY1BTN,		4),
 	PFMAX("Joy1_PID", PFTYPE_UINT8,		&np2oscfg.JOYPAD1ID,	15),
+	PFVAL("Joy1POVC", PFTYPE_BOOL,		&np2oscfg.JOYPAD1POVXY),
 
 	PFVAL("clocknow", PFTYPE_UINT8,		&np2oscfg.clk_x),
 	PFVAL("clockfnt", PFTYPE_UINT8,		&np2oscfg.clk_fnt),

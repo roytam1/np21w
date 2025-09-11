@@ -1926,6 +1926,7 @@ SndOptPadPage::SndOptPadPage()
 BOOL SndOptPadPage::OnInitDialog()
 {
 	CheckDlgButton(IDC_JOYPAD1, (np2oscfg.JOYPAD1 & 1) ? BST_CHECKED : BST_UNCHECKED);
+	CheckDlgButton(IDC_PAD1_POVXY, (np2oscfg.JOYPAD1POVXY & 1) ? BST_CHECKED : BST_UNCHECKED);
 #if defined(SUPPORT_GAMEPORT)
 	CheckDlgButton(IDC_PAD1_GAMEPORT, (np2cfg.gameport & 1) ? BST_CHECKED : BST_UNCHECKED);
 	CheckDlgButton(IDC_PAD1_ANALOG, (np2cfg.analogjoy & 1) ? BST_CHECKED : BST_UNCHECKED);
@@ -2023,6 +2024,12 @@ void SndOptPadPage::OnOK()
 	if (np2oscfg.JOYPAD1 != cJoyPad)
 	{
 		np2oscfg.JOYPAD1 = cJoyPad;
+	}
+
+	const UINT8 cJoyPadPOVXY = (np2oscfg.JOYPAD2POVXY & (~1)) | ((IsDlgButtonChecked(IDC_PAD1_POVXY) != BST_UNCHECKED) ? 1 : 0);
+	if (np2oscfg.JOYPAD1POVXY != cJoyPadPOVXY)
+	{
+		np2oscfg.JOYPAD1POVXY = cJoyPadPOVXY;
 	}
 
 #if defined(SUPPORT_GAMEPORT)

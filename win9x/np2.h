@@ -143,6 +143,8 @@ typedef struct {
 
 	UINT8	midiasns; // MIDI Active Sensingを送る
 	UINT32	midiaint; // MIDI Active Sensingを送る間隔（ミリ秒）
+
+	UINT8	knjpaste; // クリップボードからテキスト貼り付けの際の漢字の扱い（0=漢字無視, 1=BASIC, 2=FEPなしDOS）
 } NP2OSCFG;
 
 

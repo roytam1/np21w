@@ -742,8 +742,6 @@ void board118_reset(const NP2CFG *pConfig)
  */
 void board118_bind(void)
 {
-	int i;
-
 	// CS4231バインド（I/Oポート割り当てとか）
 	cs4231io_bind();
 	
@@ -781,6 +779,7 @@ void board118_bind(void)
 #if defined(SUPPORT_GAMEPORT)
 		// ゲームポート割り当て 1480h～1487hどこでも良いらしい
 		if(np2cfg.gameport){
+			int i;
 			for(i=0;i<=7;i++){
 				iocore_attachout(0x1480+i, gameport_o1480);
 				iocore_attachinp(0x1480+i, gameport_i1480);

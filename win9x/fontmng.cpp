@@ -165,11 +165,37 @@ static void getlength1(FNTMNG fhdl, FNTDAT fdat,
 static void fontmng_getchar(FNTMNG fhdl, FNTDAT fdat, const OEMCHAR *string) {
 
 	int		leng;
+	GLYPHMETRICS gm;
+	MAT2 mat = { {0,1},{0,0},{0,0},{0,1} };
+	DWORD bufSize;
 
 	FillRect(fhdl->hdcimage, &fhdl->rect,
 										(HBRUSH)GetStockObject(BLACK_BRUSH));
 	leng = milstr_charsize(string);
-	TextOut(fhdl->hdcimage, 0, 0, string, leng);
+
+#ifdef UNICODE
+	// Unicode文字なら最初の値をとるだけでOK
+	bufSize = GetGlyphOutline(fhdl->hdcimage, string[0], GGO_BITMAP, &gm, 0, NULL, &mat);
+#else
+	// マルチバイト文字の場合
+	if (leng == 1) {
+		// 半角なら最初の値をとるだけでOK
+		bufSize = GetGlyphOutline(fhdl->hdcimage, string[0], GGO_BITMAP, &gm, 0, NULL, &mat);
+	}
+	else {
+		// 全角なら2文字をとる
+		bufSize = GetGlyphOutline(fhdl->hdcimage, (UINT)(string[0] << 8) | string[1], GGO_BITMAP, &gm, 0, NULL, &mat);
+	}
+#endif
+	if (bufSize != GDI_ERROR && gm.gmBlackBoxX < fdat->width) {
+		// 左側1pxは切れる可能性があるので意図的に避ける
+		TextOut(fhdl->hdcimage, 1, 0, string, leng); 
+	}
+	else {
+		// 右がはみ出すので普通に出力
+		TextOut(fhdl->hdcimage, 0, 0, string, leng);
+	}
+
 	getlength1(fhdl, fdat, string, leng);
 }
 

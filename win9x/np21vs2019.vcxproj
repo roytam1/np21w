@@ -171,6 +171,9 @@
     <ResourceCompile>
       <PreprocessorDefinitions>_UNICODE;UNICODE;SUPPORT_PC9821;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ResourceCompile>
+    <Manifest>
+      <EnableDpiAwareness>true</EnableDpiAwareness>
+    </Manifest>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
@@ -200,6 +203,9 @@
     <ResourceCompile>
       <PreprocessorDefinitions>_WIN64;_UNICODE;UNICODE;SUPPORT_PC9821;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ResourceCompile>
+    <Manifest>
+      <EnableDpiAwareness>true</EnableDpiAwareness>
+    </Manifest>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <ClCompile>
@@ -233,6 +239,9 @@
     <ResourceCompile>
       <PreprocessorDefinitions>_UNICODE;UNICODE;SUPPORT_PC9821;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ResourceCompile>
+    <Manifest>
+      <EnableDpiAwareness>true</EnableDpiAwareness>
+    </Manifest>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseHAXM|Win32'">
     <ClCompile>
@@ -266,6 +275,9 @@
     <ResourceCompile>
       <PreprocessorDefinitions>_UNICODE;UNICODE;SUPPORT_PC9821;SUPPORT_IDEIO;SUPPORT_LARGE_HDD;SUPPORT_LARGE_MEMORY;SUPPORT_NET;SUPPORT_LGY98;SUPPORT_WAB;SUPPORT_CL_GD5430;SUPPORT_HRTIMER;SUPPORT_VPCVHD;SUPPORT_KAI_IMAGES;SUPPORT_NVL_IMAGES;SUPPORT_PHYSICAL_CDDRV;SUPPORT_FMGEN;SUPPORT_SOUND_SB16;SUPPORT_FPU_DOSBOX;SUPPORT_FPU_DOSBOX2;SUPPORT_FPU_SOFTFLOAT;SUPPORT_GPIB;SUPPORT_PCI;SUPPORT_SCRN_DIRECT3D;SUPPORT_FAST_MEMORYCHECK;SUPPORT_PEGC;SUPPORT_ASYNC_CPU;SUPPORT_SMPU98;SUPPORT_WACOM_TABLET;SUPPORT_RS232C_FIFO;SUPPORT_NAMED_PIPE;SUPPORT_IA32_HAXM;HOOK_SYSKEY;ALLOW_MULTIRUN;USE_FPU;USE_MMX;USE_3DNOW;USE_SSE;USE_SSE2;USE_SSE3;USE_SSSE3;USE_SSE4_1;USE_SSE4_2;USE_SSE4A;USE_TSC;USE_MAME;USE_FASTPAGING;USE_VME;BIOS_IO_EMULATION;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ResourceCompile>
+    <Manifest>
+      <EnableDpiAwareness>true</EnableDpiAwareness>
+    </Manifest>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>

@@ -6,7 +6,6 @@
 #ifdef SUPPORT_PHYSICAL_CDDRV
 
 #include	<winioctl.h>
-#include	<api/ntddcdrm.h>
 
 #pragma warning (push)
 #pragma warning (disable: 4091)

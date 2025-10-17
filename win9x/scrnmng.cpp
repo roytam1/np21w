@@ -159,11 +159,11 @@ void scrnmng_setwindowsize(HWND hWnd, int width, int height)
 		int winx = (np2oscfg.winx != CW_USEDEFAULT) ? np2oscfg.winx : rectwindow.left;
 		int winy = (np2oscfg.winy != CW_USEDEFAULT) ? np2oscfg.winy : rectwindow.top;
 		int cx = width;
-		cx += np2oscfg.paddingx * 2;
+		cx += np2oscfg.paddingx * 2 * scrnstat.multiple / 8;
 		cx += rectwindow.right - rectwindow.left;
 		cx -= rectclient.right - rectclient.left;
 		int cy = height;
-		cy += np2oscfg.paddingy * 2;
+		cy += np2oscfg.paddingy * 2 * scrnstat.multiple / 8;
 		cy += rectwindow.bottom - rectwindow.top;
 		cy -= rectclient.bottom - rectclient.top;
 

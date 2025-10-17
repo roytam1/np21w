@@ -218,6 +218,7 @@ static	TCHAR		szClassName[] = _T("NP2-MainWindow");
 						1,
 #endif	// defined(SUPPORT_MULTITHREAD)
 						0, 200,
+						1
 					};
 
 		OEMCHAR		fddfolder[MAX_PATH];
@@ -409,7 +410,6 @@ char *autokey_sendbuffer = NULL;
 int autokey_sendbufferlen = 0;
 int autokey_sendbufferpos = 0;
 int autokey_lastkanastate = 0;
-int autokey_kanjimode = 1; // 0=漢字無視, 1=BASIC, 2=DOS
 
 // オートラン抑制用
 static int WM_QueryCancelAutoPlay;
@@ -3419,7 +3419,7 @@ void autoSendKey(){
 						}
 					}else if(0x80 <= sendchar){
 						// 多分2byte文字
-						if (autokey_kanjimode)
+						if (np2oscfg.knjpaste)
 						{
 							isKanji = 1;
 							if ((capslock ^ shift))
@@ -3444,7 +3444,7 @@ void autoSendKey(){
 							}
 							UINT8 sendchar2 = ((UINT8*)autokey_sendbuffer)[autokey_sendbufferpos + 1];
 							unsigned short jiscode = sjis_to_jis(((unsigned short)sendchar << 8) | (unsigned short)sendchar2);
-							UINT8 hexToAsc[] = { '0','1' ,'2' ,'3' ,'4' ,'5' ,'6' ,'7' ,'8' ,'9' ,'a' ,'b' ,'c' ,'d' ,'e' ,'f' };
+							UINT8 hexToAsc[] = { '0', '1' ,'2' ,'3' ,'4' ,'5' ,'6' ,'7' ,'8' ,'9' ,'a' ,'b' ,'c' ,'d' ,'e' ,'f' };
 							keystat_senddata(0x00 | vkeylist[hexToAsc[((jiscode >> 12) & 0xf)]]);
 							keystat_senddata(0x80 | vkeylist[hexToAsc[((jiscode >> 12) & 0xf)]]);
 							keystat_senddata(0x00 | vkeylist[hexToAsc[((jiscode >> 8) & 0xf)]]);
@@ -3453,7 +3453,7 @@ void autoSendKey(){
 							keystat_senddata(0x80 | vkeylist[hexToAsc[((jiscode >> 4) & 0xf)]]);
 							keystat_senddata(0x00 | vkeylist[hexToAsc[((jiscode) & 0xf)]]);
 							keystat_senddata(0x80 | vkeylist[hexToAsc[((jiscode) & 0xf)]]);
-							if (autokey_kanjimode == 2)
+							if (np2oscfg.knjpaste == 2)
 							{
 								// DOSは1文字毎に解除される
 								kanjimode = 0;

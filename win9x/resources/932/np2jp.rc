@@ -540,10 +540,11 @@ BEGIN
     CONTROL         "B",IDC_PAD1_RB,"Button",BS_AUTOCHECKBOX,86,60,21,10
     CONTROL         "C",IDC_PAD1_RC,"Button",BS_AUTOCHECKBOX,108,60,21,10
     CONTROL         "D",IDC_PAD1_RD,"Button",BS_AUTOCHECKBOX,130,60,21,10
-    LTEXT           "ジョイパッドID",IDC_STATIC,24,81,60,8
-    COMBOBOX        IDC_PAD1_ID,84,79,120,52,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
-    CONTROL         "ゲームポートを使う (SB16, 118)", IDC_PAD1_GAMEPORT, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 20, 100, 140, 10
-    CONTROL         "アナログ入力を使う", IDC_PAD1_ANALOG, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 32, 116, 140, 10
+    CONTROL         "POV -> X-Y軸変換", IDC_PAD1_POVXY, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 20, 75, 140, 10
+    LTEXT           "ジョイパッドID",IDC_STATIC,24,95,40,8
+    COMBOBOX        IDC_PAD1_ID,68,92,120,52,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    CONTROL         "ゲームポートを使う (SB16, 118)", IDC_PAD1_GAMEPORT, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 20, 112, 140, 10
+    CONTROL         "アナログ入力を使う", IDC_PAD1_ANALOG, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 32, 125, 140, 10
 END
 
 IDD_SNDFMGEN DIALOG 0, 0, 184, 124
@@ -1001,6 +1002,16 @@ BEGIN
             MENUITEM "&x52",     IDM_CHANGECLK_X52
             MENUITEM "&x62",     IDM_CHANGECLK_X62
             MENUITEM "&設定値に戻す", IDM_CHANGECLK_RESTORE
+        END
+        POPUP "エミュレーション速度変更 (&S)"
+        BEGIN
+            MENUITEM "&x0.5",        IDM_EMULSPEED_50
+            MENUITEM "&x0.75",       IDM_EMULSPEED_75
+            MENUITEM "&x1 (通常速度)", IDM_EMULSPEED_100
+            MENUITEM "&x1.5",        IDM_EMULSPEED_150
+            MENUITEM "&x2",          IDM_EMULSPEED_200
+            MENUITEM "&x4",          IDM_EMULSPEED_400
+            MENUITEM "&x8",          IDM_EMULSPEED_800
         END
         POPUP "ディスクイメージ作成(&N)"
         BEGIN

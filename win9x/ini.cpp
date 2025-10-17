@@ -703,6 +703,7 @@ static const PFTBL s_IniItems[] =
 #if defined(SUPPORT_NP2SCSI)
 	PFVAL("USENP2ST", PFRO_BOOL,		&np2cfg.usenp2stor),
 #endif
+	PFVAL("CPUSPEED", PFTYPE_UINT32,	&np2cfg.emuspeed),
 
 	
 

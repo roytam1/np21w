@@ -317,7 +317,11 @@ struct tagNP2Config
 
 	SINT64	cal_vofs; // 仮想カレンダ時刻オフセット(秒)
 
+#if defined(SUPPORT_NP2SCSI)
 	UINT8	usenp2stor; // np2 SCSIを使用する
+#endif
+
+	UINT32	emuspeed; // emulation speed(%)
 };
 typedef struct tagNP2Config  NP2CFG;		/*!< The define of config */
 

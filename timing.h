@@ -14,6 +14,7 @@ UINT32 timing_getmsstep(void);
 UINT timing_getcount(void);
 UINT timing_getcount_baseclock(void);
 UINT32 timing_getcount_raw(void);
+void timing_setspeed(UINT32 speed);
 
 #ifdef __cplusplus
 }

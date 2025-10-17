@@ -1018,6 +1018,42 @@ static void OnCommand(HWND hWnd, WPARAM wParam)
 #endif
 			break;
 
+		case IDM_EMULSPEED_50:
+			np2cfg.emuspeed = 50;
+			timing_setspeed(np2cfg.emuspeed * 128 / 100);
+			update |= SYS_UPDATECFG;
+			break;
+		case IDM_EMULSPEED_75:
+			np2cfg.emuspeed = 75;
+			timing_setspeed(np2cfg.emuspeed * 128 / 100);
+			update |= SYS_UPDATECFG;
+			break;
+		case IDM_EMULSPEED_100:
+			np2cfg.emuspeed = 100;
+			timing_setspeed(np2cfg.emuspeed * 128 / 100);
+			update |= SYS_UPDATECFG;
+			break;
+		case IDM_EMULSPEED_150:
+			np2cfg.emuspeed = 150;
+			timing_setspeed(np2cfg.emuspeed * 128 / 100);
+			update |= SYS_UPDATECFG;
+			break;
+		case IDM_EMULSPEED_200:
+			np2cfg.emuspeed = 200;
+			timing_setspeed(np2cfg.emuspeed * 128 / 100);
+			update |= SYS_UPDATECFG;
+			break;
+		case IDM_EMULSPEED_400:
+			np2cfg.emuspeed = 400;
+			timing_setspeed(np2cfg.emuspeed * 128 / 100);
+			update |= SYS_UPDATECFG;
+			break;
+		case IDM_EMULSPEED_800:
+			np2cfg.emuspeed = 800;
+			timing_setspeed(np2cfg.emuspeed * 128 / 100);
+			update |= SYS_UPDATECFG;
+			break;
+
 		case IDM_CHANGECLK_X2:
 			np2_DynamicChangeClockMul(2);
 			break;

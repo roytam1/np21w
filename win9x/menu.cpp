@@ -19,6 +19,7 @@
 #include "sound\s98.h"
 #endif
 #include "mousemng.h"
+#include "timing.h"
 
 extern UINT8	np2userpause;
 
@@ -317,6 +318,13 @@ void xmenu_update(HMENU hMenu)
 	
 	// Emulate
 	CheckMenuItem(hMenu, IDM_PAUSE, MF_BYCOMMAND | MFCHECK(np2userpause));
+	CheckMenuItem(hMenu, IDM_EMULSPEED_50, MF_BYCOMMAND | MFCHECK(np2cfg.emuspeed == 50));
+	CheckMenuItem(hMenu, IDM_EMULSPEED_75, MF_BYCOMMAND | MFCHECK(np2cfg.emuspeed == 75));
+	CheckMenuItem(hMenu, IDM_EMULSPEED_100, MF_BYCOMMAND | MFCHECK(np2cfg.emuspeed == 100));
+	CheckMenuItem(hMenu, IDM_EMULSPEED_150, MF_BYCOMMAND | MFCHECK(np2cfg.emuspeed == 150));
+	CheckMenuItem(hMenu, IDM_EMULSPEED_200, MF_BYCOMMAND | MFCHECK(np2cfg.emuspeed == 200));
+	CheckMenuItem(hMenu, IDM_EMULSPEED_400, MF_BYCOMMAND | MFCHECK(np2cfg.emuspeed == 400));
+	CheckMenuItem(hMenu, IDM_EMULSPEED_800, MF_BYCOMMAND | MFCHECK(np2cfg.emuspeed == 800));
 	
 	// Screen
 	const bool bFullScreen = ((g_scrnmode & SCRNMODE_FULLSCREEN) != 0);

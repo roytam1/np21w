@@ -374,11 +374,12 @@ static REG8 IOINPCALL gameport_i1480(UINT port)
 	LARGE_INTEGER li = {0};
 	QueryPerformanceCounter(&li);
 #endif
-	if(!joymng_available()){
+	{
 		REG8 joyflag = joymng_getstat();
-		if(!joymng_available()){
-			return 0xff;
-		}
+		gameport_joyflag = ((joyflag >> 2) & 0x30) | ((joyflag << 2) & 0xc0) | (gameport_joyflag & 0x0f);
+	}
+	if(!joymng_available()){
+		return 0xff;
 	}
 	joyAnalogX = joymng_getAnalogX();
 	joyAnalogY = joymng_getAnalogY();

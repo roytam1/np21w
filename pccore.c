@@ -194,6 +194,7 @@ const OEMCHAR np2version[] = OEMTEXT(NP2VER_CORE);
 #if defined(SUPPORT_NP2SCSI)
 				1,
 #endif
+				100,
 	};
 
 	PCCORE	pccore = {	PCBASECLOCK25, PCBASEMULTIPLE,
@@ -856,6 +857,10 @@ void pccore_reset(void) {
 	}
 #endif
 #endif
+
+	// エミュレーション速度セット
+	if (np2cfg.emuspeed < 1) np2cfg.emuspeed = 1;
+	timing_setspeed(np2cfg.emuspeed * 128 / 100);
 
 	// マウスリセット
 	mousemng_reset();

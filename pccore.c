@@ -195,6 +195,7 @@ const OEMCHAR np2version[] = OEMTEXT(NP2VER_CORE);
 				1,
 #endif
 				100,
+				TEXT("")
 	};
 
 	PCCORE	pccore = {	PCBASECLOCK25, PCBASEMULTIPLE,
@@ -436,7 +437,7 @@ void pccore_init(void) {
 	sxsi_initialize();
 
 	font_initialize();
-	font_load(np2cfg.fontfile, TRUE);
+	font_load(np2cfg.fontfile, TRUE, np2cfg.fontface);
 	maketext_initialize();
 	makegrph_initialize();
 	gdcsub_initialize();

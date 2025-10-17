@@ -23,7 +23,7 @@ extern	UINT8	__font[FONTMEMORYSIZE];
 
 void font_initialize(void);
 void font_setchargraph(BOOL epson);
-UINT8 font_load(const OEMCHAR *filename, BOOL force);
+UINT8 font_load(const OEMCHAR *filename, BOOL force, const OEMCHAR* defaultfontface);
 
 #if defined(SUPPORT_TEXTHOOK)
 unsigned short font_Jis2Sjis( unsigned short jis );

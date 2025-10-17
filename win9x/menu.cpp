@@ -236,6 +236,8 @@ void sysmenu_update(HMENU hMenu)
 	CheckMenuItem(hMenu, IDM_SCRNMUL10, MF_BYCOMMAND | MFCHECK(scrnmul == 10));
 	CheckMenuItem(hMenu, IDM_SCRNMUL12, MF_BYCOMMAND | MFCHECK(scrnmul == 12));
 	CheckMenuItem(hMenu, IDM_SCRNMUL16, MF_BYCOMMAND | MFCHECK(scrnmul == 16));
+	CheckMenuItem(hMenu, IDM_SCRNMUL24, MF_BYCOMMAND | MFCHECK(scrnmul == 24));
+	CheckMenuItem(hMenu, IDM_SCRNMUL32, MF_BYCOMMAND | MFCHECK(scrnmul == 32));
 }
 
 

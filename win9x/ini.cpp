@@ -704,7 +704,7 @@ static const PFTBL s_IniItems[] =
 	PFVAL("USENP2ST", PFRO_BOOL,		&np2cfg.usenp2stor),
 #endif
 	PFVAL("CPUSPEED", PFTYPE_UINT32,	&np2cfg.emuspeed),
-
+	PFSTR("fontface", PFRO_STR,			np2cfg.fontface),
 	
 
 	// OS依存？
@@ -850,7 +850,7 @@ static const PFTBL s_IniItems[] =
 	PFVAL("midiaint", PFRO_SINT32,		&np2oscfg.midiaint), // MIDI Active Sensingを送る間隔（ミリ秒）
 
 	PFVAL("knjpaste", PFTYPE_UINT8,		&np2oscfg.knjpaste), // クリップボードからテキスト貼り付けの際の漢字の扱い（0=漢字無視, 1=BASIC, 2=FEPなしDOS）
-		
+
 };
 
 //! .ini 拡張子

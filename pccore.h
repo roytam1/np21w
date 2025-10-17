@@ -322,6 +322,8 @@ struct tagNP2Config
 #endif
 
 	UINT32	emuspeed; // emulation speed(%)
+
+	OEMCHAR	fontface[256];
 };
 typedef struct tagNP2Config  NP2CFG;		/*!< The define of config */
 

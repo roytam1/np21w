@@ -285,14 +285,19 @@ static void patchextfnt(UINT8 *ptr, const UINT8 *fnt) {			// 2c24-2c6f
 #define COPYGLYPH_LEFTPART		0x1		// 16 -> 8のとき縮小せず左半分をコピー
 #define COPYGLYPH_RIGHTPART		0x2		// 16 -> 8のとき縮小せず右半分をコピー
 #define COPYGLYPH_ADJUSTPART	0x4		// 16 -> 8のときデータがあるX座標を起点にコピー
-#define COPYGLYPH_ADJUSTPARTR	0x8		// 16 -> 8のときデータがあるX座標を起点にコピー（左揃え）
+#define COPYGLYPH_ADJUSTPARTR	0x8		// 16 -> 8のときデータがあるX座標を起点にコピー（右揃え）
 #define COPYGLYPH_WITHVMARK		0x10	// コピー後に濁点を付ける
 #define COPYGLYPH_WITHPMARK		0x20	// コピー後に半濁点を付ける
+#define COPYGLYPH_REVERSEXSH1	0x40	// 左右反転して1pxシフトする
+#define COPYGLYPH_7TO6			0x80	// 幅を1px縮小
 
 // 文字コピー
 static void copyglyph(UINT8* ptr, UINT srccode, int srcwidth, UINT dstcode, int dstwidth, int copyflag) {
 
 	int i;
+	int stride = 2048 / 8;
+	int stridedst = 2048 / 8;
+	UINT8 reversebuf[16 * 2];
 	UINT8* srcptr;
 	UINT8* dstptr;
 	UINT8* dstptrbase;
@@ -313,12 +318,57 @@ static void copyglyph(UINT8* ptr, UINT srccode, int srcwidth, UINT dstcode, int 
 		dstptr = ptr + (2048 / 16 - 1 - jisy) * (2048 / 8 * 16) + jisx * 2;
 	}
 	dstptrbase = dstptr;
+	if (copyflag & COPYGLYPH_REVERSEXSH1) {
+		memset(reversebuf, 0xff, sizeof(reversebuf));
+		if (srcwidth == 8) {
+			UINT8 tmp;
+			UINT8 bitstate = 0xff;
+			for (i = 0; i < 16; i++) {
+				tmp = *srcptr;
+				tmp = ((tmp & 0x0f) << 4) | ((tmp >> 4) & 0x0f);
+				tmp = ((tmp & 0x33) << 2) | ((tmp >> 2) & 0x33);
+				tmp = ((tmp & 0x55) << 1) | ((tmp >> 1) & 0x55);
+				bitstate &= tmp;
+				reversebuf[i * 2] = tmp;
+				srcptr += stride;
+			}
+			if (bitstate & 0x01) {
+				// 右端が空いていれば1pxずらす
+				for (i = 0; i < 16; i++) {
+					*(UINT8*)(reversebuf + i * 2) = (*(UINT8*)(reversebuf + i * 2) >> 1) | 0x80;
+				}
+			}
+		}
+		else if (srcwidth == 16) {
+			UINT16 tmp;
+			UINT16 bitstate = 0xffff;
+			for (i = 0; i < 16; i++) {
+				tmp = *((UINT16*)srcptr);
+				tmp = ((tmp & 0x00ff) << 8) | ((tmp >> 8) & 0x00ff);
+				tmp = ((tmp & 0x0f0f) << 4) | ((tmp >> 4) & 0x0f0f);
+				tmp = ((tmp & 0x3333) << 2) | ((tmp >> 2) & 0x3333);
+				tmp = ((tmp & 0x5555) << 1) | ((tmp >> 1) & 0x5555);
+				bitstate &= tmp;
+				reversebuf[i * 2] = (tmp >> 8) & 0xff;
+				reversebuf[i * 2 + 1] = tmp & 0xff;
+				srcptr += stride;
+			}
+			if (bitstate & 0x0001) {
+				// 右端が空いていれば1pxずらす
+				for (i = 0; i < 16; i++) {
+					*((UINT16*)(reversebuf + i * 2)) = (*((UINT16*)(reversebuf + i * 2)) >> 1) | 0x8000;
+				}
+			}
+		}
+		srcptr = reversebuf;
+		stride = 2;
+	}
 	if (srcwidth == 8 && dstwidth == 8) {
 		// 半角→半角
 		for (i = 0; i < 16; i++) {
 			*dstptr = *srcptr;
-			srcptr += 2048 / 8;
-			dstptr += 2048 / 8;
+			srcptr += stride;
+			dstptr += stridedst;
 		}
 	}
 	else if (srcwidth == 16 && dstwidth == 16) {
@@ -326,8 +376,8 @@ static void copyglyph(UINT8* ptr, UINT srccode, int srcwidth, UINT dstcode, int 
 		for (i = 0; i < 16; i++) {
 			*dstptr = *srcptr;
 			*(dstptr + 1) = *(srcptr + 1);
-			srcptr += 2048 / 8;
-			dstptr += 2048 / 8;
+			srcptr += stride;
+			dstptr += stridedst;
 		}
 	}
 	else if (srcwidth == 8 && dstwidth == 16) {
@@ -335,8 +385,8 @@ static void copyglyph(UINT8* ptr, UINT srccode, int srcwidth, UINT dstcode, int 
 		for (i = 0; i < 16; i++) {
 			*dstptr = *srcptr;
 			*(dstptr + 1) = 0xff;
-			srcptr += 2048 / 8;
-			dstptr += 2048 / 8;
+			srcptr += stride;
+			dstptr += stridedst;
 		}
 	}
 	else if (srcwidth == 16 && dstwidth == 8) {
@@ -345,16 +395,16 @@ static void copyglyph(UINT8* ptr, UINT srccode, int srcwidth, UINT dstcode, int 
 			// 左側のみ
 			for (i = 0; i < 16; i++) {
 				*dstptr = *srcptr;
-				srcptr += 2048 / 8;
-				dstptr += 2048 / 8;
+				srcptr += stride;
+				dstptr += stridedst;
 			}
 		}
 		else if(copyflag & COPYGLYPH_RIGHTPART) {
 			// 右側のみ
 			for (i = 0; i < 16; i++) {
 				*dstptr = *(srcptr + 1);
-				srcptr += 2048 / 8;
-				dstptr += 2048 / 8;
+				srcptr += stride;
+				dstptr += stridedst;
 			}
 		}
 		else if (copyflag & (COPYGLYPH_ADJUSTPART | COPYGLYPH_ADJUSTPARTR)) {
@@ -366,7 +416,7 @@ static void copyglyph(UINT8* ptr, UINT srccode, int srcwidth, UINT dstcode, int 
 			UINT8* srcptr2 = srcptr;
 			for (i = 0; i < 16; i++) {
 				bitstate &= (UINT16)(*srcptr2) << 8 | *(srcptr2 + 1);
-				srcptr2 += 2048 / 8;
+				srcptr2 += stride;
 			}
 			bitstateTmp = bitstate;
 			for (beginX = 0; beginX < 16; beginX++) {
@@ -398,8 +448,8 @@ static void copyglyph(UINT8* ptr, UINT srccode, int srcwidth, UINT dstcode, int 
 					src1 |= 0xff >> (8 - (beginX - 8));
 				}
 				*dstptr = src1;
-				srcptr += 2048 / 8;
-				dstptr += 2048 / 8;
+				srcptr += stride;
+				dstptr += stridedst;
 			}
 		}
 		else {
@@ -413,39 +463,88 @@ static void copyglyph(UINT8* ptr, UINT srccode, int srcwidth, UINT dstcode, int 
 				src2 &= 0x55;
 				*dstptr = ((src1 << 1) & 0x80) | ((src1 << 2) & 0x40) | ((src1 << 3) & 0x20) | ((src1 << 4) & 0x10) |
 					((src2 >> 3) & 0x08) | ((src2 >> 2) & 0x04) | ((src2 >> 1) & 0x02) | ((src2 >> 0) & 0x01);
-				srcptr += 2048 / 8;
-				dstptr += 2048 / 8;
+				srcptr += stride;
+				dstptr += stridedst;
 			}
 		}
 	}
 	dstptr = dstptrbase;
 	if (copyflag & COPYGLYPH_WITHVMARK) {
-		dstptr += (2048 / 8) * 14;
+		dstptr += stridedst * 14;
 		if (dstwidth == 16) {
 			dstptr++; // 右側につける
 		}
 		*dstptr &= 0xfa;
 		*dstptr |= 0x02;
-		dstptr += 2048 / 8;
+		dstptr += stridedst;
 		*dstptr &= 0xfa;
 		*dstptr |= 0x02;
 	}
 	else if (copyflag & COPYGLYPH_WITHPMARK) {
-		dstptr += (2048 / 8) * 12;
+		dstptr += stridedst * 12;
 		if (dstwidth == 16) {
 			dstptr++; // 右側につける
 		}
 		*dstptr &= 0xfd;
 		*dstptr |= 0x05;
-		dstptr += 2048 / 8;
+		dstptr += stridedst;
 		*dstptr &= 0xfa;
 		*dstptr |= 0x02;
-		dstptr += 2048 / 8;
+		dstptr += stridedst;
 		*dstptr &= 0xfa;
 		*dstptr |= 0x02;
-		dstptr += 2048 / 8;
+		dstptr += stridedst;
 		*dstptr &= 0xfd;
 		*dstptr |= 0x05;
+	}
+	dstptr = dstptrbase;
+	if (copyflag & COPYGLYPH_7TO6) {
+		memset(reversebuf, 0xff, sizeof(reversebuf));
+		if (dstwidth == 8) {
+			UINT8 tmp;
+			UINT8 bitstate = 0xff;
+			UINT8 bitsame = 0x00;
+			for (i = 0; i < 16; i++) {
+				tmp = *dstptr;
+				bitstate &= tmp;
+				bitsame |= tmp ^ (tmp << 1);
+				dstptr += stridedst;
+			}
+			if (bitstate & 0x01) {
+				// 右端が空いていれば何もしなくてよい
+			}
+			else if ((bitstate & 0xc0) == 0xc0) {
+				// 左端が2px空いていれば左へ1pxずらす
+				dstptr = dstptrbase;
+				for (i = 0; i < 16; i++) {
+					*dstptr = (*dstptr << 1) | 0x01;
+					dstptr += stridedst;
+				}
+			}
+			else {
+				// 中央に同じ内容が連続していたらそこを削る
+				dstptr = dstptrbase;
+				if (!(bitsame & 0x08)) {
+					for (i = 0; i < 16; i++) {
+						tmp = *dstptr;
+						tmp = (tmp & 0xf0) | ((tmp & 0x7) << 1) | 0x01;
+						*dstptr = tmp;
+						dstptr += stridedst;
+					}
+				}
+				else if (!(bitsame & 0x10)) {
+					for (i = 0; i < 16; i++) {
+						tmp = *dstptr;
+						tmp = (tmp & 0xe0) | ((tmp & 0xf) << 1) | 0x01;
+						*dstptr = tmp;
+						dstptr += stridedst;
+					}
+				}
+			}
+		}
+		else if (srcwidth == 16) {
+			// 未実装
+		}
 	}
 }
 
@@ -497,10 +596,16 @@ void makepc98bmp(const OEMCHAR *filename, const OEMCHAR* fontface) {
 	copyglyph(ptr, 0x4a2c, 16, 0xf6, 8, 0); // 分
 	copyglyph(ptr, 0x4943, 16, 0xf7, 8, 0); // 秒
 	for (i = 0; i < 0x7f - 0x21; i++) {
-		copyglyph(ptr, 0x21 + i, 8, 0x2921 + i, 16, 0); // 数字英字など
+		copyglyph(ptr, 0x21 + i, 8, 0x2921 + i, 8, 0); // 数字英字など
+	}
+	for (i = 0x20; i < 0x39; i++) {
+		copyglyph(ptr, 0x21 + i, 8, 0x2921 + i, 8, COPYGLYPH_7TO6); // ascii部分だけ可能なら狭幅にする
+	}
+	for (i = 0x40; i < 0x59; i++) {
+		copyglyph(ptr, 0x21 + i, 8, 0x2921 + i, 8, COPYGLYPH_7TO6); // ascii部分だけ可能なら狭幅にする
 	}
 	for (i = 0; i < 0x60 - 0x21; i++) {
-		copyglyph(ptr, 0xa1 + i, 8, 0x2a21 + i, 16, 0); // カナなど
+		copyglyph(ptr, 0xa1 + i, 8, 0x2a21 + i, 8, 0); // カナなど
 	}
 	copyglyph(ptr, 0x2570, 16, 0x2a60, 8, 0); // ヰ
 	copyglyph(ptr, 0x2571, 16, 0x2a61, 8, 0); // ヱ
@@ -528,6 +633,7 @@ void makepc98bmp(const OEMCHAR *filename, const OEMCHAR* fontface) {
 	copyglyph(ptr, 0x215a, 16, 0x2b7c, 8, COPYGLYPH_ADJUSTPARTR); // 【
 	copyglyph(ptr, 0x215b, 16, 0x2b7d, 8, COPYGLYPH_ADJUSTPART); // 】
 	copyglyph(ptr, '-', 8, 0x2b7e, 8, 0); // -
+	copyglyph(ptr, '/', 8, 0xfc, 8, COPYGLYPH_REVERSEXSH1); // バックスラッシュ
 #endif
 
 	fh = file_create(filename);

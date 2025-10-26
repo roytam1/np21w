@@ -454,11 +454,11 @@ static void update_backbuffer2size(UINT8 scrnmode){
 		UINT backsurf2widthbase;
 		UINT backsurf2heightbase;
 		if (scrnmode & SCRNMODE_ROTATE) {
-			backsurf2widthbase = max(scrnstat.height + scrnstat.extend * 2, 200);
-			backsurf2heightbase = max(scrnstat.width + scrnstat.extend * 2, 320); 
+			backsurf2widthbase = max(scrnstat.height + 2, 200); // 常時extendがある前提で確保
+			backsurf2heightbase = max(scrnstat.width + 2, 320); // 常時extendがある前提で確保 
 		}else{
-			backsurf2widthbase = max(scrnstat.width + scrnstat.extend * 2, 320);
-			backsurf2heightbase = max(scrnstat.height + scrnstat.extend * 2, 200);
+			backsurf2widthbase = max(scrnstat.width + 2, 320); // 常時extendがある前提で確保
+			backsurf2heightbase = max(scrnstat.height + 2, 200); // 常時extendがある前提で確保
 		}
 		d3d.backsurf2mul = 1;
 		switch(current_d3d_imode){

@@ -347,7 +347,21 @@ void sound_sync(void)
 	{
 		return;
 	}
+#ifdef SNDCSEC_TRYENTER
+	if (length < 1024)
+	{
+		if (!SNDCSEC_TRYENTER)
+		{
+			return;
+		}
+	}
+	else 
+	{
+		SNDCSEC_ENTER;
+	}
+#else
 	SNDCSEC_ENTER;
+#endif
 #if defined(SUPPORT_WAVEREC)
 	if (sndstream.rec)
 	{

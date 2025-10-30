@@ -850,6 +850,7 @@ static const PFTBL s_IniItems[] =
 	PFVAL("midiaint", PFRO_SINT32,		&np2oscfg.midiaint), // MIDI Active Sensingを送る間隔（ミリ秒）
 
 	PFVAL("knjpaste", PFTYPE_UINT8,		&np2oscfg.knjpaste), // クリップボードからテキスト貼り付けの際の漢字の扱い（0=漢字無視, 1=BASIC, 2=FEPなしDOS）
+	PFVAL("scrscfix", PFRO_UINT8,		&np2oscfg.scrscfix), // 画面拡大転送時の補正（0=自動, 1=通常転送, 2=NVDIA向け）
 
 };
 

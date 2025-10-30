@@ -706,11 +706,21 @@ BRESULT scrnmngD3D_check() {
 	if(!(test_d3d = Direct3DCreate9(D3D_SDK_VERSION))){
 		goto scre_err2;
 	}
-	if(test_d3d->GetAdapterIdentifier(D3DADAPTER_DEFAULT, 0, &identifier) == D3D_OK){
-		if(identifier.VendorId == 0x10DE){
-			// NVIDIA Adapter
-			nvidia_fixflag = 1;
+	if (np2oscfg.scrscfix == 0) {
+		if (test_d3d->GetAdapterIdentifier(D3DADAPTER_DEFAULT, 0, &identifier) == D3D_OK) {
+			if (identifier.VendorId == 0x10DE) {
+				// NVIDIA Adapter
+				nvidia_fixflag = 1;
+			}
 		}
+	}
+	else if (np2oscfg.scrscfix == 2) {
+		// NVIDIAŒü‚¯
+		nvidia_fixflag = 1;
+	}
+	else {
+		// ˆê”ÊŒü‚¯
+		nvidia_fixflag = 0;
 	}
 
 	ZeroMemory(&test_d3dparam, sizeof(test_d3dparam));

@@ -145,6 +145,8 @@ typedef struct {
 	UINT32	midiaint; // MIDI Active Sensingを送る間隔（ミリ秒）
 
 	UINT8	knjpaste; // クリップボードからテキスト貼り付けの際の漢字の扱い（0=漢字無視, 1=BASIC, 2=FEPなしDOS）
+
+	UINT8	scrscfix; // 画面拡大転送時の補正（0=自動, 1=通常転送, 2=NVDIA向け）
 } NP2OSCFG;
 
 

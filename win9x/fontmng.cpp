@@ -287,7 +287,7 @@ static void fontmng_getchar(FNTMNG fhdl, FNTDAT fdat, const OEMCHAR *string) {
 		int ofsx = 0;
 		int ofsy = 0;
 		int realY = 0;
-		if (gm.gmptGlyphOrigin.x + gm.gmBlackBoxX > fdat->width - 1) {
+		if (gm.gmptGlyphOrigin.x + gm.gmBlackBoxX > fdat->width) {
 			ofsx = fdat->width - 1 - (gm.gmptGlyphOrigin.x + gm.gmBlackBoxX);
 			if (ofsx < -gm.gmptGlyphOrigin.x) ofsx = -gm.gmptGlyphOrigin.x;
 		}

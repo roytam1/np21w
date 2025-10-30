@@ -18,6 +18,7 @@ extern CRITICAL_SECTION g_sndcsec;
 
 #define	SNDCSEC_INIT	InitializeCriticalSection(&g_sndcsec)
 #define	SNDCSEC_TERM	DeleteCriticalSection(&g_sndcsec)
+#define	SNDCSEC_TRYENTER	TryEnterCriticalSection(&g_sndcsec)
 #define	SNDCSEC_ENTER	EnterCriticalSection(&g_sndcsec)
 #define	SNDCSEC_LEAVE	LeaveCriticalSection(&g_sndcsec)
 

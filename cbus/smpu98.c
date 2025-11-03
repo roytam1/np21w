@@ -127,6 +127,9 @@ static const UINT8 shortmsgleng[0x10] = {
 static const UINT8 hclk_step1[4][4] = {{0, 0, 0, 0}, {1, 0, 0, 0},
 									{1, 0, 1, 0}, {1, 1, 1, 0}};
 
+// XXX: 根拠なし　とりあえず大きめの値にしておく
+#define SMPU98_WRITEBUFFER	2048
+static int smpu98_writecounter = 0;
 
 static void makeintclock(void) {
 
@@ -440,15 +443,39 @@ void smpu98_midiint(NEVENTITEM item) {
 void smpu98_midiwaitout(NEVENTITEM item) {
 
 //	TRACE_("midi ready", 0);
-	smpu98.status &= ~MIDIOUT_BUSY;
+	if (smpu98_writecounter > 0) {
+		smpu98_writecounter--;
+	}
+	if (smpu98_writecounter < SMPU98_WRITEBUFFER) {
+		// カウンタがバッファサイズより小さいならBUSY解除
+		smpu98.status &= ~MIDIOUT_BUSY;
+	}
+	if (smpu98_writecounter > 0) {
+		// カウンタが0になるまで再登録
+		nevent_set(NEVENT_MIDIWAIT, smpu98.xferclock, smpu98_midiwaitout, NEVENT_RELATIVE);
+	}
 	(void)item;
 }
 
 static void midiwait(SINT32 waitclock) {
 
-	if (!nevent_iswork(NEVENT_MIDIWAIT)) {
+	// 転送が多すぎてバッファを溢れるようならBUSYに変える
+	smpu98_writecounter += waitclock / smpu98.xferclock;
+	if (smpu98_writecounter > SMPU98_WRITEBUFFER) {
 		smpu98.status |= MIDIOUT_BUSY;
-		nevent_set(NEVENT_MIDIWAIT, waitclock, smpu98_midiwaitout, NEVENT_ABSOLUTE);
+	}
+	if (!nevent_iswork(NEVENT_MIDIWAIT)) {
+		nevent_set(NEVENT_MIDIWAIT, smpu98.xferclock, smpu98_midiwaitout, NEVENT_ABSOLUTE);
+	}
+}
+
+static void midicmdwait(SINT32 waitclock) {
+
+	// 一定時間強制BUSY
+	smpu98_writecounter++;
+	smpu98.status |= MIDIOUT_BUSY;
+	if (!nevent_iswork(NEVENT_MIDIWAIT)) {
+		nevent_set(NEVENT_MIDIWAIT, smpu98.xferclock, smpu98_midiwaitout, NEVENT_ABSOLUTE);
 	}
 }
 
@@ -1127,7 +1154,7 @@ TRACEOUT(("smpu98 out %.4x %.2x", port, dat));
 				setrecvdata(MPUMSG_ACK);
 			}
 		}
-		midiwait(pccore.realclock / 10000);
+		midicmdwait(pccore.realclock / 10000);
 	}
 	(void)port;
 }
@@ -1679,7 +1706,8 @@ void smpu98_midipanic(void) {
 
 void smpu98_changeclock(void) {
 	
-	smpu98.xferclock = pccore.realclock / 3125;
+	smpu98.xferclock = pccore.realclock / 31250;
+
 	makeintclock();
 }
 

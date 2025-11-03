@@ -110,7 +110,7 @@ const OEMCHAR np2version[] = OEMTEXT(NP2VER_CORE);
 				0, 0, {1, 1, 6, 1, 8, 1},
 				128, 0x00, 1, 
 #if defined(SUPPORT_ASYNC_CPU)
-				0, 100,
+				0, 0,
 #endif
 				1,
 #if defined(SUPPORT_IDEIO)
@@ -856,6 +856,8 @@ void pccore_reset(void) {
 	}else{
 		asynccpu_clockpersec.QuadPart = 0;
 	}
+	pccore_asynccpu_initialize();
+	pccore_asynccpu_updatesettings(np2cfg.asynclvl);
 #endif
 #endif
 
@@ -1085,21 +1087,58 @@ void pccore_postevent(UINT32 event) {	// yet!
 }
 
 #if defined(SUPPORT_ASYNC_CPU)
-UINT32 pccore_asynccpu_drawskip = 1;
-UINT32 pccore_asynccpu_nowait = 0;
-UINT32 pccore_asynccpu_lastTimingValue = 0;
-UINT32 pccore_asynccpu_asyncOffset = 0;
-int pccore_asynccpu_lastTimingValid = 0;
-int pccore_asynccpu_screendisp = 0;
-#define LATECOUNTER_THRESHOLD_DOWN	6
-#define LATECOUNTER_THRESHOLD_UP	2
+ASYNCCPUSTAT pccore_asynccpustat = {0};
+void pccore_asynccpu_initialize(void)
+{
+	pccore_asynccpustat.drawskip = 1;
+	pccore_asynccpustat.nowait = 0;
+	pccore_asynccpustat.lastTimingValue = 0;
+	pccore_asynccpustat.asyncTarget = 0;
+	pccore_asynccpustat.lastTimingValid = 0;
+	pccore_asynccpustat.screendisp = 0;
+	pccore_asynccpustat.threshold_down = 2;
+	pccore_asynccpustat.threshold_up = 5;
+	memset(pccore_asynccpustat.clockUpTbl, 0, sizeof(pccore_asynccpustat.clockUpTbl));
+	memset(pccore_asynccpustat.clockDownTbl, 0, sizeof(pccore_asynccpustat.clockDownTbl));
+}
+void pccore_asynccpu_updatesettings(int asyncLevel)
+{
+	int i;
+	int upBaseValue;
+	int downBaseValue;
+
+	if (asyncLevel < 0) asyncLevel = 0;
+	if (asyncLevel > 100) asyncLevel = 100;
+	pccore_asynccpustat.asyncTarget = asyncLevel;
+
+	// 上げ下げの頻度を設定　安定性を考慮して最低1はつける
+	pccore_asynccpustat.threshold_down = (6 * asyncLevel + 1 * (100 - asyncLevel)) / 100;
+	pccore_asynccpustat.threshold_up = (1 * asyncLevel + 6 * (100 - asyncLevel)) / 100;
+	if (pccore_asynccpustat.threshold_down < 1) pccore_asynccpustat.threshold_down = 1;
+	if (pccore_asynccpustat.threshold_up < 1) pccore_asynccpustat.threshold_up = 1;
+
+	// 現在のクロック倍率に対してどれだけクロック倍率を上げ下げするかのテーブル
+	upBaseValue = (8 * asyncLevel + 4 * (100 - asyncLevel)) / 100; // ベース値はクロック倍率40に対してどれだけ上げるかの値とする
+	downBaseValue = (10 * asyncLevel + 15 * (100 - asyncLevel)) / 100; // ベース値はクロック倍率40に対してどれだけ下げるかの値とする
+	for (i = 1; i < ASYNCCPU_CLOCKTABLE_MAX; i++) {
+		pccore_asynccpustat.clockUpTbl[i] = (upBaseValue * i + 39) / 40; // 最低1はつけたいので切り上げ
+		pccore_asynccpustat.clockDownTbl[i] = (downBaseValue * i + 39) / 40; // 最低1はつけたいので切り上げ
+		if (pccore_asynccpustat.clockDownTbl[i] > i - 1) {
+			// クロック倍率0以下は不可
+			pccore_asynccpustat.clockDownTbl[i] = i - 1;
+		}
+	}
+	// クロック倍率0はあり得ないが念のため値は書いておく
+	pccore_asynccpustat.clockDownTbl[0] = 0;
+	pccore_asynccpustat.clockUpTbl[0] = 1;
+}
 static void pccore_asynccpu()
 {
 	// 非同期CPU処理
 	static int latecount = 0;
 	static int latecount2 = 0;
 	static unsigned int hltflag = 0;
-	if (np2cfg.asynccpu && !pccore_asynccpu_nowait)
+	if (np2cfg.asynccpu && !pccore_asynccpustat.nowait)
 	{
 		int remclkcnt = INT_MAX;
 
@@ -1124,57 +1163,38 @@ static void pccore_asynccpu()
 #endif
 		if (!asynccpu_fastflag && !asynccpu_lateflag)
 		{
-			UINT32 timimg = pccore_asynccpu_lastTimingValue;
+			UINT32 timimg = pccore_asynccpustat.lastTimingValue;
 			UINT32 shdrawskip = 1 << TIMING_MSSHIFT;
 			if (timimg > shdrawskip)
 			{
 				latecount++;
-				if (latecount > +LATECOUNTER_THRESHOLD_DOWN)
+				if (latecount > pccore_asynccpustat.threshold_down)
 				{
 					if (pccore.multiple > 1)
 					{
 						UINT32 oldmultiple = pccore.multiple;
-						if (pccore.multiple > 40)
+						UINT32 changeValue = pccore_asynccpustat.clockDownTbl[pccore.multiple < ASYNCCPU_CLOCKTABLE_MAX ? pccore.multiple : ASYNCCPU_CLOCKTABLE_MAX - 1];
+						if (timimg > 2 * shdrawskip)
 						{
-							if (timimg > 2 * shdrawskip)
-							{
-								pccore.multiple -= 10;
-							}
-							else if (timimg > 15 * shdrawskip / 10)
-							{
-								pccore.multiple -= 5;
-							}
-							else if (timimg > 12 * shdrawskip / 10)
-							{
-								pccore.multiple -= 3;
-							}
-							else
-							{
-								pccore.multiple -= 1;
-							}
+							// そのまま
 						}
-						else if (pccore.multiple > 20)
+						else if (timimg > 15 * shdrawskip / 10)
 						{
-							if (timimg > 2 * shdrawskip)
-							{
-								pccore.multiple -= 6;
-							}
-							else if (timimg > 15 * shdrawskip / 10)
-							{
-								pccore.multiple -= 3;
-							}
-							else if (timimg > 12 * shdrawskip / 10)
-							{
-								pccore.multiple -= 2;
-							}
-							else
-							{
-								pccore.multiple -= 1;
-							}
+							changeValue = (changeValue + 1) / 2; // 1/2
+						}
+						else if (timimg > 12 * shdrawskip / 10)
+						{
+							changeValue = (changeValue + 2) / 3; // 1/3
 						}
 						else
 						{
-							pccore.multiple -= 1;
+							changeValue = (changeValue + 9) / 10; // 1/10
+						}
+						if (pccore.multiple > changeValue) {
+							pccore.multiple -= changeValue;
+						}
+						else {
+							pccore.multiple = 1;
 						}
 						pccore.realclock = pccore.baseclock * pccore.multiple;
 						pcm86_changeclock(oldmultiple);
@@ -1190,36 +1210,42 @@ static void pccore_asynccpu()
 						mouseif_changeclock();
 						gdc_updateclock();
 					}
-
 					latecount = 0;
 				}
 				asynccpu_lateflag = 1;
 			}
 			else
 			{
-				if (!hltflag && pccore_asynccpu_screendisp)
+				if (!hltflag && pccore_asynccpustat.screendisp)
 				{
 					latecount--;
-					if (latecount < -LATECOUNTER_THRESHOLD_UP)
+					if (latecount < -pccore_asynccpustat.threshold_up)
 					{
 						if (pccore.multiple < pccore.maxmultiple)
 						{
 							UINT32 oldmultiple = pccore.multiple;
+							UINT32 changeValue = pccore_asynccpustat.clockUpTbl[pccore.multiple < ASYNCCPU_CLOCKTABLE_MAX ? pccore.multiple : ASYNCCPU_CLOCKTABLE_MAX - 1];
 							if (timimg < 5 * shdrawskip / 10)
 							{
-								pccore.multiple += 4;
+								// そのまま
 							}
 							else if (timimg < 7 * shdrawskip / 10)
 							{
-								pccore.multiple += 3;
+								changeValue = (changeValue * 3 + 3) / 4; // 3/4
 							}
 							else if (timimg < 8 * shdrawskip / 10)
 							{
-								pccore.multiple += 2;
+								changeValue = (changeValue + 1) / 2; // 1/2
 							}
 							else
 							{
-								pccore.multiple += 1;
+								changeValue = (changeValue + 3) / 4; // 1/4
+							}
+							if (pccore.multiple + changeValue < pccore.maxmultiple) {
+								pccore.multiple += changeValue;
+							}
+							else {
+								pccore.multiple = pccore.maxmultiple;
 							}
 							pccore.realclock = pccore.baseclock * pccore.multiple;
 							pcm86_changeclock(oldmultiple);

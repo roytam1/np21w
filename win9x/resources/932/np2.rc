@@ -1041,14 +1041,11 @@ BEGIN
         MENUITEM "&No wait",                    IDM_NOWAIT
         MENUITEM "&CPU clock stabilizer",       IDM_CPUSTABILIZER
         MENUITEM "Dyn&amic CPU clock adjustment",	IDM_ASYNCCPU
-        //POPUP "Dynamic CPU clock &target"
-        //BEGIN
-        //    MENUITEM "100%", IDM_ASYNCCPU_MAX
-        //    MENUITEM "70%", IDM_ASYNCCPU_70
-        //    MENUITEM "50%", IDM_ASYNCCPU_50
-        //    MENUITEM "30%", IDM_ASYNCCPU_30
-        //    MENUITEM "20%", IDM_ASYNCCPU_20
-        //END
+        POPUP "Dynamic CPU clock &priority"
+        BEGIN
+            MENUITEM "Performance", IDM_ASYNCCPU_LEVEL_MAX
+            MENUITEM "Timing stability", IDM_ASYNCCPU_LEVEL_MIN
+        END
         MENUITEM SEPARATOR
         //MENUITEM "&Auto frame",                 IDM_AUTOFPS
         MENUITEM "F&ull frame",                 IDM_60FPS

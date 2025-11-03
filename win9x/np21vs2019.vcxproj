@@ -726,9 +726,7 @@
     <ClCompile Include="ext\opna.cpp" />
     <ClCompile Include="ext\romeo\juliet.cpp" />
     <ClCompile Include="ext\scci\scciif.cpp" />
-    <ClCompile Include="fontmng.cpp">
-      <WholeProgramOptimization Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</WholeProgramOptimization>
-    </ClCompile>
+    <ClCompile Include="fontmng.cpp" />
     <ClCompile Include="ini.cpp" />
     <ClCompile Include="joymng.cpp" />
     <ClCompile Include="menu.cpp" />

@@ -698,11 +698,8 @@
 #define IDM_SCREENOPT                   40514
 #define IDM_CPUSTABILIZER               40515
 #define IDM_ASYNCCPU                    40516
-#define IDM_ASYNCCPU_MAX                40520
-#define IDM_ASYNCCPU_20                 40522
-#define IDM_ASYNCCPU_30                 40523
-#define IDM_ASYNCCPU_50                 40525
-#define IDM_ASYNCCPU_70                 40527
+#define IDM_ASYNCCPU_LEVEL_MIN          40530
+#define IDM_ASYNCCPU_LEVEL_MAX          40539
 #define IDM_KEY                         40601
 #define IDM_JOY1                        40602
 #define IDM_JOY2                        40603

@@ -108,20 +108,6 @@
 
 #include	<process.h>
 
-#if defined(SUPPORT_ASYNC_CPU)
-extern "C" UINT32 pccore_asynccpu_drawskip;
-extern "C" UINT32 pccore_asynccpu_nowait;
-extern "C" UINT32 pccore_asynccpu_lastTimingValue;
-extern "C" UINT32 pccore_asynccpu_asyncOffset;
-
-static void setasyncoffset()
-{
-	UINT32 asynctgt = np2cfg.asynctgt;
-	if (asynctgt > 100) asynctgt = 100;
-	if (asynctgt < 1) asynctgt = 1;
-	pccore_asynccpu_asyncOffset = TIMING_MSSHIFT_VALUE * (100 - asynctgt) / 100;
-}
-#endif
 extern bool scrnmng_create_pending; // グラフィックレンダラ生成保留中
 
 
@@ -1379,30 +1365,14 @@ static void OnCommand(HWND hWnd, WPARAM wParam)
 			np2cfg.asynccpu = !np2cfg.asynccpu;
 			update |= SYS_UPDATECFG;
 			break;
-
-		case IDM_ASYNCCPU_MAX:
-			np2cfg.asynctgt = 100;
-			setasyncoffset();
+		case IDM_ASYNCCPU_LEVEL_MAX:
+			np2cfg.asynclvl = 100;
+			pccore_asynccpu_updatesettings(np2cfg.asynclvl);
 			update |= SYS_UPDATECFG;
 			break;
-		case IDM_ASYNCCPU_20:
-			np2cfg.asynctgt = 20;
-			setasyncoffset();
-			update |= SYS_UPDATECFG;
-			break;
-		case IDM_ASYNCCPU_30:
-			np2cfg.asynctgt = 30;
-			setasyncoffset();
-			update |= SYS_UPDATECFG;
-			break;
-		case IDM_ASYNCCPU_50:
-			np2cfg.asynctgt = 50;
-			setasyncoffset();
-			update |= SYS_UPDATECFG;
-			break;
-		case IDM_ASYNCCPU_70:
-			np2cfg.asynctgt = 70;
-			setasyncoffset();
+		case IDM_ASYNCCPU_LEVEL_MIN:
+			np2cfg.asynclvl = 0;
+			pccore_asynccpu_updatesettings(np2cfg.asynclvl);
 			update |= SYS_UPDATECFG;
 			break;
 #endif
@@ -3714,7 +3684,7 @@ static void processasyncwait()
 {
 #if defined(SUPPORT_ASYNC_CPU)
 	UINT32 rawTiming = timing_getcount_raw();
-	pccore_asynccpu_lastTimingValue = rawTiming + pccore_asynccpu_asyncOffset;
+	pccore_asynccpustat.lastTimingValue = rawTiming;
 #endif
 }
 
@@ -3740,7 +3710,7 @@ static void processwait(UINT cnt) {
 	{
 		UINT32 rawTiming = timing_getcount_raw();
 		int waitTime = (TIMING_MSSHIFT_VALUE - (rawTiming & TIMING_MSSHIFT_MASK)) / timing_getmsstep();
-		waitTime-=2; // 少し減らす
+		waitTime--; // 少し減らす
 		if (waitTime > 0)
 		{
 			if (waitTime > 1000) waitTime = 1000;
@@ -3748,7 +3718,7 @@ static void processwait(UINT cnt) {
 		}
 		else if (waitTime == 0)
 		{
-			//Sleep(0);
+			Sleep(0);
 		}
 		frameSleep = 1;
 	}
@@ -3982,9 +3952,6 @@ void loadNP2INI(const OEMCHAR *fname){
 #endif
 	
 	SetTickCounterMode(np2oscfg.tickmode);
-#if defined(SUPPORT_ASYNC_CPU)
-	setasyncoffset();
-#endif
 	pccore_reset();
 	np2_SetUserPause(0);
 	
@@ -4086,8 +4053,8 @@ static unsigned int __stdcall np2_multithread_EmulatorThreadMain(LPVOID vdParam)
 		if (!np2stopemulate && !np2_multithread_pauseemulation && !np2userpause) {
 			UINT32 drawskip = (np2oscfg.DRAW_SKIP == 0 ? 1 : np2oscfg.DRAW_SKIP);
 #if defined(SUPPORT_ASYNC_CPU)
-			pccore_asynccpu_drawskip = drawskip;
-			pccore_asynccpu_nowait = np2oscfg.NOWAIT;
+			pccore_asynccpustat.drawskip = drawskip;
+			pccore_asynccpustat.nowait = np2oscfg.NOWAIT;
 #endif
 			np2_multithread_pausing = false;
 			if (np2oscfg.NOWAIT) {
@@ -4453,9 +4420,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInst,
 #endif
 
 	SetTickCounterMode(np2oscfg.tickmode);
-#if defined(SUPPORT_ASYNC_CPU)
-	setasyncoffset();
-#endif
 	pccore_reset();
 	np2_SetUserPause(0);
 	
@@ -4649,8 +4613,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInst,
 					{
 						UINT32 drawskip = (np2oscfg.DRAW_SKIP == 0 ? 1 : np2oscfg.DRAW_SKIP);
 #if defined(SUPPORT_ASYNC_CPU)
-						pccore_asynccpu_drawskip = drawskip;
-						pccore_asynccpu_nowait = np2oscfg.NOWAIT;
+						pccore_asynccpustat.drawskip = drawskip;
+						pccore_asynccpustat.nowait = np2oscfg.NOWAIT;
 #endif
 						if (np2oscfg.NOWAIT)
 						{

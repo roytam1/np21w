@@ -342,11 +342,8 @@ void xmenu_update(HMENU hMenu)
 	CheckMenuItem(hMenu, IDM_CPUSTABILIZER, MF_BYCOMMAND | MFCHECK(np2oscfg.cpustabf != 0));
 #if defined(SUPPORT_ASYNC_CPU)
 	CheckMenuItem(hMenu, IDM_ASYNCCPU, MF_BYCOMMAND | MFCHECK(np2cfg.asynccpu != 0));
-	CheckMenuItem(hMenu, IDM_ASYNCCPU_MAX, MF_BYCOMMAND | MFCHECK(np2cfg.asynctgt == 100));
-	CheckMenuItem(hMenu, IDM_ASYNCCPU_20, MF_BYCOMMAND | MFCHECK(np2cfg.asynctgt == 20));
-	CheckMenuItem(hMenu, IDM_ASYNCCPU_30, MF_BYCOMMAND | MFCHECK(np2cfg.asynctgt == 30));
-	CheckMenuItem(hMenu, IDM_ASYNCCPU_50, MF_BYCOMMAND | MFCHECK(np2cfg.asynctgt == 50));
-	CheckMenuItem(hMenu, IDM_ASYNCCPU_70, MF_BYCOMMAND | MFCHECK(np2cfg.asynctgt == 70));
+	CheckMenuItem(hMenu, IDM_ASYNCCPU_LEVEL_MAX, MF_BYCOMMAND | MFCHECK(np2cfg.asynclvl == 100));
+	CheckMenuItem(hMenu, IDM_ASYNCCPU_LEVEL_MIN, MF_BYCOMMAND | MFCHECK(np2cfg.asynclvl == 0));
 #endif
 	const UINT8 DRAW_SKIP = np2oscfg.DRAW_SKIP;
 	CheckMenuItem(hMenu, IDM_AUTOFPS, MF_BYCOMMAND | MFCHECK(DRAW_SKIP == 0));

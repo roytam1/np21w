@@ -1706,7 +1706,7 @@ void smpu98_midipanic(void) {
 
 void smpu98_changeclock(void) {
 	
-	smpu98.xferclock = pccore.realclock / 31250;
+	smpu98.xferclock = pccore.realclock / (31250 / 8);
 
 	makeintclock();
 }

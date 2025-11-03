@@ -26,6 +26,8 @@ static void trace_fmt_ex(const char* fmt, ...)
 
 extern	PCM86CFG	pcm86cfg;
 
+extern UINT64 datawriteirqwait;
+
 static const UINT8 pcm86bits[] = {1, 1, 1, 2, 0, 0, 0, 1};
 static const SINT32 pcm86rescue[] = {PCM86_RESCUE * 32, PCM86_RESCUE * 24,
 									 PCM86_RESCUE * 16, PCM86_RESCUE * 12,
@@ -82,6 +84,7 @@ static void IOOUTCALL pcm86_oa466(UINT port, REG8 val) {
 static void IOOUTCALL pcm86_oa468(UINT port, REG8 val) {
 
 	REG8	xchgbit;
+	UINT64 curclk = CPU_CLOCK + CPU_BASECLOCK - CPU_REMCLOCK;
 
 //	TRACEOUT(("86pcm out %.4x %.2x", port, val));
 	sound_sync();
@@ -101,6 +104,7 @@ static void IOOUTCALL pcm86_oa468(UINT port, REG8 val) {
 			g_pcm86.virbuf = 0;
 			g_pcm86.lastclock = CPU_CLOCK + CPU_BASECLOCK - CPU_REMCLOCK;
 			g_pcm86.lastclock <<= 6;
+			g_pcm86.lastclockforwait = curclk;
 #if defined(SUPPORT_MULTITHREAD)
 			pcm86cs_leave_criticalsection();
 #endif
@@ -110,6 +114,10 @@ static void IOOUTCALL pcm86_oa468(UINT port, REG8 val) {
 	if ((!(val & 0x10)))
 	{
 		g_pcm86.irqflag = 0;
+		if (g_pcm86.virbuf == 0) {
+			// WORKAROUND: 割り込みクリア時にバッファが空の状態だったら、長めの割り込み待ちを入れる
+			g_pcm86.lastclockforwait = CPU_CLOCK + CPU_BASECLOCK - CPU_REMCLOCK;
+		}
 	}
 	// 割り込み条件を満たしていれば強制的に割り込む　ポリスノーツ用
 	if (g_pcm86.virbuf <= g_pcm86.fifosize)
@@ -172,6 +180,8 @@ static void IOOUTCALL pcm86_oa46a(UINT port, REG8 val) {
 
 static void IOOUTCALL pcm86_oa46c(UINT port, REG8 val) {
 	
+	UINT64 addClock = 0;
+
 //	TRACEOUT(("86pcm out %.4x %.2x", port, val));
 #if defined(SUPPORT_MULTITHREAD)
 	pcm86cs_enter_criticalsection();
@@ -195,6 +205,17 @@ static void IOOUTCALL pcm86_oa46c(UINT port, REG8 val) {
 	}
 //	g_pcm86.write = 1;
 	g_pcm86.reqirq = 1;
+
+	// WORKAROUND: ウェイト時間はfifosizeに比例するものとする 根拠なし　元のdatawriteirqwaitは8192の場合の実験値
+	if (g_pcm86.fifosize < 8192) {
+		addClock = datawriteirqwait - datawriteirqwait * g_pcm86.fifosize / 8192;
+	}
+	// WORKAROUND: バッファがFIFO割り込みサイズの2倍以上満たされているか、フル状態か、FIFO割り込みサイズが小さいなら割り込みウェイトはかけないことにする 根拠なし
+	// 上の「ウェイト時間はfifosizeに比例する」だけあればOK？？
+	if (g_pcm86.virbuf > g_pcm86.fifosize * 2 || g_pcm86.virbuf >= PCM86_LOGICALBUF) {
+		addClock = datawriteirqwait;
+	}
+	g_pcm86.lastclockforwait = CPU_CLOCK + CPU_BASECLOCK - CPU_REMCLOCK + addClock;
 #else
 	if (g_pcm86.virbuf < PCM86_LOGICALBUF) {
 		g_pcm86.virbuf++;

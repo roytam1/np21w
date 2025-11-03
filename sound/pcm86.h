@@ -58,8 +58,13 @@ typedef struct {
 	SINT32	volume;
 	SINT32	vol5;
 
-	UINT32	lastclock_obsolate;
-	UINT32	stepclock_obsolate;
+	union {
+		struct {
+			UINT32	lastclock_obsolate;
+			UINT32	stepclock_obsolate;
+		} obsolate;
+		UINT64	lastclockforwait;
+	};
 	UINT	stepmask;
 
 	UINT8	fifo;

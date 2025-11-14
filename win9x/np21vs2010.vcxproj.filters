@@ -334,6 +334,12 @@
     <Filter Include="ヘッダー ファイル\i386c\ia32\instructions\sse4a">
       <UniqueIdentifier>{df6a572b-1232-4899-b023-6f0ac3de3618}</UniqueIdentifier>
     </Filter>
+    <Filter Include="ソース ファイル\win9x\ext\scci2">
+      <UniqueIdentifier>{26228415-0149-4d0f-a777-a72b6f14a8d7}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ヘッダー ファイル\win9x\ext\scci2">
+      <UniqueIdentifier>{c7d65458-6735-43aa-8317-f93b7e9bc92f}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\calendar.c">
@@ -1287,12 +1293,6 @@
     <ClCompile Include="ext\c86ctl\c86ctlif.cpp">
       <Filter>ソース ファイル\win9x\ext\c86ctl</Filter>
     </ClCompile>
-    <ClCompile Include="ext\romeo\juliet.cpp">
-      <Filter>ソース ファイル\win9x\ext\scci</Filter>
-    </ClCompile>
-    <ClCompile Include="ext\scci\scciif.cpp">
-      <Filter>ソース ファイル\win9x\ext\romeo</Filter>
-    </ClCompile>
     <ClCompile Include="..\diskimage\cd\cdd_real.c">
       <Filter>ソース ファイル\diskimage\cd</Filter>
     </ClCompile>
@@ -1409,6 +1409,15 @@
     </ClCompile>
     <ClCompile Include="..\generic\hostdrvnt.c">
       <Filter>ソース ファイル\generic</Filter>
+    </ClCompile>
+    <ClCompile Include="ext\scci2\scci2if.cpp">
+      <Filter>ソース ファイル\win9x\ext\scci2</Filter>
+    </ClCompile>
+    <ClCompile Include="ext\romeo\juliet.cpp">
+      <Filter>ソース ファイル\win9x\ext\romeo</Filter>
+    </ClCompile>
+    <ClCompile Include="ext\scci\scciif.cpp">
+      <Filter>ソース ファイル\win9x\ext\scci</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -2482,6 +2491,12 @@
     </ClInclude>
     <ClInclude Include="..\generic\hostdrvntdef.h">
       <Filter>ヘッダー ファイル\generic</Filter>
+    </ClInclude>
+    <ClInclude Include="ext\scci2\scci2.h">
+      <Filter>ヘッダー ファイル\win9x\ext\scci2</Filter>
+    </ClInclude>
+    <ClInclude Include="ext\scci2\scci2if.h">
+      <Filter>ヘッダー ファイル\win9x\ext\scci2</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

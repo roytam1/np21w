@@ -708,6 +708,7 @@
     <ClCompile Include="ext\opl3.cpp" />
     <ClCompile Include="ext\opna.cpp" />
     <ClCompile Include="ext\romeo\juliet.cpp" />
+    <ClCompile Include="ext\scci2\scci2if.cpp" />
     <ClCompile Include="ext\scci\scciif.cpp" />
     <ClCompile Include="fontmng.cpp" />
     <ClCompile Include="ini.cpp" />
@@ -1056,6 +1057,8 @@
     <ClInclude Include="ext\mt32snd.h" />
     <ClInclude Include="ext\romeo\juliet.h" />
     <ClInclude Include="ext\romeo\romeo.h" />
+    <ClInclude Include="ext\scci2\scci2.h" />
+    <ClInclude Include="ext\scci2\scci2if.h" />
     <ClInclude Include="ext\scci\scci.h" />
     <ClInclude Include="ext\scci\SCCIDefines.h" />
     <ClInclude Include="ext\scci\scciif.h" />

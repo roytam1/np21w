@@ -202,7 +202,7 @@ static void np2sysp_cngclkmul(const void *arg1, long arg2) {
 	UINT8 oldclockmult = pccore.multiple;
 	UINT8 newclockmul = (np2sysp.outval >> 24);
 	
-	if(newclockmul > 0) {
+	if(newclockmul > 0 && pccore.multiple != newclockmul) {
 		np2sysp.outval = (oldclockmul << 24) + (np2sysp.outval >> 8);
 
 		pccore.multiple = newclockmul;

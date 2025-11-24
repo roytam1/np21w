@@ -586,6 +586,7 @@
 #define IDM_SCRNMUL16                   40066
 #define IDM_SCRNMUL24                   40074
 #define IDM_SCRNMUL32                   40082
+#define IDM_SCRNMUL_END                 40100
 #define IDM_RESET                       40101
 #define IDM_CONFIG                      40102
 #define IDM_NEWDISK                     40103
@@ -852,6 +853,12 @@
 #define IDM_WABSYSMENU_HALFTONE         43302
 #define IDM_IDE0PHYSICALDRV_ID0         43400 // size = 26*4
 #define IDM_IDE0PHYSICALDRV_LAST        43503
+#define IDM_FDD1_LIST_DIRNAME			43510
+#define IDM_FDD2_LIST_DIRNAME			43511
+#define IDM_FDD3_LIST_DIRNAME			43512
+#define IDM_FDD4_LIST_DIRNAME			43513
+#define IDM_FDD1_LIST_ID0				43520 // size = 20*4
+#define IDM_FDD1_LIST_LAST			    43599
 
 // Next default values for new objects
 // 

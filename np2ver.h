@@ -4,9 +4,9 @@
  */
 
 #if defined(SUPPORT_IA32_HAXM)
-#define	NP2VER_CORE			"ver.0.86 rev.96HAX"
+#define	NP2VER_CORE			"ver.0.86 rev.97HAX"
 #else
-#define	NP2VER_CORE			"ver.0.86 rev.96"
+#define	NP2VER_CORE			"ver.0.86 rev.97"
 #endif
 
 // #define	NP2VER_WIN9X

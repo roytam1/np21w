@@ -139,6 +139,7 @@ void hostdrvNT_stopMonitorChangeFS()
 			TerminateThread(s_hThreadChangeFS, 0); // ゾンビスレッド死すべし
 		}
 		CloseHandle(s_hChangeFSStopEvent); // 停止イベントを閉じる
+		CloseHandle(s_hThreadChangeFS); // スレッドも閉じる
 
 		s_hThreadChangeFS = NULL;
 		s_hChangeFSStopEvent = NULL;

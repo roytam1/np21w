@@ -105,7 +105,6 @@
 #include	"i386hax/haxfunc.h"
 #include	"i386hax/haxcore.h"
 #endif
-
 #include	<process.h>
 
 extern bool scrnmng_create_pending; // グラフィックレンダラ生成保留中
@@ -205,7 +204,8 @@ static	TCHAR		szClassName[] = _T("NP2-MainWindow");
 #endif	// defined(SUPPORT_MULTITHREAD)
 						0, 200,
 						1,
-						0
+						0,
+						1
 					};
 
 		OEMCHAR		fddfolder[MAX_PATH];
@@ -214,6 +214,7 @@ static	TCHAR		szClassName[] = _T("NP2-MainWindow");
 		OEMCHAR		bmpfilefolder[MAX_PATH];
 		OEMCHAR		npcfgfilefolder[MAX_PATH];
 		OEMCHAR		modulefile[MAX_PATH];
+
 
 static	UINT		framecnt = 0;
 static	UINT		framecntUI = 0;
@@ -309,7 +310,7 @@ void np2_multithread_Suspend(){
 			if(np2_multithread_enable && np2_multithread_hThread){
 				int workaroundCounter = 0;
 				Sleep(10);
-				while(np2_multithread_hThread && !np2_multithread_pausing){
+				while(!np2_multithread_hThread_requestexit && np2_multithread_hThread && !np2_multithread_pausing){
 					if(workaroundCounter >= 30){
 						np2_multithread_fakeWndProc();
 					}else{
@@ -328,7 +329,7 @@ void np2_multithread_Resume(){
 			if(np2_multithread_enable && np2_multithread_hThread){
 				int workaroundCounter = 0;
 				Sleep(10);
-				while(np2_multithread_hThread && np2_multithread_pausing){
+				while(!np2_multithread_hThread_requestexit && np2_multithread_hThread && np2_multithread_pausing){
 					if(workaroundCounter >= 30){
 						np2_multithread_fakeWndProc();
 					}else{
@@ -844,7 +845,7 @@ static void np2popup(HWND hWnd, LPARAM lp) {
 }
 
 #ifdef SUPPORT_PHYSICAL_CDDRV
-static void np2updatemenu() {
+static void np2updateCDmenu() {
 	static char drvMenuVisible[4][26] = {0}; // 実ドライブメニューの表示状態
 	char drvAvailable[26] = {0}; // 使える実ドライブ
 	
@@ -932,6 +933,19 @@ static void OnCommand(HWND hWnd, WPARAM wParam)
 	}
 #endif
 #endif
+	if (IDM_FDD1_LIST_ID0 <= uID && uID <= IDM_FDD1_LIST_LAST) {
+		int fdddrv = (uID - IDM_FDD1_LIST_ID0) / FDDMENU_ITEMS_MAX;
+		int index = (uID - IDM_FDD1_LIST_ID0) % FDDMENU_ITEMS_MAX;
+		OEMCHAR* lpImage = sysmng_getfddlistitem(fdddrv, index);
+		if (lpImage) {
+			file_cpyname(fddfolder, lpImage, _countof(fddfolder));
+			sysmng_update(SYS_UPDATEOSCFG);
+			np2_multithread_Suspend();
+			diskdrv_setfdd(fdddrv, lpImage, false);
+			toolwin_setfdd(fdddrv, lpImage);
+			np2_multithread_Resume();
+		}
+	}
 	switch(uID)
 	{
 		case IDM_RESET:
@@ -969,7 +983,7 @@ static void OnCommand(HWND hWnd, WPARAM wParam)
 				np2_multithread_Resume();
 				sysmng_updatecaption(SYS_UPDATECAPTION_FDD);
 #ifdef SUPPORT_PHYSICAL_CDDRV
-				np2updatemenu();
+				np2updateCDmenu();
 #endif
 #ifdef HOOK_SYSKEY
 				start_hook_systemkey();
@@ -1150,6 +1164,24 @@ static void OnCommand(HWND hWnd, WPARAM wParam)
 			diskdrv_setfdd(3, NULL, 0);
 			toolwin_setfdd(3, NULL);
 			break;
+
+		//case IDM_FDD1_LIST_DIRNAME:
+		//case IDM_FDD2_LIST_DIRNAME:
+		//case IDM_FDD3_LIST_DIRNAME:
+		//case IDM_FDD4_LIST_DIRNAME:
+		//	{
+		//		OEMCHAR* fname = fdd_diskname(uID - IDM_FDD1_LIST_DIRNAME); // 現在開いているファイルから取得
+		//		if (!fname || !(*fname)) {
+		//			fname = sysmng_getlastfddlistitem(uID - IDM_FDD1_LIST_DIRNAME); // だめならディレクトリパスに基づいて取得
+		//		}
+		//		if (fname && *fname) {
+		//			TCHAR seltmp[500];
+		//			_tcscpy(seltmp, OEMTEXT("/select,"));
+		//			_tcscat(seltmp, fname);
+		//			ShellExecute(NULL, NULL, OEMTEXT("explorer.exe"), seltmp, NULL, SW_SHOWNORMAL);
+		//		}
+		//	}
+		//	break;
 
 		case IDM_IDE0OPEN:
 			winuienter();
@@ -2263,6 +2295,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 					}
 					//	FDイメージ…？
 					if (fddrv <= 0x02) {
+						file_cpyname(fddfolder, fname, _countof(fddfolder));
 						diskdrv_setfdd(fddrv, fname, 0);
 						sysmng_update(SYS_UPDATEOSCFG);
 						toolwin_setfdd(fddrv, fname);
@@ -2414,23 +2447,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 					update |= SYS_UPDATEOSCFG;
 					break;
 
-				case IDM_SCRNMUL4:
-				case IDM_SCRNMUL6:
-				case IDM_SCRNMUL8:
-				case IDM_SCRNMUL10:
-				case IDM_SCRNMUL12:
-				case IDM_SCRNMUL16:
-				case IDM_SCRNMUL24:
-				case IDM_SCRNMUL32:
-					if ((!scrnmng_isfullscreen()) &&
-						!(GetWindowLong(g_hWndMain, GWL_STYLE) & WS_MINIMIZE))
-					{
-						np2_multithread_EnterCriticalSection();
-						scrnmng_setmultiple((int)(wParam - IDM_SCRNMUL));
-						np2_multithread_LeaveCriticalSection();
-					}
-					break;
-
 				case SC_MINIMIZE:
 					wlex = np2_winlocexallwin(hWnd);
 					winlocex_close(wlex);
@@ -2457,7 +2473,19 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 					return(DefWindowProc(hWnd, msg, wParam, lParam));
 
 				default:
-					return(DefWindowProc(hWnd, msg, wParam, lParam));
+					if (IDM_SCRNMUL < wParam && wParam <= IDM_SCRNMUL_END) {
+						if ((!scrnmng_isfullscreen()) &&
+							!(GetWindowLong(g_hWndMain, GWL_STYLE) & WS_MINIMIZE))
+						{
+							np2_multithread_EnterCriticalSection();
+							scrnmng_setmultiple((int)(wParam - IDM_SCRNMUL));
+							np2_multithread_LeaveCriticalSection();
+						}
+						break;
+					}
+					else {
+						return(DefWindowProc(hWnd, msg, wParam, lParam));
+					}
 			}
 			sysmng_update(update);
 			break;
@@ -3948,7 +3976,7 @@ void loadNP2INI(const OEMCHAR *fname){
 #endif
 	
 #ifdef SUPPORT_PHYSICAL_CDDRV
-	np2updatemenu();
+	np2updateCDmenu();
 #endif
 	
 	SetTickCounterMode(np2oscfg.tickmode);
@@ -4028,7 +4056,7 @@ void loadNP2INI(const OEMCHAR *fname){
 //		}
 //	}
 //#endif
-	
+
 	scrndraw_redraw();
 	
 	np2opening = 0;
@@ -4184,6 +4212,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInst,
 #if defined(SUPPORT_VSTi)
 	CVstEditWnd::Initialize(hInstance);
 #endif	// defined(SUPPORT_VSTi)
+
+	sysmng_findfile_Initialize();
 
 	GetModuleFileName(NULL, modulefile, NELEMENTS(modulefile));
 	dosio_init();
@@ -4416,7 +4446,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInst,
 #endif
 	
 #ifdef SUPPORT_PHYSICAL_CDDRV
-	np2updatemenu();
+	np2updateCDmenu();
 #endif
 
 	SetTickCounterMode(np2oscfg.tickmode);
@@ -4804,6 +4834,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInst,
 #if defined(SUPPORT_MULTITHREAD)
 	np2_multithread_Finalize();
 #endif
+
+	sysmng_findfile_Finalize();
 
 	//_CrtDumpMemoryLeaks();
 

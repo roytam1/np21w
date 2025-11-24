@@ -147,6 +147,8 @@ typedef struct {
 	UINT8	knjpaste; // クリップボードからテキスト貼り付けの際の漢字の扱い（0=漢字無視, 1=BASIC, 2=FEPなしDOS）
 
 	UINT8	scrscfix; // 画面拡大転送時の補正（0=自動, 1=通常転送, 2=NVDIA向け）
+
+	UINT8	dirfdlst; // 同じディレクトリにあるFDイメージファイルのリストを表示する
 } NP2OSCFG;
 
 

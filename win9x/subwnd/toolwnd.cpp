@@ -246,6 +246,7 @@ static void sellist(UINT drv) {
 	fdd = s_toolwndcfg.fdd + drv;
 	sel = (UINT)SendMessage(hwnd, CB_GETCURSEL, 0, 0);
 	if (sel < fdd->cnt) {
+		file_cpyname(fddfolder, fdd->name[fdd->pos[sel]], _countof(fddfolder));
 		diskdrv_setfdd(drv, fdd->name[fdd->pos[sel]], 0);
 		fdd->insert = 1;
 		setlist(hwnd, fdd, sel);
@@ -354,6 +355,7 @@ static LRESULT CALLBACK twsub(HWND hWnd, UINT msg, WPARAM wp, LPARAM lp) {
 				diskdrv_setfdd(1, fname, 0);
 				toolwin_setfdd(1, fname);
 			}
+			file_cpyname(fddfolder, fname, _countof(fddfolder));
 		}
 		DragFinish((HDROP)wp);
 		return(FALSE);

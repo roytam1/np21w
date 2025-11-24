@@ -222,9 +222,16 @@ void nevent_changeclock(UINT32 oldclock, UINT32 newclock)
 				}
 			}
 
-			// クロック変更のタイミングは CPU_BASECLOCK==CPU_REMCLOCK のタイミングになるように調整済み
-			CPU_BASECLOCK = g_nevent.item[g_nevent.level[0]].clock;
-			CPU_REMCLOCK = CPU_BASECLOCK;/* カウンタへセット */
+			// 自動調整のクロック変更のタイミングは CPU_BASECLOCK==CPU_REMCLOCK のタイミングになるように調整済み
+			if (CPU_BASECLOCK == CPU_REMCLOCK) {
+				CPU_BASECLOCK = g_nevent.item[g_nevent.level[0]].clock;
+				CPU_REMCLOCK = CPU_BASECLOCK;/* カウンタへセット */
+			}
+			else {
+				// I/O経由の場合はずれている場合あり。この場合はスケール
+				CPU_BASECLOCK = ((SINT64)CPU_BASECLOCK * newclock + oldclock / 2) / oldclock;
+				CPU_REMCLOCK = ((SINT64)CPU_REMCLOCK * newclock + oldclock / 2) / oldclock;
+			}
 		}
 	}
 #if defined(SUPPORT_MULTITHREAD)

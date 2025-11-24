@@ -1923,6 +1923,7 @@ const SFENTRY	*tblterm;
 			opna_fmgen_setallvolumeRhythmTotal_linear(np2cfg.vol_rhythm * np2cfg.vol_master / 100);
 		}
 #endif
+		oplgen_setvol(np2cfg.vol_fm * np2cfg.vol_master / 100);
 	}
 	for (i = 0; i < _countof(g_opna); i++)
 	{

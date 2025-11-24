@@ -447,8 +447,16 @@ void xmenu_update(HMENU hMenu)
 	// Device-FPU
 	const UINT8 fputype = np2cfg.fpu_type;
 	CheckMenuItem(hMenu, IDM_FPU80, MF_BYCOMMAND | MFCHECK(fputype == FPU_TYPE_SOFTFLOAT));
+#if defined(SUPPORT_FPU_DOSBOX)
 	CheckMenuItem(hMenu, IDM_FPU64,  MF_BYCOMMAND | MFCHECK(fputype == FPU_TYPE_DOSBOX));
+#else
+	EnableMenuItem(hMenu, IDM_FPU64, MF_GRAYED);
+#endif
+#if defined(SUPPORT_FPU_DOSBOX2)
 	CheckMenuItem(hMenu, IDM_FPU64INT,  MF_BYCOMMAND | MFCHECK(fputype == FPU_TYPE_DOSBOX2));
+#else
+	EnableMenuItem(hMenu, IDM_FPU64INT, MF_GRAYED);
+#endif
 
 	// Device
 	CheckMenuItem(hMenu, IDM_MOUSE, MF_BYCOMMAND | MFCHECK(np2oscfg.MOUSE_SW));

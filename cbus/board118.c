@@ -600,6 +600,18 @@ static void SOUNDCALL opl3gen_getpcm2(void* opl3, SINT32 *pcm, UINT count) {
 		outbuf += 2;
 	}
 }
+static void SOUNDCALL opl3gen_getpcm2_dummy(void* opl3, SINT32* pcm, UINT count) {
+	UINT i;
+	INT16* buf[4];
+	INT16 s1l, s1r, s2l, s2r;
+	buf[0] = &s1l;
+	buf[1] = &s1r;
+	buf[2] = &s2l;
+	buf[3] = &s2r;
+	for (i = 0; i < count; i++) {
+		YMF262UpdateOne(opl3, buf, 1);
+	}
+}
 #endif
 
 static const IOOUT ymf_o[4] = {
@@ -733,6 +745,7 @@ void board118_reset(const NP2CFG *pConfig)
 			opna_fmgen_setallvolumeRhythmTotal_linear(np2cfg.vol_rhythm * cs4231.devvolume[0xff] / 15 * np2cfg.vol_master / 100);
 		}
 #endif
+		oplgen_setvol(np2cfg.vol_fm * np2cfg.vol_master / 100);
 	}
 	(void)pConfig;
 }
@@ -800,7 +813,14 @@ void board118_bind(void)
 			g_mame_opl3[G_OPL3_INDEX] = YMF262Init(14400000, np2cfg.samplingrate);
 			samplerate = np2cfg.samplingrate;
 		}
-		sound_streamregist(g_mame_opl3[G_OPL3_INDEX], (SOUNDCB)opl3gen_getpcm2);
+		if (g_opl3[G_OPL3_INDEX].userdata) {
+			// 外部音源を使用する場合 ダミー登録
+			sound_streamregist(g_mame_opl3[G_OPL3_INDEX], (SOUNDCB)opl3gen_getpcm2_dummy);
+		}
+		else {
+			// 外部音源を使用しない場合 PCM登録
+			sound_streamregist(g_mame_opl3[G_OPL3_INDEX], (SOUNDCB)opl3gen_getpcm2);
+		}
 #else
 		iocore_attachout(cs4231.port[9], ym_o1488);
 		iocore_attachinp(cs4231.port[9], ym_i1488);

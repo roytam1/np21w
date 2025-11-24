@@ -860,6 +860,7 @@ tlb_flush()
 	}
 }
 
+__declspec(noinline)
 void MEMCALL
 tlb_flush_all()
 {

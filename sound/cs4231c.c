@@ -324,6 +324,7 @@ void cs4231_control(UINT idx, REG8 dat) {
 			{
 				rhythm_update(&g_opna[i].rhythm);
 			}
+			oplgen_setvol(np2cfg.vol_fm * np2cfg.vol_master / 100);
 		}
 		break;
 	case 0x3: // Right Auxiliary #1 Input Control

@@ -154,7 +154,10 @@ void SndOptMixerPage::OnOK()
 	//}
 
 	UINT volex = 15;
-	if(g_nSoundID==SOUNDID_WAVESTAR){
+	if(g_nSoundID == SOUNDID_WAVESTAR){
+		volex = cs4231.devvolume[0xff];
+	}
+	if (g_nSoundID == SOUNDID_WAVESTAR) {
 		volex = cs4231.devvolume[0xff];
 	}
 	const UINT8 cFM = static_cast<UINT8>(m_fm.GetPos());
@@ -165,6 +168,7 @@ void SndOptMixerPage::OnOK()
 #if defined(SUPPORT_FMGEN)
 		opna_fmgen_setallvolumeFM_linear(cFM * volex / 15 * np2cfg.vol_master / 100);
 #endif	/* SUPPORT_FMGEN */
+		oplgen_setvol(cFM * np2cfg.vol_master / 100);
 		bUpdated = true;
 	}
 

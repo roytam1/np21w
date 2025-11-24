@@ -1,6 +1,6 @@
 #include	"compiler.h"
 
-#if 1
+#if 0
 #undef	TRACEOUT
 //#define USE_TRACEOUT_VS
 //#define MEM_BDA_TRACEOUT
@@ -997,8 +997,7 @@ PF_UINT32 MEMCALL memp_read32_paging(UINT32 address) {
 	
 	return memp_read32_codefetch(address);
 }
-//#define TEST_START_ADDR	0xf00000
-//#define TEST_END_ADDR	0xffffff
+
 void MEMCALL memp_write8(UINT32 address, REG8 value) {
 	
 #ifdef MEM_BDA_TRACEOUT

@@ -250,14 +250,8 @@
     <Filter Include="ソース ファイル\sound\fmgen">
       <UniqueIdentifier>{b4f00a4f-35e2-4be7-b253-8942f4a07695}</UniqueIdentifier>
     </Filter>
-    <Filter Include="ソース ファイル\sound\mame">
-      <UniqueIdentifier>{e5047bb2-eec0-46e6-b600-1f5579b29028}</UniqueIdentifier>
-    </Filter>
     <Filter Include="ヘッダー ファイル\sound\fmgen">
       <UniqueIdentifier>{1fbae04d-6163-4fc0-99e3-af4a99fad012}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="ヘッダー ファイル\sound\mame">
-      <UniqueIdentifier>{69e55071-1b40-4cc2-928d-d45bc986a5af}</UniqueIdentifier>
     </Filter>
     <Filter Include="ソース ファイル\io\pci">
       <UniqueIdentifier>{e6da250b-858c-4fa8-9663-2d66e79a5ad2}</UniqueIdentifier>
@@ -276,6 +270,18 @@
     </Filter>
     <Filter Include="ソース ファイル\win9x\ext\scci2">
       <UniqueIdentifier>{37208fcb-ec9d-4a89-a251-78ddd106b797}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ソース ファイル\sound\mamebsd">
+      <UniqueIdentifier>{e5047bb2-eec0-46e6-b600-1f5579b29028}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ヘッダー ファイル\sound\mamebsd">
+      <UniqueIdentifier>{69e55071-1b40-4cc2-928d-d45bc986a5af}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ヘッダー ファイル\sound\mame">
+      <UniqueIdentifier>{8346230e-b0af-46cd-90eb-f3e6683262b9}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ソース ファイル\sound\mame">
+      <UniqueIdentifier>{a5fc2156-2feb-4d4f-9433-66d5cb304a2f}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -1206,15 +1212,6 @@
     <ClCompile Include="..\sound\fmgen\fmgen_psg.cpp">
       <Filter>ソース ファイル\sound\fmgen</Filter>
     </ClCompile>
-    <ClCompile Include="..\sound\mame\fmopl.c">
-      <Filter>ソース ファイル\sound\mame</Filter>
-    </ClCompile>
-    <ClCompile Include="..\sound\mame\ymdeltat.c">
-      <Filter>ソース ファイル\sound\mame</Filter>
-    </ClCompile>
-    <ClCompile Include="..\sound\mame\ymf262.c">
-      <Filter>ソース ファイル\sound\mame</Filter>
-    </ClCompile>
     <ClCompile Include="..\fdd\sxsihdd_nvl.c">
       <Filter>ソース ファイル\fdd</Filter>
     </ClCompile>
@@ -1256,6 +1253,51 @@
     </ClCompile>
     <ClCompile Include="ext\scci2\scci2if.cpp">
       <Filter>ソース ファイル\win9x\ext\scci2</Filter>
+    </ClCompile>
+    <ClCompile Include="..\sound\mame\ymf262.c">
+      <Filter>ソース ファイル\sound\mame</Filter>
+    </ClCompile>
+    <ClCompile Include="..\sound\mame\fmopl.c">
+      <Filter>ソース ファイル\sound\mame</Filter>
+    </ClCompile>
+    <ClCompile Include="..\sound\mame\ymdeltat.c">
+      <Filter>ソース ファイル\sound\mame</Filter>
+    </ClCompile>
+    <ClCompile Include="..\sound\mamebsd\ymfm_opq.cpp">
+      <Filter>ソース ファイル\sound\mamebsd</Filter>
+    </ClCompile>
+    <ClCompile Include="..\sound\mamebsd\ymfm_opz.cpp">
+      <Filter>ソース ファイル\sound\mamebsd</Filter>
+    </ClCompile>
+    <ClCompile Include="..\sound\mamebsd\ymfm_pcm.cpp">
+      <Filter>ソース ファイル\sound\mamebsd</Filter>
+    </ClCompile>
+    <ClCompile Include="..\sound\mamebsd\ymfm_ssg.cpp">
+      <Filter>ソース ファイル\sound\mamebsd</Filter>
+    </ClCompile>
+    <ClCompile Include="..\sound\mamebsd\ymfm_adpcm.cpp">
+      <Filter>ソース ファイル\sound\mamebsd</Filter>
+    </ClCompile>
+    <ClCompile Include="..\sound\mamebsd\ymfm_misc.cpp">
+      <Filter>ソース ファイル\sound\mamebsd</Filter>
+    </ClCompile>
+    <ClCompile Include="..\sound\mamebsd\ymfm_opl.cpp">
+      <Filter>ソース ファイル\sound\mamebsd</Filter>
+    </ClCompile>
+    <ClCompile Include="..\sound\mamebsd\ymfm_opm.cpp">
+      <Filter>ソース ファイル\sound\mamebsd</Filter>
+    </ClCompile>
+    <ClCompile Include="..\sound\mamebsd\ymfm_opn.cpp">
+      <Filter>ソース ファイル\sound\mamebsd</Filter>
+    </ClCompile>
+    <ClCompile Include="..\sound\mamebsd\np2interop.cpp">
+      <Filter>ソース ファイル\sound\mamebsd</Filter>
+    </ClCompile>
+    <ClCompile Include="..\sound\ct1741g.c">
+      <Filter>ソース ファイル\sound</Filter>
+    </ClCompile>
+    <ClCompile Include="..\sound\ct1741c.c">
+      <Filter>ソース ファイル\sound</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -2120,21 +2162,6 @@
     <ClInclude Include="scrnmng_d3d.h">
       <Filter>ヘッダー ファイル\win9x</Filter>
     </ClInclude>
-    <ClInclude Include="..\sound\mame\driver.h">
-      <Filter>ヘッダー ファイル\sound\mame</Filter>
-    </ClInclude>
-    <ClInclude Include="..\sound\mame\fm.h">
-      <Filter>ヘッダー ファイル\sound\mame</Filter>
-    </ClInclude>
-    <ClInclude Include="..\sound\mame\fmopl.h">
-      <Filter>ヘッダー ファイル\sound\mame</Filter>
-    </ClInclude>
-    <ClInclude Include="..\sound\mame\ymdeltat.h">
-      <Filter>ヘッダー ファイル\sound\mame</Filter>
-    </ClInclude>
-    <ClInclude Include="..\sound\mame\ymf262.h">
-      <Filter>ヘッダー ファイル\sound\mame</Filter>
-    </ClInclude>
     <ClInclude Include="..\sound\fmgen\fmgen_diag.h">
       <Filter>ヘッダー ファイル\sound\fmgen</Filter>
     </ClInclude>
@@ -2227,6 +2254,69 @@
     </ClInclude>
     <ClInclude Include="ext\scci2\scci2if.h">
       <Filter>ヘッダー ファイル\win9x\ext\scci2</Filter>
+    </ClInclude>
+    <ClInclude Include="..\sound\mame\driver.h">
+      <Filter>ヘッダー ファイル\sound\mame</Filter>
+    </ClInclude>
+    <ClInclude Include="..\sound\mame\fm.h">
+      <Filter>ヘッダー ファイル\sound\mame</Filter>
+    </ClInclude>
+    <ClInclude Include="..\sound\mame\fmopl.h">
+      <Filter>ヘッダー ファイル\sound\mame</Filter>
+    </ClInclude>
+    <ClInclude Include="..\sound\mame\ymdeltat.h">
+      <Filter>ヘッダー ファイル\sound\mame</Filter>
+    </ClInclude>
+    <ClInclude Include="..\sound\mame\ymf262.h">
+      <Filter>ヘッダー ファイル\sound\mame</Filter>
+    </ClInclude>
+    <ClInclude Include="..\sound\mamebsd\np2interop.h">
+      <Filter>ヘッダー ファイル\sound\mamebsd</Filter>
+    </ClInclude>
+    <ClInclude Include="..\sound\mame\np2interopg.h">
+      <Filter>ヘッダー ファイル\sound\mame</Filter>
+    </ClInclude>
+    <ClInclude Include="..\sound\mamebsd\ymfm.h">
+      <Filter>ヘッダー ファイル\sound\mamebsd</Filter>
+    </ClInclude>
+    <ClInclude Include="..\sound\mamebsd\ymfm_adpcm.h">
+      <Filter>ヘッダー ファイル\sound\mamebsd</Filter>
+    </ClInclude>
+    <ClInclude Include="..\sound\mamebsd\ymfm_fm.h">
+      <Filter>ヘッダー ファイル\sound\mamebsd</Filter>
+    </ClInclude>
+    <ClInclude Include="..\sound\mamebsd\ymfm_misc.h">
+      <Filter>ヘッダー ファイル\sound\mamebsd</Filter>
+    </ClInclude>
+    <ClInclude Include="..\sound\mamebsd\ymfm_opl.h">
+      <Filter>ヘッダー ファイル\sound\mamebsd</Filter>
+    </ClInclude>
+    <ClInclude Include="..\sound\mamebsd\ymfm_opm.h">
+      <Filter>ヘッダー ファイル\sound\mamebsd</Filter>
+    </ClInclude>
+    <ClInclude Include="..\sound\mamebsd\ymfm_opn.h">
+      <Filter>ヘッダー ファイル\sound\mamebsd</Filter>
+    </ClInclude>
+    <ClInclude Include="..\sound\mamebsd\ymfm_opq.h">
+      <Filter>ヘッダー ファイル\sound\mamebsd</Filter>
+    </ClInclude>
+    <ClInclude Include="..\sound\mamebsd\ymfm_opx.h">
+      <Filter>ヘッダー ファイル\sound\mamebsd</Filter>
+    </ClInclude>
+    <ClInclude Include="..\sound\mamebsd\ymfm_opz.h">
+      <Filter>ヘッダー ファイル\sound\mamebsd</Filter>
+    </ClInclude>
+    <ClInclude Include="..\sound\mamebsd\ymfm_pcm.h">
+      <Filter>ヘッダー ファイル\sound\mamebsd</Filter>
+    </ClInclude>
+    <ClInclude Include="..\sound\mamebsd\ymfm_ssg.h">
+      <Filter>ヘッダー ファイル\sound\mamebsd</Filter>
+    </ClInclude>
+    <ClInclude Include="..\sound\mamebsd\ymfm_fm.ipp">
+      <Filter>ヘッダー ファイル\sound\mamebsd</Filter>
+    </ClInclude>
+    <ClInclude Include="..\sound\ct1741.h">
+      <Filter>ヘッダー ファイル\sound</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

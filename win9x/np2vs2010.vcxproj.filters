@@ -1257,6 +1257,12 @@
     <ClCompile Include="ext\scci2\scci2if.cpp">
       <Filter>ソース ファイル\win9x\ext\scci2</Filter>
     </ClCompile>
+    <ClCompile Include="..\sound\ct1741c.c">
+      <Filter>ソース ファイル\sound</Filter>
+    </ClCompile>
+    <ClCompile Include="..\sound\ct1741g.c">
+      <Filter>ソース ファイル\sound</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\calendar.h">
@@ -2227,6 +2233,12 @@
     </ClInclude>
     <ClInclude Include="ext\scci2\scci2if.h">
       <Filter>ヘッダー ファイル\win9x\ext\scci2</Filter>
+    </ClInclude>
+    <ClInclude Include="..\sound\ct1741.h">
+      <Filter>ヘッダー ファイル\sound</Filter>
+    </ClInclude>
+    <ClInclude Include="..\sound\mame\np2interop.h">
+      <Filter>ヘッダー ファイル\sound\mame</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

@@ -35,8 +35,11 @@
 #define IA32_CPU_CPU_H__
 
 #include "interface.h"
-#if defined(SUPPORT_FPU_SOFTFLOAT)
+#if defined(SUPPORT_FPU_SOFTFLOAT) && !defined(SUPPORT_FPU_SOFTFLOAT3)
 #include "instructions/fpu/softfloat/softfloat.h"
+#endif
+#if defined(SUPPORT_FPU_SOFTFLOAT3)
+#include "instructions/fpu/softfloat3/softfloat.h"
 #endif
 
 #ifdef __cplusplus
@@ -261,7 +264,12 @@ typedef enum {
 } FP_RND;
 
 typedef union {
-    floatx80 d;
+#if defined(SUPPORT_FPU_SOFTFLOAT) && !defined(SUPPORT_FPU_SOFTFLOAT3)
+	floatx80 d;
+#endif
+#if defined(SUPPORT_FPU_SOFTFLOAT3)
+	sw_extFloat80_t d;
+#endif
     double d64;
     struct {
         UINT32 lower;

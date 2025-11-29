@@ -564,6 +564,8 @@
     <ClCompile Include="..\sound\beepg.c" />
     <ClCompile Include="..\sound\cs4231c.c" />
     <ClCompile Include="..\sound\cs4231g.c" />
+    <ClCompile Include="..\sound\ct1741c.c" />
+    <ClCompile Include="..\sound\ct1741g.c" />
     <ClCompile Include="..\sound\fmboard.c" />
     <ClCompile Include="..\sound\fmgen\fmgen_file.cpp" />
     <ClCompile Include="..\sound\fmgen\fmgen_fmgen.cpp" />
@@ -884,6 +886,7 @@
     <ClInclude Include="..\sound\adpcm.h" />
     <ClInclude Include="..\sound\beep.h" />
     <ClInclude Include="..\sound\cs4231.h" />
+    <ClInclude Include="..\sound\ct1741.h" />
     <ClInclude Include="..\sound\fmboard.h" />
     <ClInclude Include="..\sound\fmgen\fmgen_diag.h" />
     <ClInclude Include="..\sound\fmgen\fmgen_file.h" />
@@ -901,6 +904,7 @@
     <ClInclude Include="..\sound\mame\driver.h" />
     <ClInclude Include="..\sound\mame\fm.h" />
     <ClInclude Include="..\sound\mame\fmopl.h" />
+    <ClInclude Include="..\sound\mame\np2interop.h" />
     <ClInclude Include="..\sound\mame\ymdeltat.h" />
     <ClInclude Include="..\sound\mame\ymf262.h" />
     <ClInclude Include="..\sound\opl3.h" />

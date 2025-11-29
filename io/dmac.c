@@ -10,7 +10,7 @@
 #include	"sound.h"
 #include	"cs4231.h"
 #if defined(SUPPORT_SOUND_SB16)
-#include	"ct1741io.h"
+#include	"ct1741.h"
 #endif
 #include	"sasiio.h"
 

@@ -42,6 +42,8 @@
 #include "ia32/instructions/sse/sse.h"
 #endif
 
+ // softfloat.hのインクルードはcpu.hにあります
+
  /*
  Short Real
 	31: sign (符号)

@@ -39,7 +39,6 @@
 #include "i386hax/haxcore.h"
 #endif
 
-__declspec(noinline)
 void
 ia32_initreg(void)
 {
@@ -99,7 +98,6 @@ ia32_initreg(void)
 #endif
 }
 
-__declspec(noinline)
 void
 ia32reset(void)
 {
@@ -118,7 +116,6 @@ ia32reset(void)
 #endif
 }
 
-__declspec(noinline)
 void
 ia32shut(void)
 {
@@ -216,7 +213,6 @@ ia32_step(void)
 	} while (CPU_REMCLOCK > 0);
 }
 //#pragma optimize("", on)
-__declspec(noinline)
 void CPUCALL
 ia32_interrupt(int vect, int soft)
 {
@@ -253,7 +249,6 @@ ia32_interrupt(int vect, int soft)
 /*
  * error function
  */
-__declspec(noinline)
 void
 ia32_panic(const char *str, ...)
 {
@@ -281,7 +276,6 @@ ia32_panic(const char *str, ...)
 #endif
 }
 
-__declspec(noinline)
 void
 ia32_warning(const char *str, ...)
 {
@@ -295,7 +289,6 @@ ia32_warning(const char *str, ...)
 	msgbox("ia32_warning", buf);
 }
 
-__declspec(noinline)
 void
 ia32_printf(const char *str, ...)
 {

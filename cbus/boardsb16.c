@@ -53,13 +53,8 @@ static int forceopl3mode = 0;
 static int seqpos = 0;
 
 #ifdef USE_MAME
+#include "sound/mame/np2interop.h"
 static int samplerate;
-void *YMF262Init(INT clock, INT rate);
-void YMF262ResetChip(void *chip);
-void YMF262Shutdown(void *chip);
-INT YMF262Write(void *chip, INT a, INT v);
-UINT8 YMF262Read(void *chip, INT a);
-void YMF262UpdateOne(void *chip, INT16 **buffer, INT length);
 #endif
 
 static void IOOUTCALL sb16_o0400(UINT port, REG8 dat) {
@@ -395,25 +390,34 @@ static REG8 IOINPCALL gameport_i4d2(UINT port)
 // ----
 
 #ifdef USE_MAME
+#define OPL3_SAMPLE_BUFFER	1024	
+static INT16 oplfm_s1ls[OPL3_SAMPLE_BUFFER] = { 0 };
+static INT16 oplfm_s1rs[OPL3_SAMPLE_BUFFER] = { 0 };
+static INT16 oplfm_s2ls[OPL3_SAMPLE_BUFFER] = { 0 };
+static INT16 oplfm_s2rs[OPL3_SAMPLE_BUFFER] = { 0 };
 static void SOUNDCALL opl3gen_getpcm(void* opl3, SINT32 *pcm, UINT count) {
 	UINT i;
 	INT16 *buf[4];
-	INT16 s1l,s1r,s2l,s2r;
 	SINT32 *outbuf = pcm;
 	SINT32 oplfm_volume;
 	SINT32 midivolL = g_sb16.mixregexp[MIXER_MIDI_LEFT];
 	SINT32 midivolR = g_sb16.mixregexp[MIXER_MIDI_RIGHT];
 	oplfm_volume = np2cfg.vol_fm * np2cfg.vol_master / 100;
-	buf[0] = &s1l;
-	buf[1] = &s1r;
-	buf[2] = &s2l;
-	buf[3] = &s2r;
-	for (i=0; i < count; i++) {
-		s1l = s1r = s2l = s2r = 0;
-		YMF262UpdateOne(opl3, buf, 1);
-		outbuf[0] += (SINT32)(((s1l << 1) * oplfm_volume * midivolL / 255 * (SINT32)g_sb16.mixregexp[MIXER_MASTER_LEFT] / 255) >> 6);
-		outbuf[1] += (SINT32)(((s1r << 1) * oplfm_volume * midivolR / 255 * (SINT32)g_sb16.mixregexp[MIXER_MASTER_RIGHT] / 255) >> 6);
-		outbuf += 2;
+	buf[0] = oplfm_s1ls;
+	buf[1] = oplfm_s1rs;
+	buf[2] = oplfm_s2ls;
+	buf[3] = oplfm_s2rs;
+
+	// PCMサウンドバッファに送る
+	while (count > 0) {
+		int cc = min(count, OPL3_SAMPLE_BUFFER);
+		YMF262UpdateOne(opl3, buf, cc);
+		for (i = 0; i < cc; i++) {
+			outbuf[0] += (SINT32)(((oplfm_s1ls[i] << 1) * oplfm_volume * midivolL / 255 * (SINT32)g_sb16.mixregexp[MIXER_MASTER_LEFT] / 255) >> 6);
+			outbuf[1] += (SINT32)(((oplfm_s1rs[i] << 1) * oplfm_volume * midivolR / 255 * (SINT32)g_sb16.mixregexp[MIXER_MASTER_RIGHT] / 255) >> 6);
+			outbuf += 2;
+		}
+		count -= cc;
 	}
 }
 
@@ -421,12 +425,14 @@ static void SOUNDCALL opl3gen_getpcm_dummy(void* opl3, SINT32* pcm, UINT count) 
 	UINT i;
 	INT16* buf[4];
 	INT16 s1l, s1r, s2l, s2r;
-	buf[0] = &s1l;
-	buf[1] = &s1r;
-	buf[2] = &s2l;
-	buf[3] = &s2r;
-	for (i = 0; i < count; i++) {
-		YMF262UpdateOne(opl3, buf, 1);
+	buf[0] = oplfm_s1ls;
+	buf[1] = oplfm_s1rs;
+	buf[2] = oplfm_s2ls;
+	buf[3] = oplfm_s2rs;
+	while (count > 0) {
+		int cc = min(count, OPL3_SAMPLE_BUFFER);
+		YMF262UpdateOne(opl3, buf, cc);
+		count -= cc;
 	}
 }
 #endif
@@ -449,7 +455,7 @@ void boardsb16_reset(const NP2CFG *pConfig) {
 	g_sb16.dsp_info = olddsp;
 	// ボードデフォルト IO:D2 DMA:3 IRQ:5(INT1) 
 	g_sb16.base = np2cfg.sndsb16io; //0xd2;
-	g_sb16.dmach = np2cfg.sndsb16dma; //0x3;
+	g_sb16.dmachnum = np2cfg.sndsb16dma; //0x3;
 	g_sb16.dmairq = np2cfg.sndsb16irq; //0x5;
 	ct1745io_reset();
 	ct1741io_reset();

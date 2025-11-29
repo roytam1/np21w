@@ -30,6 +30,10 @@
 #if defined(SUPPORT_HRTIMER)
 #include	"timemng.h"
 #endif
+#if defined(SUPPORT_LGY98)
+#include	"network/lgy98.h"
+#include	"network/lgy98dev.h"
+#endif
 #if defined(SUPPORT_IA32_HAXM)
 #include	"i386hax/haxfunc.h"
 #include	"i386hax/haxcore.h"
@@ -38,6 +42,9 @@
 #include	"mousemng.h"
 
 #include <shlwapi.h>
+
+// 性能上最適化で優先しない方がいいコードなのでわざと別セグメントに置く
+#pragma code_seg(".MISCCODE")
 
 #if 0
 #undef	TRACEOUT
@@ -114,6 +121,19 @@ static const OEMCHAR str_mhz[] = OEMTEXT("%uMHz");
 #define NP21W_SWITCH_SETIDEWAIT_R		7
 #define NP21W_SWITCH_SETIDEWAIT_W		8
 #define NP21W_SWITCH_AUTOHIDECURSOR		9
+#define NP21W_SWITCH_SETDEVICEIRQ		10
+
+#define NP21W_SWITCH_SETDEVICEIRQ_SUPPORTED		0
+#define NP21W_SWITCH_SETDEVICEIRQ_SND_26		1
+#define NP21W_SWITCH_SETDEVICEIRQ_SND_86		2
+#define NP21W_SWITCH_SETDEVICEIRQ_SND_118		3
+#define NP21W_SWITCH_SETDEVICEIRQ_SND_MATEX		4
+#define NP21W_SWITCH_SETDEVICEIRQ_SND_SB16		5
+#define NP21W_SWITCH_SETDEVICEIRQ_SND_SPB		6
+#define NP21W_SWITCH_SETDEVICEIRQ_MIDI_MPU		7
+#define NP21W_SWITCH_SETDEVICEIRQ_MIDI_SMPU		8
+#define NP21W_SWITCH_SETDEVICEIRQ_NET_LGY98		9
+#define NP21W_SWITCH_SETDEVICEIRQ_SND_SO		10
 
 
 static void setoutstr(const OEMCHAR *str) {
@@ -270,6 +290,108 @@ static void np2sysp_getconfig(const void *arg1, long arg2) {
 	case NP21W_SWITCH_AUTOHIDECURSOR:
 		configvalue = mousemng_getautohidecursor();
 		break;
+	case NP21W_SWITCH_SETDEVICEIRQ:
+	{
+		UINT8 targetvalue = (np2sysp.outval >> 16) & 0xff;
+		int opna_idx;
+		if (g_nSoundID == SOUNDID_PC_9801_86_WSS || g_nSoundID == SOUNDID_PC_9801_86_118 || g_nSoundID == SOUNDID_WAVESTAR || g_nSoundID == SOUNDID_PC_9801_86_WSS_SB16 || g_nSoundID == SOUNDID_PC_9801_86_118_SB16) {
+			opna_idx = 1;
+		}
+		else {
+			opna_idx = 0;
+		}
+		configvalue = 0xfe; // デバイスがない場合は0xfeを返す
+		switch (targetvalue) {
+		case NP21W_SWITCH_SETDEVICEIRQ_SUPPORTED:
+			configvalue = 98; // サポート確認用　常時98を返す
+			break;
+		case NP21W_SWITCH_SETDEVICEIRQ_SND_26:
+			if (g_nSoundID == SOUNDID_PC_9801_26K) {
+				configvalue = g_opna[0].s.irq;
+			}
+			else if (g_nSoundID == SOUNDID_PC_9801_86_26K) {
+				configvalue = g_opna[1].s.irq;
+			}
+			break;
+		case NP21W_SWITCH_SETDEVICEIRQ_SND_86:
+			if (g_nSoundID == SOUNDID_PC_9801_86 ||
+				g_nSoundID == SOUNDID_PC_9801_86_26K ||
+				g_nSoundID == SOUNDID_PC_9801_86_118 || 
+				g_nSoundID == SOUNDID_PC_9801_86_118_SB16 || 
+				g_nSoundID == SOUNDID_PC_9801_86_ADPCM ||
+				g_nSoundID == SOUNDID_PC_9801_86_SB16 ||
+				g_nSoundID == SOUNDID_PC_9801_86_WSS ||
+				g_nSoundID == SOUNDID_PC_9801_86_WSS_SB16 ||
+				g_nSoundID == SOUNDID_86_SPEAKBOARD) {
+				configvalue = g_pcm86.irq;
+			}
+			break;
+		case NP21W_SWITCH_SETDEVICEIRQ_SND_118:
+			if (g_nSoundID == SOUNDID_PC_9801_118 ||
+				g_nSoundID == SOUNDID_PC_9801_118_SB16 ||
+				g_nSoundID == SOUNDID_PC_9801_86_118 ||
+				g_nSoundID == SOUNDID_PC_9801_86_118_SB16) {
+				configvalue = cs4231.dmairq;
+			}
+			break;
+		case NP21W_SWITCH_SETDEVICEIRQ_SND_MATEX:
+			if (g_nSoundID == SOUNDID_MATE_X_PCM ||
+				g_nSoundID == SOUNDID_WSS_SB16 ||
+				g_nSoundID == SOUNDID_PC_9801_86_WSS ||
+				g_nSoundID == SOUNDID_PC_9801_86_WSS_SB16) {
+				configvalue = cs4231.dmairq;
+			}
+			break;
+#if defined(SUPPORT_SOUND_SB16)
+		case NP21W_SWITCH_SETDEVICEIRQ_SND_SB16:
+			if (g_nSoundID == SOUNDID_SB16 ||
+				g_nSoundID == SOUNDID_WSS_SB16 ||
+				g_nSoundID == SOUNDID_PC_9801_86_SB16 ||
+				g_nSoundID == SOUNDID_PC_9801_86_WSS_SB16 ||
+				g_nSoundID == SOUNDID_PC_9801_118_SB16 ||
+				g_nSoundID == SOUNDID_PC_9801_86_118_SB16) {
+				configvalue = g_sb16.dmairq;
+			}
+			break;
+#endif
+		case NP21W_SWITCH_SETDEVICEIRQ_SND_SPB:
+			if (g_nSoundID == SOUNDID_SPEAKBOARD || g_nSoundID == SOUNDID_SPARKBOARD) {
+				configvalue = g_opna[0].s.irq;
+			}
+			else if (g_nSoundID == SOUNDID_86_SPEAKBOARD) {
+				configvalue = g_opna[1].s.irq;
+			}
+			break;
+		case NP21W_SWITCH_SETDEVICEIRQ_MIDI_MPU:
+			if (mpu98.enable) {
+				configvalue = mpu98.irqnum;
+			}
+			break;
+#if defined(SUPPORT_SMPU98)
+		case NP21W_SWITCH_SETDEVICEIRQ_MIDI_SMPU:
+			if (smpu98.enable) {
+				configvalue = smpu98.irqnum;
+			}
+			break;
+#endif
+#if defined(SUPPORT_LGY98)
+		case NP21W_SWITCH_SETDEVICEIRQ_NET_LGY98:
+			if (lgy98cfg.enabled) {
+				configvalue = lgy98cfg.irq;
+			}
+			break;
+#endif
+		case NP21W_SWITCH_SETDEVICEIRQ_SND_SO:
+			if (g_nSoundID == SOUNDID_SOUNDORCHESTRA || g_nSoundID == SOUNDID_SOUNDORCHESTRAV) {
+				configvalue = g_opna[0].s.irq;
+			}
+			break;
+		default:
+			configvalue = 0xfd; // 番号自体無効なら0xfdを返す
+			break;
+		}
+		break;
+	}
 	case NP21W_SWITCH_DUMMY:
 	default:
 		break;
@@ -413,6 +535,108 @@ static void np2sysp_cngconfig(const void *arg1, long arg2) {
 	case NP21W_SWITCH_AUTOHIDECURSOR:
 		mousemng_setautohidecursor(configvalue);
 		break;
+	case NP21W_SWITCH_SETDEVICEIRQ:
+	{
+		// デバイスのIRQLを設定　デバイスで有効なIRQのみ設定可能　ただし事実上の無効化のためにIRQ14には設定できるようにする
+		UINT8 retvalue = 0xfe; // デバイスがない場合は0xfeを返す
+		UINT8 irqvalue = (np2sysp.outval >> 8) & 0xff;
+		int opna_idx;
+		if (g_nSoundID == SOUNDID_PC_9801_86_WSS || g_nSoundID == SOUNDID_PC_9801_86_118 || g_nSoundID == SOUNDID_WAVESTAR || g_nSoundID == SOUNDID_PC_9801_86_WSS_SB16 || g_nSoundID == SOUNDID_PC_9801_86_118_SB16) {
+			opna_idx = 1;
+		}
+		else {
+			opna_idx = 0;
+		}
+		switch (configvalue) {
+		case NP21W_SWITCH_SETDEVICEIRQ_SUPPORTED:
+			retvalue = 98; // サポート確認用　常時98を返す
+			break;
+		case NP21W_SWITCH_SETDEVICEIRQ_SND_26:
+			if (irqvalue == 0x03 || irqvalue == 0x0d || irqvalue == 0x0a || irqvalue == 0x0c || irqvalue == 0xff) {
+				if (g_nSoundID == SOUNDID_PC_9801_26K) {
+					g_opna[0].s.irq = irqvalue;
+					retvalue = irqvalue; // 受付されたらその値を返す
+				}
+				else if (g_nSoundID == SOUNDID_PC_9801_86_26K) {
+					g_opna[1].s.irq = irqvalue;
+					retvalue = irqvalue; // 受付されたらその値を返す
+				}
+			}
+			break;
+		case NP21W_SWITCH_SETDEVICEIRQ_SND_86:
+			if (irqvalue == 0x03 || irqvalue == 0x0d || irqvalue == 0x0a || irqvalue == 0x0c || irqvalue == 0xff) {
+				g_opna[0].s.irq = irqvalue;
+				g_pcm86.irq = irqvalue;
+				retvalue = irqvalue; // 受付されたらその値を返す
+			}
+			break;
+		case NP21W_SWITCH_SETDEVICEIRQ_SND_118:
+			if (irqvalue == 0x03 || irqvalue == 0x06 || irqvalue == 0x0a || irqvalue == 0x0c || irqvalue == 0xff) {
+				g_opna[opna_idx].s.irq = irqvalue;
+				cs4231.dmairq = irqvalue;
+				retvalue = irqvalue; // 受付されたらその値を返す
+			}
+			break;
+		case NP21W_SWITCH_SETDEVICEIRQ_SND_MATEX:
+			if (irqvalue == 0x03 || irqvalue == 0x06 || irqvalue == 0x0a || irqvalue == 0x0c || irqvalue == 0xff) {
+				cs4231.dmairq = irqvalue;
+				retvalue = irqvalue; // 受付されたらその値を返す
+			}
+			break;
+#if defined(SUPPORT_SOUND_SB16)
+		case NP21W_SWITCH_SETDEVICEIRQ_SND_SB16:
+			if (irqvalue == 3 || irqvalue == 5 || irqvalue == 10 || irqvalue == 12 || irqvalue == 0xff) {
+				g_sb16.dmairq = 3;
+				g_sb16.dsp_info.dmairq = ct1741_get_dma_irq();
+				retvalue = irqvalue; // 受付されたらその値を返す
+			}
+			break;
+#endif
+		case NP21W_SWITCH_SETDEVICEIRQ_SND_SPB:
+			if (irqvalue == 0x03 || irqvalue == 0x0d || irqvalue == 0x0a || irqvalue == 0x0c || irqvalue == 0xff) {
+				g_opna[0].s.irq = irqvalue;
+				g_pcm86.irq = irqvalue;
+				retvalue = irqvalue; // 受付されたらその値を返す
+			}
+			break;
+		case NP21W_SWITCH_SETDEVICEIRQ_MIDI_MPU:
+			if (irqvalue == 3 || irqvalue == 5 || irqvalue == 6 || irqvalue == 12 || irqvalue == 0xff) {
+				mpu98.irqnum = irqvalue;
+				retvalue = irqvalue; // 受付されたらその値を返す
+			}
+			break;
+#if defined(SUPPORT_SMPU98)
+		case NP21W_SWITCH_SETDEVICEIRQ_MIDI_SMPU:
+			if (irqvalue == 3 || irqvalue == 5 || irqvalue == 6 || irqvalue == 12 || irqvalue == 0xff) {
+				smpu98.irqnum = irqvalue;
+				retvalue = irqvalue; // 受付されたらその値を返す
+			}
+			break;
+#endif
+#if defined(SUPPORT_LGY98)
+		case NP21W_SWITCH_SETDEVICEIRQ_NET_LGY98:
+			if (irqvalue == 3 || irqvalue == 5 || irqvalue == 6 || irqvalue == 12 || irqvalue == 0xff) {
+				lgy98cfg.irq = irqvalue;
+				lgy98.irq = irqvalue;
+				retvalue = irqvalue; // 受付されたらその値を返す
+			}
+			break;
+#endif
+		case NP21W_SWITCH_SETDEVICEIRQ_SND_SO:
+			if (irqvalue == 0x03 || irqvalue == 0x0d || irqvalue == 0x0a || irqvalue == 0x0c || irqvalue == 0xff) {
+				if (g_nSoundID == SOUNDID_SOUNDORCHESTRA || g_nSoundID == SOUNDID_SOUNDORCHESTRAV) {
+					g_opna[0].s.irq = irqvalue;
+					retvalue = irqvalue; // 受付されたらその値を返す
+				}
+			}
+			break;
+		default:
+			retvalue = 0xfd; // 番号自体無効なら0xfdを返す
+			break;
+		}
+		configvalue = retvalue;
+		break;
+	}
 	case NP21W_SWITCH_DUMMY:
 	default:
 		break;
@@ -691,4 +915,6 @@ void np2sysp_bind(void) {
 	iocore_attachinp(0x00e9, np2sysp_i0e9);
 #endif
 }
+
+#pragma code_seg()
 

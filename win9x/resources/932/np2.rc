@@ -1149,6 +1149,7 @@ BEGIN
             MENUITEM "&Raw Input Mode",             IDM_MOUSERAW
             MENUITEM "&Non-capture Control",        IDM_MOUSENC
             MENUITEM "&Change Sound Volume by Wheel",   IDM_MOUSEWHEELCTL
+            MENUITEM "&Limit Max Mouse Speed",      IDM_SLOWMOUSE
             MENUITEM SEPARATOR
             MENUITEM "x3.0",                        IDM_MOUSE30X
             MENUITEM "x2.0",                        IDM_MOUSE20X
@@ -1193,6 +1194,7 @@ BEGIN
         // MENUITEM "Fix &MMTimer",                IDM_TIMERFIX
         // MENUITEM "&Skip over 16MB memcheck",    IDM_SKIP16MEMCHK
         MENUITEM "Fast m&emcheck",              IDM_FASTMEMCHK
+        MENUITEM "Allow &drag and drop",        IDM_ALLOWDRAGDROP
         MENUITEM SEPARATOR
         MENUITEM "&Help...",                    IDM_HELP
         MENUITEM "&About...",                   IDM_ABOUT

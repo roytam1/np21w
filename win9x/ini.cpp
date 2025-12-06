@@ -705,6 +705,7 @@ static const PFTBL s_IniItems[] =
 #endif
 	PFVAL("CPUSPEED", PFTYPE_UINT32,	&np2cfg.emuspeed),
 	PFSTR("fontface", PFRO_STR,			np2cfg.fontface),
+	PFVAL("SLOWMOUS", PFTYPE_BOOL,		&np2cfg.slowmous),
 	
 
 	// OS依存？
@@ -815,7 +816,7 @@ static const PFTBL s_IniItems[] =
 	PFVAL("EMUDDRAW", PFTYPE_BOOL,		&np2oscfg.emuddraw), // 最近はEMULATIONONLYにした方速かったりする（特にピクセル操作する場合とか）
 	PFVAL("DRAWTYPE", PFTYPE_UINT8,		&np2oscfg.drawtype), // 画面レンダラ (0: DirectDraw, 1: reserved(DirecrDraw), 2: Direct3D)
 	
-	PFVAL("DRAGDROP", PFRO_BOOL,		&np2oscfg.dragdrop), // ドラッグアンドドロップサポート
+	PFVAL("DRAGDROP", PFTYPE_BOOL,		&np2oscfg.dragdrop), // ドラッグアンドドロップサポート
 	PFVAL("MAKELHDD", PFRO_BOOL,		&np2oscfg.makelhdd), // 巨大HDDイメージ作成サポート
 	PFVAL("SYSKHOOK", PFTYPE_BOOL,		&np2oscfg.syskhook), // システムキーフックサポート
 	PFVAL("RAWMOUSE", PFTYPE_BOOL,		&np2oscfg.rawmouse), // 直接マウスデータ読み取り

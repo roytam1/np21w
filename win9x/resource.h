@@ -778,6 +778,7 @@
 #define IDM_FPU80                       49680
 #define IDM_FPU64                       49681
 #define IDM_FPU64INT                    49682
+#define IDM_SLOWMOUSE                   40687
 #define IDM_MOUSEWHEELCTL               40688
 #define IDM_MOUSENC                     40689
 #define IDM_MOUSERAW                    40690
@@ -805,6 +806,7 @@
 #define IDM_TIMERFIX                    40716
 #define IDM_SKIP16MEMCHK                40717
 #define IDM_FASTMEMCHK                  40718
+#define IDM_ALLOWDRAGDROP               40719
 #define IDM_ALTENTER                    40721
 #define IDM_ALTF4                       40722
 #define IDM_SYSKHOOK                    40729

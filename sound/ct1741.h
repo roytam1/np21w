@@ -42,6 +42,8 @@ typedef enum {
 #define CT1741_DMA_BUFSIZE  1024
 // DSP DMAバッファマスク
 #define CT1741_DMA_BUFMASK  (CT1741_DMA_BUFSIZE - 1)
+// DSP DMA読み取り単位
+#define CT1741_DMA_READINTERVAL	(CT1741_DMA_BUFSIZE / 8)
 
 // DSP コマンドバッファサイズ
 #define CT1741_DSP_BUFSIZE 64

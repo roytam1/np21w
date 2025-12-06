@@ -1047,14 +1047,11 @@ BEGIN
         MENUITEM "&No wait",                    IDM_NOWAIT
         MENUITEM "&CPU clock stabilizer",       IDM_CPUSTABILIZER
         MENUITEM "Dyn&amic CPU clock adjustment",  IDM_ASYNCCPU
-        //POPUP "Dynamic CPU clock &target"
-        //BEGIN
-        //    MENUITEM "100%", IDM_ASYNCCPU_MAX
-        //    MENUITEM "70%", IDM_ASYNCCPU_70
-        //    MENUITEM "50%", IDM_ASYNCCPU_50
-        //    MENUITEM "30%", IDM_ASYNCCPU_30
-        //    MENUITEM "20%", IDM_ASYNCCPU_20
-        //END
+        POPUP "Dynamic CPU clock &priority"
+        BEGIN
+            MENUITEM "Performance", IDM_ASYNCCPU_LEVEL_MAX
+            MENUITEM "Timing stability", IDM_ASYNCCPU_LEVEL_MIN
+        END
         MENUITEM SEPARATOR
         //MENUITEM "&Auto frame",                 IDM_AUTOFPS
         MENUITEM "F&ull frame",                 IDM_60FPS
@@ -1077,6 +1074,7 @@ BEGIN
             MENUITEM "mechanical &GRPH",            IDM_XGRPH
             MENUITEM SEPARATOR
             MENUITEM "Send Ctrl+Alt+Del",           IDM_SENDCAD
+            MENUITEM "Paste Clipboard Text",		IDM_COPYPASTE_PASTE
             MENUITEM SEPARATOR
             MENUITEM "F12 = &Mouse",                IDM_F12MOUSE
             MENUITEM "F12 = Co&py",                 IDM_F12COPY
@@ -1087,6 +1085,7 @@ BEGIN
             MENUITEM "F12 = User2",                 IDM_USERKEY2
             MENUITEM "F12 = No wait",               IDM_F12NOWAIT
             MENUITEM "F12 = No wait(toggle)",       IDM_F12NOWAIT2
+            MENUITEM "F12 = WAB relay SW",          IDM_F12WABRELAY
             MENUITEM SEPARATOR
             MENUITEM "Use &NumLock key",            IDM_USENUMLOCK
             MENUITEM "Swap PageUp/PageDown",        IDM_SWAPPAGEUPDOWN
@@ -1156,6 +1155,7 @@ BEGIN
             MENUITEM "&Raw Input Mode",             IDM_MOUSERAW
             MENUITEM "&Non-capture Control",        IDM_MOUSENC
             MENUITEM "&Change Sound Volume by Wheel",   IDM_MOUSEWHEELCTL
+            MENUITEM "&Limit Max Mouse Speed",  IDM_SLOWMOUSE
             MENUITEM SEPARATOR
             MENUITEM "x3.0",                        IDM_MOUSE30X
             MENUITEM "x2.0",                        IDM_MOUSE20X
@@ -1200,6 +1200,7 @@ BEGIN
         // MENUITEM "Fix &MMTimer",                IDM_TIMERFIX
         // MENUITEM "&Skip over 16MB memcheck",    IDM_SKIP16MEMCHK
         MENUITEM "Fast m&emcheck",              IDM_FASTMEMCHK
+        MENUITEM "Allow &drag and drop",        IDM_ALLOWDRAGDROP
         MENUITEM SEPARATOR
         MENUITEM "&Help...",                    IDM_HELP
         MENUITEM "&About...",                   IDM_ABOUT
@@ -1241,6 +1242,7 @@ BEGIN
         MENUITEM "&Open...",                    IDM_FDD1OPEN
         MENUITEM SEPARATOR
         MENUITEM "&Eject",                      IDM_FDD1EJECT
+        MENUITEM SEPARATOR
     END
 END
 
@@ -1251,6 +1253,7 @@ BEGIN
         MENUITEM "&Open...",                    IDM_FDD2OPEN
         MENUITEM SEPARATOR
         MENUITEM "&Eject",                      IDM_FDD2EJECT
+        MENUITEM SEPARATOR
     END
 END
 
@@ -1261,6 +1264,7 @@ BEGIN
         MENUITEM "&Open...",                    IDM_FDD3OPEN
         MENUITEM SEPARATOR
         MENUITEM "&Eject",                      IDM_FDD3EJECT
+        MENUITEM SEPARATOR
     END
 END
 
@@ -1271,6 +1275,7 @@ BEGIN
         MENUITEM "&Open...",                    IDM_FDD4OPEN
         MENUITEM SEPARATOR
         MENUITEM "&Eject",                      IDM_FDD4EJECT
+        MENUITEM SEPARATOR
     END
 END
 

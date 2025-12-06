@@ -1849,57 +1849,72 @@ static void OnCommand(HWND hWnd, WPARAM wParam)
 			cmwacom_setNCControl(!!np2oscfg.mouse_nc);
 #endif
 			mousemng_updateautohidecursor();
+			update |= SYS_UPDATEOSCFG;
 			break;
 
 		case IDM_MOUSEWHEELCTL:
 			np2oscfg.usewheel = !np2oscfg.usewheel;
+			update |= SYS_UPDATEOSCFG;
 			break;
 
 		case IDM_MOUSERAW:
 			np2oscfg.rawmouse = !np2oscfg.rawmouse;
 			mousemng_updateclip(); // キャプチャし直す
+			update |= SYS_UPDATEOSCFG;
 			break;
-			
+
+		case IDM_SLOWMOUSE:
+			np2cfg.slowmous = !np2cfg.slowmous;
+			update |= SYS_UPDATECFG;
+			break;
+
 		case IDM_MOUSE30X:
 			np2oscfg.mousemul = 3;
 			np2oscfg.mousediv = 1;
 			mousemng_updatespeed();
+			update |= SYS_UPDATEOSCFG;
 			break;
 
 		case IDM_MOUSE20X:
 			np2oscfg.mousemul = 2;
 			np2oscfg.mousediv = 1;
 			mousemng_updatespeed();
+			update |= SYS_UPDATEOSCFG;
 			break;
 
 		case IDM_MOUSE15X:
 			np2oscfg.mousemul = 3;
 			np2oscfg.mousediv = 2;
 			mousemng_updatespeed();
+			update |= SYS_UPDATEOSCFG;
 			break;
 
 		case IDM_MOUSE10X:
 			np2oscfg.mousemul = 1;
 			np2oscfg.mousediv = 1;
 			mousemng_updatespeed();
+			update |= SYS_UPDATEOSCFG;
 			break;
 
 		case IDM_MOUSED2X:
 			np2oscfg.mousemul = 1;
 			np2oscfg.mousediv = 2;
 			mousemng_updatespeed();
+			update |= SYS_UPDATEOSCFG;
 			break;
 
 		case IDM_MOUSED3X:
 			np2oscfg.mousemul = 1;
 			np2oscfg.mousediv = 3;
 			mousemng_updatespeed();
+			update |= SYS_UPDATEOSCFG;
 			break;
 
 		case IDM_MOUSED4X:
 			np2oscfg.mousemul = 1;
 			np2oscfg.mousediv = 4;
 			mousemng_updatespeed();
+			update |= SYS_UPDATEOSCFG;
 			break;
 
 		case IDM_SERIAL1:
@@ -2081,7 +2096,16 @@ static void OnCommand(HWND hWnd, WPARAM wParam)
 			update |= SYS_UPDATECFG;
 #endif
 			break;
-			
+
+		case IDM_ALLOWDRAGDROP:
+			np2oscfg.dragdrop = !np2oscfg.dragdrop;
+			if (np2oscfg.dragdrop)
+				DragAcceptFiles(hWnd, TRUE);	//	イメージファイルのＤ＆Ｄに対応(Kai1)
+			else
+				DragAcceptFiles(hWnd, FALSE);
+			update |= SYS_UPDATEOSCFG;
+			break;
+
 		case IDM_RESTOREBORDER:
 			if(np2oscfg.wintype!=0){
 				WINLOCEX	wlex;
@@ -2292,6 +2316,39 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 							hddrv_SCSI++;
 						}
 						continue;
+					}
+					// VM設定ファイル（単独で入れた場合のみ有効）
+					if ((!file_cmpname(ext, OEMTEXT("npcfg"))) ||
+						(!file_cmpname(ext, OEMTEXT("np2cfg"))) ||
+						(!file_cmpname(ext, OEMTEXT("np21cfg"))) ||
+						(!file_cmpname(ext, OEMTEXT("np21wcfg")))) {
+						if (files == 1) {
+							LPCTSTR lpFilename = fname;
+							file_cpyname(npcfgfilefolder, lpFilename, _countof(bmpfilefolder));
+							sysmng_update(SYS_UPDATEOSCFG);
+							BOOL b = FALSE;
+							if (!np2oscfg.comfirm) {
+								b = TRUE;
+							}
+							else
+							{
+								if (messagebox(hWnd, MAKEINTRESOURCE(IDS_CONFIRM_EXIT),
+									MB_ICONQUESTION | MB_YESNO) == IDYES)
+								{
+									b = TRUE;
+								}
+							}
+							if (b) {
+								np2_multithread_Suspend();
+								unloadNP2INI();
+								loadNP2INI(lpFilename);
+								np2_multithread_Resume();
+							}
+							break;
+						}
+						else {
+							continue;
+						}
 					}
 					//	FDイメージ…？
 					if (fddrv <= 0x02) {

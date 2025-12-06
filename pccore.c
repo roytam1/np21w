@@ -195,7 +195,8 @@ const OEMCHAR np2version[] = OEMTEXT(NP2VER_CORE);
 				1,
 #endif
 				100,
-				TEXT("")
+				TEXT(""),
+				0
 	};
 
 	PCCORE	pccore = {	PCBASECLOCK25, PCBASEMULTIPLE,

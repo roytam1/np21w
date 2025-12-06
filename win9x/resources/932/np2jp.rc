@@ -1040,14 +1040,11 @@ BEGIN
         MENUITEM "CPUウェイト無し(&N)",         IDM_NOWAIT
         MENUITEM "CPUクロック安定化(&C)",       IDM_CPUSTABILIZER
         MENUITEM "動的CPUクロック調整(&A)",		IDM_ASYNCCPU
-        //POPUP "動的CPUクロック目標値(&T)"
-        //BEGIN
-        //    MENUITEM "100%", IDM_ASYNCCPU_MAX
-        //    MENUITEM "70%", IDM_ASYNCCPU_70
-        //    MENUITEM "50%", IDM_ASYNCCPU_50
-        //    MENUITEM "30%", IDM_ASYNCCPU_30
-        //    MENUITEM "20%", IDM_ASYNCCPU_20
-        //END
+        POPUP "動的CPUクロック調整目標(&P)"
+        BEGIN
+            MENUITEM "処理速度最大化", IDM_ASYNCCPU_LEVEL_MAX
+            MENUITEM "タイミング重視", IDM_ASYNCCPU_LEVEL_MIN
+        END
         MENUITEM SEPARATOR
         //MENUITEM "自動フレームスキップ(&A)",    IDM_AUTOFPS
         MENUITEM "フレームスキップ無し(&U)",    IDM_60FPS
@@ -1070,6 +1067,7 @@ BEGIN
             MENUITEM "メカニカル &GRPHキー",        IDM_XGRPH
             MENUITEM SEPARATOR
             MENUITEM "Ctrl+Alt+Del 送信",           IDM_SENDCAD
+            MENUITEM "クリップボードテキスト貼り付け",		IDM_COPYPASTE_PASTE
             MENUITEM SEPARATOR
             MENUITEM "F12 = マウスキャプチャ(&M)",  IDM_F12MOUSE
             MENUITEM "F12 = Co&py",                 IDM_F12COPY
@@ -1080,6 +1078,7 @@ BEGIN
             MENUITEM "F12 = ユーザ設定2",           IDM_USERKEY2
             MENUITEM "F12 = CPUウェイト無し",       IDM_F12NOWAIT
             MENUITEM "F12 = CPUウェイト無し(切替)", IDM_F12NOWAIT2
+            MENUITEM "F12 = WAB出力強制切替",       IDM_F12WABRELAY
             MENUITEM SEPARATOR
             MENUITEM "NumLockキー有効(&N)",         IDM_USENUMLOCK
             MENUITEM "PageUpとPageDownを入替",      IDM_SWAPPAGEUPDOWN
@@ -1149,6 +1148,7 @@ BEGIN
             MENUITEM "高解像度マウス(&R)",          IDM_MOUSERAW
             MENUITEM "キャプチャ無し操作(&N)",      IDM_MOUSENC
             MENUITEM "マウスホイールで音量設定(&C)",   IDM_MOUSEWHEELCTL
+            MENUITEM "マウス最大速度制限(&S)",     IDM_SLOWMOUSE
             MENUITEM SEPARATOR
             MENUITEM "x3.0",                        IDM_MOUSE30X
             MENUITEM "x2.0",                        IDM_MOUSE20X
@@ -1158,8 +1158,6 @@ BEGIN
             MENUITEM "x1/3",                        IDM_MOUSED3X
             MENUITEM "x1/4",                        IDM_MOUSED4X
         END
-        MENUITEM "マウスキャプチャ(&M)",        IDM_MOUSE
-        MENUITEM SEPARATOR
         MENUITEM "シリアルポート設定(&R)...",   IDM_SERIAL1
         MENUITEM SEPARATOR
         MENUITEM "MIDI設定(&O)...",             IDM_MPUPC98
@@ -1195,6 +1193,7 @@ BEGIN
         // MENUITEM "タイマー不具合修正(&T)",      IDM_TIMERFIX
         // MENUITEM "16MB超メモリチェック省略(&S)",IDM_SKIP16MEMCHK
         MENUITEM "高速メモリチェック(&E)",      IDM_FASTMEMCHK
+        MENUITEM "ドラッグ＆ドロップ許可(&D)",  IDM_ALLOWDRAGDROP
         MENUITEM SEPARATOR
         MENUITEM "ヘルプ(&H)...",               IDM_HELP
         MENUITEM "バージョン情報(&A)...",       IDM_ABOUT
@@ -1236,6 +1235,7 @@ BEGIN
         MENUITEM "開く(&O)...",                    IDM_FDD1OPEN
         MENUITEM SEPARATOR
         MENUITEM "取り出し(&E)...",                      IDM_FDD1EJECT
+        MENUITEM SEPARATOR
     END
 END
 
@@ -1246,6 +1246,7 @@ BEGIN
         MENUITEM "開く(&O)...",                    IDM_FDD2OPEN
         MENUITEM SEPARATOR
         MENUITEM "取り出し(&E)...",                      IDM_FDD2EJECT
+        MENUITEM SEPARATOR
     END
 END
 
@@ -1256,6 +1257,7 @@ BEGIN
         MENUITEM "開く(&O)...",                    IDM_FDD3OPEN
         MENUITEM SEPARATOR
         MENUITEM "取り出し(&E)...",                      IDM_FDD3EJECT
+        MENUITEM SEPARATOR
     END
 END
 
@@ -1266,6 +1268,7 @@ BEGIN
         MENUITEM "開く(&O)...",                    IDM_FDD4OPEN
         MENUITEM SEPARATOR
         MENUITEM "取り出し(&E)...",                      IDM_FDD4EJECT
+        MENUITEM SEPARATOR
     END
 END
 
@@ -1313,12 +1316,16 @@ BEGIN
         MENUITEM "開く(&O)...",                    IDM_IDE0OPEN
         MENUITEM SEPARATOR
         MENUITEM "取り外し(&R)...",                     IDM_IDE0EJECT
+        MENUITEM SEPARATOR
+        MENUITEM " ",							IDM_IDE0STATE
     END
     POPUP "SASI #1"
     BEGIN
         MENUITEM "開く(&O)...",                    IDM_IDE1OPEN
         MENUITEM SEPARATOR
         MENUITEM "取り外し(&R)...",                     IDM_IDE1EJECT
+        MENUITEM SEPARATOR
+        MENUITEM " ",							IDM_IDE0STATE
     END
 END
 

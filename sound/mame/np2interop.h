@@ -5,6 +5,7 @@
 
 #pragma once
 
+#ifndef USE_MAME_BSD
 
 #ifdef __cplusplus
 extern "C" {
@@ -24,3 +25,4 @@ int YMF262FlagLoad(void* chipptr, void* srcbuf, int size);
 }
 #endif
 
+#endif

@@ -324,9 +324,12 @@ typedef struct {
 	FP_REG		reg[FPU_REG_NUM+1]; // R0 to R7 + α
 	FP_TAG		tag[FPU_REG_NUM+1]; // R0 to R7 + α
 	FP_RND		round;
-#ifdef SUPPORT_FPU_DOSBOX2 // XXX: 整数間だけ正確にするため用
+#if defined(SUPPORT_FPU_DOSBOX2) // XXX: 整数間だけ正確にするため用
 	FP_INT_REG	int_reg[FPU_REG_NUM+1];
 	UINT8		int_regvalid[FPU_REG_NUM+1];
+#elif defined(SUPPORT_FPU_DOSBOX2_COMPATIBLE) // XXX: 互換維持用　未使用
+	FP_INT_REG	reserved_fpu1[FPU_REG_NUM + 1];
+	UINT8		reserved_fpu2[FPU_REG_NUM + 1];
 #endif
 #ifdef USE_SSE
 	XMM_REG		xmm_reg[XMM_REG_NUM+1]; // xmm0 to xmm7	

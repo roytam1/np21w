@@ -236,6 +236,7 @@ private:
 	uint8_t m_ssg_inverted;                // non-zero if the output should be inverted (bit 0)
 	uint8_t m_key_state;                   // current key state: on or off (bit 0)
 	uint8_t m_keyon_live;                  // live key on state (bit 0 = direct, bit 1 = rhythm, bit 2 = CSM)
+	uint8_t m_keyon_request;               // request key on (set to 1 when a key on is requested, and cleared after the key on occurs)
 	opdata_cache m_cache;                  // cached values for performance
 	RegisterType &m_regs;                  // direct reference to registers
 	fm_engine_base<RegisterType> &m_owner; // reference to the owning engine

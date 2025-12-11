@@ -24,7 +24,11 @@ static int a460_soundid = 0x80;
 #define G_OPL3_INDEX	0
 
 #ifdef USE_MAME
+#ifdef USE_MAME_BSD
+#include "sound/mamebsd/np2interop.h"
+#else
 #include "sound/mame/np2interop.h"
+#endif
 static int samplerate;
 
 static void IOOUTCALL sb16_o20d2(UINT port, REG8 dat) {

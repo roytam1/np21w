@@ -518,7 +518,9 @@ int32_t fm_operator<RegisterType>::compute_noise_volume(uint32_t am_offset) cons
 template<class RegisterType>
 void fm_operator<RegisterType>::keyonoff(uint32_t on, keyon_type type)
 {
+	uint8_t last_keyon_live = m_keyon_live;
 	m_keyon_live = (m_keyon_live & ~(1 << int(type))) | (bitfield(on, 0) << int(type));
+	if(!last_keyon_live && m_keyon_live) m_keyon_request = 1;
 }
 
 
@@ -607,6 +609,16 @@ void fm_operator<RegisterType>::clock_keystate(uint32_t keystate)
 		else
 			start_release();
 	}
+	else if (m_keyon_request) 
+	{
+		if (keystate != 0) 
+		{
+			// send a key on again
+			m_env_state = EG_RELEASE;
+			start_attack(true);
+		}
+	}
+	m_keyon_request = 0;
 }
 
 

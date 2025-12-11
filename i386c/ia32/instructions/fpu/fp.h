@@ -30,7 +30,9 @@
 extern "C" {
 #endif
 	
-void fpu_initialize(void);
+void CPUCALL fpu_initialize(int initreg);
+
+void fpu_statesave_load(void);
 
 void FPU_FWAIT(void);
 

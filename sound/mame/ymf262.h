@@ -1,3 +1,6 @@
+
+#ifndef USE_MAME_BSD
+
 #ifndef YMF262_H
 #define YMF262_H
 
@@ -53,3 +56,5 @@ void YMF262SetUpdateHandler(void *chip, OPL3_UPDATEHANDLER UpdateHandler, void *
 
 
 #endif /* YMF262_H */
+
+#endif

@@ -53,7 +53,11 @@ static int forceopl3mode = 0;
 static int seqpos = 0;
 
 #ifdef USE_MAME
+#ifdef USE_MAME_BSD
+#include "sound/mamebsd/np2interop.h"
+#else
 #include "sound/mame/np2interop.h"
+#endif
 static int samplerate;
 #endif
 

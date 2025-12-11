@@ -39,6 +39,8 @@ differences between OPL2 and OPL3 shown in datasheets:
 
 */
 
+#ifndef USE_MAME_BSD
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
@@ -2582,15 +2584,14 @@ int YMF262FlagLoad(void *chip, void *srcbuf, int size)
 	OPL3* opl3src = (OPL3*)srcbuf;
 	OPL3 opl3tmp = *opl3;
 
-	OPL3_TIMERHANDLER  TimerHandler;/* TIMER handler                */
-	void *TimerParam;					/* TIMER parameter              */
-	OPL3_IRQHANDLER    IRQHandler;	/* IRQ handler                  */
-	void *IRQParam;					/* IRQ parameter                */
-	OPL3_UPDATEHANDLER UpdateHandler;/* stream update handler       */
-	void *UpdateParam;
-
 	if(srcbuf==NULL) return 0;
-	if(size != sizeof(OPL3) + sizeof(INT32) * 18 * 2) return 0;
+
+	// バッファサイズがあっていなくても復元なしで通す
+	if (size != sizeof(OPL3) + sizeof(INT32) * 18 * 2) {
+		// reset
+		OPL3ResetChip((OPL3*)chip);
+		return size;
+	}
 
 	*opl3 = *opl3src;
 	
@@ -2834,3 +2835,5 @@ void YMF262UpdateOne(void *_chip, OPL3SAMPLE **buffers, int length)
 
 }
 #endif /* BUILD_YMF262 */
+
+#endif

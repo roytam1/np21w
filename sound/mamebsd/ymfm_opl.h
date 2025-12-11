@@ -668,7 +668,7 @@ public:
 	void write(uint32_t offset, uint8_t data);
 
 	// generate samples of sound
-	void generate(output_data *output, uint32_t numsamples = 1);
+	void generate(output_data *output, uint32_t numsamples = 1, int32_t* lpHasdata = nullptr);
 
 protected:
 	// internal state

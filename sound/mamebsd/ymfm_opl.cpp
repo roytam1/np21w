@@ -1399,8 +1399,9 @@ void ymf262::write(uint32_t offset, uint8_t data)
 //  generate - generate samples of sound
 //-------------------------------------------------
 
-void ymf262::generate(output_data *output, uint32_t numsamples)
+void ymf262::generate(output_data *output, uint32_t numsamples, int32_t* lpHasdata)
 {
+	int32_t hasdata = 0;
 	for (uint32_t samp = 0; samp < numsamples; samp++, output++)
 	{
 		// clock the system
@@ -1411,7 +1412,10 @@ void ymf262::generate(output_data *output, uint32_t numsamples)
 
 		// YMF262 output is 16-bit offset serial via YAC512 DAC
 		output->clamp16();
+
+		hasdata |= output->data[0] | output->data[1] | output->data[2] | output->data[3];
 	}
+	if(lpHasdata) *lpHasdata = hasdata;
 }
 
 

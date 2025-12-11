@@ -54,7 +54,11 @@ static int seqpos = 0;
 
 #ifdef USE_MAME
 #ifdef USE_MAME_BSD
+#if _MSC_VER < 1900
+#include "sound/mamebsdsub/np2interop.h"
+#else
 #include "sound/mamebsd/np2interop.h"
+#endif
 #else
 #include "sound/mame/np2interop.h"
 #endif
@@ -394,7 +398,7 @@ static REG8 IOINPCALL gameport_i4d2(UINT port)
 // ----
 
 #ifdef USE_MAME
-#define OPL3_SAMPLE_BUFFER	1024	
+#define OPL3_SAMPLE_BUFFER	4096	
 static INT16 oplfm_s1ls[OPL3_SAMPLE_BUFFER] = { 0 };
 static INT16 oplfm_s1rs[OPL3_SAMPLE_BUFFER] = { 0 };
 static INT16 oplfm_s2ls[OPL3_SAMPLE_BUFFER] = { 0 };
@@ -406,6 +410,7 @@ static void SOUNDCALL opl3gen_getpcm(void* opl3, SINT32 *pcm, UINT count) {
 	SINT32 oplfm_volume;
 	SINT32 midivolL = g_sb16.mixregexp[MIXER_MIDI_LEFT];
 	SINT32 midivolR = g_sb16.mixregexp[MIXER_MIDI_RIGHT];
+	SINT32 volL, volR;
 	oplfm_volume = np2cfg.vol_fm * np2cfg.vol_master / 100;
 	buf[0] = oplfm_s1ls;
 	buf[1] = oplfm_s1rs;
@@ -413,12 +418,14 @@ static void SOUNDCALL opl3gen_getpcm(void* opl3, SINT32 *pcm, UINT count) {
 	buf[3] = oplfm_s2rs;
 
 	// PCMサウンドバッファに送る
+	volL = oplfm_volume * midivolL * 2;
+	volR = oplfm_volume * midivolR * 2;
 	while (count > 0) {
 		int cc = min(count, OPL3_SAMPLE_BUFFER);
 		YMF262UpdateOne(opl3, buf, cc);
 		for (i = 0; i < cc; i++) {
-			outbuf[0] += (SINT32)(((oplfm_s1ls[i] << 1) * oplfm_volume * midivolL / 255 * (SINT32)g_sb16.mixregexp[MIXER_MASTER_LEFT] / 255) >> 6);
-			outbuf[1] += (SINT32)(((oplfm_s1rs[i] << 1) * oplfm_volume * midivolR / 255 * (SINT32)g_sb16.mixregexp[MIXER_MASTER_RIGHT] / 255) >> 6);
+			outbuf[0] += (SINT32)((oplfm_s1ls[i] * volL / 255 * (SINT32)g_sb16.mixregexp[MIXER_MASTER_LEFT] / 255) >> 6);
+			outbuf[1] += (SINT32)((oplfm_s1rs[i] * volR / 255 * (SINT32)g_sb16.mixregexp[MIXER_MASTER_RIGHT] / 255) >> 6);
 			outbuf += 2;
 		}
 		count -= cc;

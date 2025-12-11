@@ -277,6 +277,12 @@
     <Filter Include="ヘッダー ファイル\win9x\ext\scci2">
       <UniqueIdentifier>{6eecaa5d-a323-4070-a304-9b14015beb12}</UniqueIdentifier>
     </Filter>
+    <Filter Include="ソース ファイル\sound\mamebsdsub">
+      <UniqueIdentifier>{41e7012c-23a8-441e-974c-e411ac566f41}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ヘッダー ファイル\sound\mamebsdsub">
+      <UniqueIdentifier>{e20317aa-841c-485e-8d42-037e378c64cb}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\calendar.c">
@@ -1263,6 +1269,12 @@
     <ClCompile Include="..\sound\ct1741g.c">
       <Filter>ソース ファイル\sound</Filter>
     </ClCompile>
+    <ClCompile Include="..\sound\mamebsdsub\ymfm_opl.cpp">
+      <Filter>ソース ファイル\sound\mamebsdsub</Filter>
+    </ClCompile>
+    <ClCompile Include="..\sound\mamebsdsub\np2interop.cpp">
+      <Filter>ソース ファイル\sound\mamebsdsub</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\calendar.h">
@@ -2240,6 +2252,18 @@
     <ClInclude Include="..\sound\mame\np2interop.h">
       <Filter>ヘッダー ファイル\sound\mame</Filter>
     </ClInclude>
+    <ClInclude Include="..\sound\mamebsdsub\np2interop.h">
+      <Filter>ヘッダー ファイル\sound\mamebsdsub</Filter>
+    </ClInclude>
+    <ClInclude Include="..\sound\mamebsdsub\ymfm.h">
+      <Filter>ヘッダー ファイル\sound\mamebsdsub</Filter>
+    </ClInclude>
+    <ClInclude Include="..\sound\mamebsdsub\ymfm_fm.h">
+      <Filter>ヘッダー ファイル\sound\mamebsdsub</Filter>
+    </ClInclude>
+    <ClInclude Include="..\sound\mamebsdsub\ymfm_opl.h">
+      <Filter>ヘッダー ファイル\sound\mamebsdsub</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <NASM Include="..\i286x\cpumem.x86">
@@ -2276,5 +2300,10 @@
     <ResourceCompile Include="resources\932\np2.rc">
       <Filter>リソース ファイル</Filter>
     </ResourceCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\sound\mamebsdsub\ymfm_fm.ipp">
+      <Filter>ヘッダー ファイル\sound\mamebsdsub</Filter>
+    </None>
   </ItemGroup>
 </Project>

@@ -74,7 +74,11 @@
 
 #ifdef USE_MAME
 #ifdef USE_MAME_BSD
+#if _MSC_VER < 1900
+#include "sound/mamebsdsub/np2interop.h"
+#else
 #include "sound/mamebsd/np2interop.h"
+#endif
 #else
 #include "sound/mame/np2interop.h"
 #endif

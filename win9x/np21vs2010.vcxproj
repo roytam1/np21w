@@ -887,6 +887,8 @@
     <ClCompile Include="..\sound\getsnd\getsmix.c" />
     <ClCompile Include="..\sound\getsnd\getsnd.c" />
     <ClCompile Include="..\sound\getsnd\getwave.c" />
+    <ClCompile Include="..\sound\mamebsdsub\np2interop.cpp" />
+    <ClCompile Include="..\sound\mamebsdsub\ymfm_opl.cpp" />
     <ClCompile Include="..\sound\mame\fmopl.c" />
     <ClCompile Include="..\sound\mame\ymdeltat.c" />
     <ClCompile Include="..\sound\mame\ymf262.c" />
@@ -1263,6 +1265,10 @@
     <ClInclude Include="..\sound\fmgen\fmgen_psg.h" />
     <ClInclude Include="..\sound\fmgen\fmgen_types.h" />
     <ClInclude Include="..\sound\getsnd\getsnd.h" />
+    <ClInclude Include="..\sound\mamebsdsub\np2interop.h" />
+    <ClInclude Include="..\sound\mamebsdsub\ymfm.h" />
+    <ClInclude Include="..\sound\mamebsdsub\ymfm_fm.h" />
+    <ClInclude Include="..\sound\mamebsdsub\ymfm_opl.h" />
     <ClInclude Include="..\sound\mame\driver.h" />
     <ClInclude Include="..\sound\mame\fm.h" />
     <ClInclude Include="..\sound\mame\fmopl.h" />
@@ -1469,6 +1475,9 @@
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="resources\932\np2.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\sound\mamebsdsub\ymfm_fm.ipp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

@@ -13,7 +13,6 @@
 
 #pragma pack(push, 1)
 
-template<typename ChipType>
 class chip_wrapper : public ymfm::ymfm_interface
 {
 public:
@@ -23,12 +22,12 @@ public:
 		m_chip.reset();
 	}
 
-	ChipType& GetChip() {
+	ymfm::ymf262& GetChip() {
 		return m_chip;
 	}
 
 private:
-	ChipType m_chip;
+	ymfm::ymf262 m_chip;
 };
 
 typedef struct {
@@ -53,13 +52,13 @@ typedef struct {
 class opl3bsd {
 public:
 	opl3bsd() :
-		m_chip(new chip_wrapper<ymfm::ymf262>()),
+		m_chip(new chip_wrapper()),
 		m_data(),
 		m_output(nullptr),
 		m_outputlen(0)
 	{
 		m_outputlen = 4096;
-		m_output = new ymfm::ymf262::output_data[m_outputlen];
+		m_output = new ymfm::ymfm_output[m_outputlen];
 	}
 	~opl3bsd()
 	{
@@ -68,13 +67,13 @@ public:
 		}
 	}
 
-	std::unique_ptr<chip_wrapper<ymfm::ymf262>> m_chip;
-	ymfm::ymf262::output_data* m_output;
+	std::unique_ptr<chip_wrapper> m_chip;
+	ymfm::ymfm_output* m_output;
 	int m_outputlen;
 	OPL3BSD_EX m_data;
 };
 
-#pragma pop
+#pragma pack(pop)
 
 void* YMF262Init(int clock, int rate)
 {
@@ -308,9 +307,9 @@ void YMF262UpdateOne(void* chipptr, INT16** buffers, int length)
 				delete[] (chipbsd->m_output);
 			}
 			chipbsd->m_outputlen = fmlength;
-			chipbsd->m_output = new ymfm::ymf262::output_data[chipbsd->m_outputlen];
+			chipbsd->m_output = new ymfm::ymfm_output[chipbsd->m_outputlen];
 		}
-		ymfm::ymf262::output_data* output = chipbsd->m_output;
+		ymfm::ymfm_output* output = chipbsd->m_output;
 		if (output == NULL) return;
 
 		int32_t hasdata = 0;

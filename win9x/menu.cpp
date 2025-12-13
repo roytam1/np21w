@@ -446,7 +446,11 @@ void xmenu_update(HMENU hMenu)
 	
 	// Device-FPU
 	const UINT8 fputype = np2cfg.fpu_type;
+#if defined(SUPPORT_FPU_SOFTFLOAT) || defined(SUPPORT_FPU_SOFTFLOAT3)
 	CheckMenuItem(hMenu, IDM_FPU80, MF_BYCOMMAND | MFCHECK(fputype == FPU_TYPE_SOFTFLOAT));
+#else
+	EnableMenuItem(hMenu, IDM_FPU64, MF_GRAYED);
+#endif
 #if defined(SUPPORT_FPU_DOSBOX)
 	CheckMenuItem(hMenu, IDM_FPU64,  MF_BYCOMMAND | MFCHECK(fputype == FPU_TYPE_DOSBOX));
 #else

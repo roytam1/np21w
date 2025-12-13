@@ -4,6 +4,8 @@
 // ---------------------------------------------------------------------------
 //	$Id: opna.cpp,v 1.68 2003/06/12 14:03:44 cisc Exp $
 
+#if defined(SUPPORT_FMGEN)
+
 #include "fmgen_types.h"
 #include "fmgen_headers.h"
 #include "fmgen_misc.h"
@@ -2093,3 +2095,5 @@ void OPNB::Mix(Sample* buffer, int nsamples)
 #endif // BUILD_OPNB
 
 }	// namespace FM
+
+#endif	/* SUPPORT_FMGEN */

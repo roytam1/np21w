@@ -1,5 +1,7 @@
 //	$Id: file.cpp,v 1.6 1999/12/28 11:14:05 cisc Exp $
 
+#if defined(SUPPORT_FMGEN)
+
 #include <stdio.h>
 #include "fmgen_types.h"
 #include "fmgen_headers.h"
@@ -175,3 +177,5 @@ bool FileIO::SetEndOfFile()
 		return false;
 	return Seek(0, end);
 }
+
+#endif	/* SUPPORT_FMGEN */

@@ -1299,6 +1299,9 @@
     <ClCompile Include="..\sound\ct1741c.c">
       <Filter>ソース ファイル\sound</Filter>
     </ClCompile>
+    <ClCompile Include="..\sound\mamebsd\np2compatible.cpp">
+      <Filter>ソース ファイル\sound\mamebsd</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\calendar.h">
@@ -2317,6 +2320,12 @@
     </ClInclude>
     <ClInclude Include="..\sound\ct1741.h">
       <Filter>ヘッダー ファイル\sound</Filter>
+    </ClInclude>
+    <ClInclude Include="..\sound\mamebsd\np2compatible.h">
+      <Filter>ヘッダー ファイル\sound\mamebsd</Filter>
+    </ClInclude>
+    <ClInclude Include="..\sound\mamebsd\np2ymfm.h">
+      <Filter>ヘッダー ファイル\sound\mamebsd</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

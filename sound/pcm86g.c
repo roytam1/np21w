@@ -6,7 +6,7 @@
 #include "compiler.h"
 #include "pcm86.h"
 
-#if 1
+#if 0
 #undef	TRACEOUT
 #define	TRACEOUT(s)	(void)(s)
 static void trace_fmt_ex(const char* fmt, ...)

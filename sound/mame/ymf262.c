@@ -2508,7 +2508,7 @@ void YMF262Shutdown(void *chip)
 {
 	OPL3Destroy((OPL3*)chip);
 }
-void YMF262ResetChip(void *chip)
+void YMF262ResetChip(void *chip, int samplerate)
 {
 	OPL3ResetChip((OPL3*)chip);
 }
@@ -2586,10 +2586,95 @@ int YMF262FlagLoad(void *chip, void *srcbuf, int size)
 
 	if(srcbuf==NULL) return 0;
 
-	// バッファサイズがあっていなくても復元なしで通す
+	// バッファサイズがあっていなくても通す
 	if (size != sizeof(OPL3) + sizeof(INT32) * 18 * 2) {
 		// reset
 		OPL3ResetChip((OPL3*)chip);
+
+		// 修正BSD版OPL3のステートセーブをロードできるようにする
+		if (1174 <= size && size < 1174 + 1024) { // 将来拡張を考えて多少大きくても認める
+			// レジスタから復元
+			int i, j;
+			UINT16 address = *((UINT8*)srcbuf); // register address
+			UINT8 *regdata = (UINT8*)srcbuf + 22; // register data
+			// Expansion Register Set　先にこれを設定しておかないとhiのセットが出来ないので先に設定
+			OPL3Write(opl3, 2, 0x5);
+			OPL3Write(opl3, 1, regdata[0x105]);
+			// 4-Operator Mode Set
+			OPL3Write(opl3, 2, 0x4);
+			OPL3Write(opl3, 1, regdata[0x104]);
+			// Keyboard Split Selection Set
+			OPL3Write(opl3, 0, 0x8);
+			OPL3Write(opl3, 1, regdata[0x8]);
+			// Rhythm Instrument Sel Set
+			OPL3Write(opl3, 0, 0xbd);
+			OPL3Write(opl3, 1, regdata[0xbd]);
+			// Slot Register 7 Set
+			for (i = 0; i < 9; i++) {
+				OPL3Write(opl3, 0, 0xc0 + i);
+				OPL3Write(opl3, 1, regdata[0xc0 + i]);
+				OPL3Write(opl3, 2, 0xc0 + i);
+				OPL3Write(opl3, 1, regdata[0x1c0 + i]);
+			}
+			// Slot Register 1 Set
+			for (i = 0; i < 3; i++) {
+				for (j = 0; j < 6; j++) {
+					int regidx = i * 8 + j;
+					OPL3Write(opl3, 0, 0x20 + regidx);
+					OPL3Write(opl3, 1, regdata[0x20 + i]);
+					OPL3Write(opl3, 2, 0x20 + regidx);
+					OPL3Write(opl3, 1, regdata[0x120 + i]);
+				}
+			}
+			// Slot Register 2 Set
+			for (i = 0; i < 3; i++) {
+				for (j = 0; j < 6; j++) {
+					int regidx = i * 8 + j;
+					OPL3Write(opl3, 0, 0x40 + regidx);
+					OPL3Write(opl3, 1, regdata[0x40 + i]);
+					OPL3Write(opl3, 2, 0x40 + regidx);
+					OPL3Write(opl3, 1, regdata[0x140 + i]);
+				}
+			}
+			// Slot Register 3 Set
+			for (i = 0; i < 3; i++) {
+				for (j = 0; j < 6; j++) {
+					int regidx = i * 8 + j;
+					OPL3Write(opl3, 0, 0x60 + regidx);
+					OPL3Write(opl3, 1, regdata[0x60 + i]);
+					OPL3Write(opl3, 2, 0x60 + regidx);
+					OPL3Write(opl3, 1, regdata[0x160 + i]);
+				}
+			}
+			// Slot Register 4 Set
+			for (i = 0; i < 3; i++) {
+				for (j = 0; j < 6; j++) {
+					int regidx = i * 8 + j;
+					OPL3Write(opl3, 0, 0x80 + regidx);
+					OPL3Write(opl3, 1, regdata[0x80 + i]);
+					OPL3Write(opl3, 2, 0x80 + regidx);
+					OPL3Write(opl3, 1, regdata[0x180 + i]);
+				}
+			}
+			// Slot Register 8 Set
+			for (i = 0; i < 3; i++) {
+				for (j = 0; j < 6; j++) {
+					int regidx = i * 8 + j;
+					OPL3Write(opl3, 0, 0xe0 + regidx);
+					OPL3Write(opl3, 1, regdata[0xe0 + i]);
+					OPL3Write(opl3, 2, 0xe0 + regidx);
+					OPL3Write(opl3, 1, regdata[0x1e0 + i]);
+				}
+			}
+			// Address Register Set
+			if (address & 0x100) {
+				OPL3Write(opl3, 2, address & 0xff);
+			}
+			else {
+				OPL3Write(opl3, 0, address & 0xff);
+			}
+		}
+
 		return size;
 	}
 

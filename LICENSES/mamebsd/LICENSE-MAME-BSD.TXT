@@ -1,5 +1,5 @@
 --------------------------------------
-/sound/mamebsd以下に適用
+/sound/mamebsd, /sound/mamebsdsub以下に適用
 
 プリプロセッサ USE_MAME_BSDを定義しない場合は除外
 

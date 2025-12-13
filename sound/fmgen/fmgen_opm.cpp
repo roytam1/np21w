@@ -4,6 +4,8 @@
 // ---------------------------------------------------------------------------
 //	$Id: opm.cpp,v 1.26 2003/08/25 13:53:08 cisc Exp $
 
+#if defined(SUPPORT_FMGEN)
+
 #include "fmgen_headers.h"
 #include "fmgen_misc.h"
 #include "fmgen_opm.h"
@@ -562,4 +564,6 @@ void OPM::DataLoad(struct OPMData* data) {
 }
 
 }	// namespace FM
+
+#endif	/* SUPPORT_FMGEN */
 

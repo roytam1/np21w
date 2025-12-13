@@ -1275,6 +1275,9 @@
     <ClCompile Include="..\sound\mamebsdsub\np2interop.cpp">
       <Filter>ソース ファイル\sound\mamebsdsub</Filter>
     </ClCompile>
+    <ClCompile Include="..\sound\mamebsdsub\np2compatible.cpp">
+      <Filter>ソース ファイル\sound\mamebsdsub</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\calendar.h">
@@ -2262,6 +2265,12 @@
       <Filter>ヘッダー ファイル\sound\mamebsdsub</Filter>
     </ClInclude>
     <ClInclude Include="..\sound\mamebsdsub\ymfm_opl.h">
+      <Filter>ヘッダー ファイル\sound\mamebsdsub</Filter>
+    </ClInclude>
+    <ClInclude Include="..\sound\mamebsdsub\np2ymfm.h">
+      <Filter>ヘッダー ファイル\sound\mamebsdsub</Filter>
+    </ClInclude>
+    <ClInclude Include="..\sound\mamebsdsub\np2compatible.h">
       <Filter>ヘッダー ファイル\sound\mamebsdsub</Filter>
     </ClInclude>
   </ItemGroup>

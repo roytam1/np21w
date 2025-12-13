@@ -21,6 +21,8 @@
 //		‚Ù‚©Œf¦”Â“™‚Å—lX‚È‚²•Œ¾C‚²x‰‡‚ğ‚¨Šñ‚¹‚¢‚½‚¾‚¢‚½ŠF—l‚É
 // ---------------------------------------------------------------------------
 
+#if defined(SUPPORT_FMGEN)
+
 #include "fmgen_headers.h"
 #include "fmgen_misc.h"
 #include "fmgen_fmgen.h"
@@ -1084,3 +1086,5 @@ void Channel4::DataLoad(struct Channel4Data* data) {
 	pms = pmtable[op[0].type_][op[0].ms_ & 7];
 }
 }	// namespace FM
+
+#endif	/* SUPPORT_FMGEN */

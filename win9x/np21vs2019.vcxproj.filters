@@ -2379,6 +2379,9 @@
     <ClCompile Include="..\i386c\ia32\instructions\fpu\softfloat\softfloat.c">
       <Filter>ソース ファイル\i386c\ia32\instructions\fpu\softfloat</Filter>
     </ClCompile>
+    <ClCompile Include="..\sound\mamebsd\np2compatible.cpp">
+      <Filter>ソース ファイル\sound\mamebsd</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\calendar.h">
@@ -3529,6 +3532,12 @@
     </ClInclude>
     <ClInclude Include="..\i386c\ia32\instructions\fpu\softfloat\softfloat-specialize.h">
       <Filter>ヘッダー ファイル\i386c\ia32\instructions\fpu\softfloat</Filter>
+    </ClInclude>
+    <ClInclude Include="..\sound\mamebsd\np2compatible.h">
+      <Filter>ヘッダー ファイル\sound\mamebsd</Filter>
+    </ClInclude>
+    <ClInclude Include="..\sound\mamebsd\np2ymfm.h">
+      <Filter>ヘッダー ファイル\sound\mamebsd</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

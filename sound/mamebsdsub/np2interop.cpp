@@ -11,69 +11,10 @@
 #include "ymfm_opl.h"
 #include "np2interop.h"
 
-#pragma pack(push, 1)
+#include "np2ymfm.h"
 
-class chip_wrapper : public ymfm::ymfm_interface
-{
-public:
-	chip_wrapper() :
-		m_chip(*this)
-	{
-		m_chip.reset();
-	}
-
-	ymfm::ymf262& GetChip() {
-		return m_chip;
-	}
-
-private:
-	ymfm::ymf262 m_chip;
-};
-
-typedef struct {
-	int clock;
-	int fmrate;
-	int playrate;
-	double fmcounter_rem;
-	INT16 lastsample[4];
-
-	// 仮実装タイマー　正式にはNEVENTを使うべき？
-	UINT8 reg_addr;
-	UINT8 reg_timer1;
-	UINT8 reg_timer2;
-	UINT8 reg_timerctrl;
-	bool timer_valid[2];
-	bool timer_intr[2];
-	UINT32 timer_startclock[2];
-
-	UINT8 reserved[128];
-} OPL3BSD_EX;
-
-class opl3bsd {
-public:
-	opl3bsd() :
-		m_chip(new chip_wrapper()),
-		m_data(),
-		m_output(nullptr),
-		m_outputlen(0)
-	{
-		m_outputlen = 4096;
-		m_output = new ymfm::ymfm_output[m_outputlen];
-	}
-	~opl3bsd()
-	{
-		if (m_output) {
-			delete[] m_output;
-		}
-	}
-
-	std::unique_ptr<chip_wrapper> m_chip;
-	ymfm::ymfm_output* m_output;
-	int m_outputlen;
-	OPL3BSD_EX m_data;
-};
-
-#pragma pack(pop)
+ // 旧np21wとのステートセーブ互換を維持する　旧→新のみ互換
+#include "np2compatible.h"
 
 void* YMF262Init(int clock, int rate)
 {
@@ -101,7 +42,7 @@ void YMF262Shutdown(void* chipptr)
 
 	delete chipbsd;
 }
-void YMF262ResetChip(void* chipptr)
+void YMF262ResetChip(void* chipptr, int samplerate)
 {
 	if (!chipptr) return;
 
@@ -109,6 +50,8 @@ void YMF262ResetChip(void* chipptr)
 	ymfm::ymf262& chipcore = chipbsd->m_chip->GetChip();
 
 	chipcore.reset();
+
+	chipbsd->m_data.playrate = samplerate;
 
 	chipbsd->m_data.reg_addr = 0;
 	chipbsd->m_data.reg_timer1 = 0;
@@ -267,11 +210,16 @@ int YMF262FlagLoad(void* chipptr, void* srcbuf, int size)
 	chipcore.save_restore(saver);
 	const int fmbufsize = dummybuffer.size();
 	dummybuffer.insert(dummybuffer.end(), (uint8_t*)&chipbsd->m_data, (uint8_t*)(&chipbsd->m_data + 1));
-
-	// バッファサイズがあっていなくても復元なしで通す
+	
+	// バッファサイズがあっていなくても通す
 	if (size != dummybuffer.size()) {
 		// reset
 		chipcore.reset();
+
+		// 旧版互換維持用　互換ロード不可なら0を返す
+		const int ret = YMF262FlagLoad_NP2REV97(chipbsd, srcbuf, size);
+		if (ret) return ret;
+
 		return dummybuffer.size();
 	}
 

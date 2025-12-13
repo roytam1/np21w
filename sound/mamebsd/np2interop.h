@@ -1,6 +1,6 @@
 /**
  * @file	np2interop.h
- * @brief	Implementation of np2 <-> mame opl (BSD-licensed Yamaha FM sound cores)
+ * @brief	Interface of np2 <-> mame opl (BSD-licensed Yamaha FM sound cores)
  */
 
 #pragma once
@@ -13,7 +13,7 @@ extern "C" {
 #endif
 
 void* YMF262Init(INT clock, INT rate);
-void YMF262ResetChip(void* chipptr);
+void YMF262ResetChip(void* chipptr, int samplerate);
 void YMF262Shutdown(void* chipptr);
 INT YMF262Write(void* chipptr, INT a, INT v);
 UINT8 YMF262Read(void* chipptr, INT a);

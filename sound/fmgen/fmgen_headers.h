@@ -1,3 +1,6 @@
+#pragma once
+#if defined(SUPPORT_FMGEN)
+
 #ifndef WIN_HEADERS_H
 #define WIN_HEADERS_H
 
@@ -19,3 +22,6 @@
 #endif
 
 #endif	// WIN_HEADERS_H
+
+#endif	/* SUPPORT_FMGEN */
+

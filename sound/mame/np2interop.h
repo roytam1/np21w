@@ -1,6 +1,6 @@
 /**
  * @file	np2interop.h
- * @brief	Implementation of np2 <-> mame opl 
+ * @brief	Interface of np2 <-> mame opl 
  */
 
 #pragma once

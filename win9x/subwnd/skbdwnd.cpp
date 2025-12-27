@@ -11,6 +11,7 @@
 #include "sysmng.h"
 #include "dialog/np2class.h"
 #include "generic/softkbd.h"
+#include "menu.h"
 
 #if defined(SUPPORT_SOFTKBD)
 
@@ -24,6 +25,8 @@ struct SoftKeyboardConfig
 {
 	int		posx;		//!< X
 	int		posy;		//!< Y
+	int		width;		//!< Width  0=Invalid
+	int		height;		//!< Height 0=Invalid
 	UINT8	type;		//!< ウィンドウ タイプ
 };
 
@@ -40,6 +43,8 @@ static const PFTBL s_skbdini[] =
 {
 	PFVAL("WindposX", PFTYPE_SINT32,	&s_skbdcfg.posx),
 	PFVAL("WindposY", PFTYPE_SINT32,	&s_skbdcfg.posy),
+	PFVAL("WindsizW", PFTYPE_SINT32,	&s_skbdcfg.width),
+	PFVAL("WindsizH", PFTYPE_SINT32,	&s_skbdcfg.height),
 	PFVAL("windtype", PFTYPE_BOOL,		&s_skbdcfg.type)
 };
 
@@ -90,7 +95,10 @@ void CSoftKeyboardWnd::Create()
 		return;
 	}
 
-	if (!CSubWndBase::Create(IDS_CAPTION_SOFTKEY, WS_OVERLAPPED | WS_SYSMENU | WS_CAPTION | WS_MINIMIZEBOX, s_skbdcfg.posx, s_skbdcfg.posy, m_nWidth, m_nHeight, NULL, NULL))
+	if (s_skbdcfg.width == 0) s_skbdcfg.width = m_nWidth;
+	if (s_skbdcfg.height == 0) s_skbdcfg.height = m_nHeight;
+
+	if (!CSubWndBase::Create(IDS_CAPTION_SOFTKEY, WS_OVERLAPPED | WS_SYSMENU | WS_CAPTION | WS_MINIMIZEBOX | WS_SIZEBOX, s_skbdcfg.posx, s_skbdcfg.posy, s_skbdcfg.width, s_skbdcfg.height, NULL, NULL))
 	{
 		return;
 	}
@@ -117,6 +125,18 @@ void CSoftKeyboardWnd::OnIdle()
 	}
 }
 
+void CSoftKeyboardWnd::ConvertClientPointToSoftkbdPoint(int &x, int &y)
+{
+	RECT rect;
+	GetClientRect(&rect);
+
+	if (rect.right - rect.left == 0) return;
+	if (rect.bottom - rect.top == 0) return;
+
+	x = x * m_nWidth / (rect.right - rect.left);
+	y = y * m_nHeight / (rect.bottom - rect.top);
+}
+
 /**
  * CWndProc オブジェクトの Windows プロシージャ (WindowProc) が用意されています
  * @param[in] nMsg 処理される Windows メッセージを指定します
@@ -130,8 +150,18 @@ LRESULT CSoftKeyboardWnd::WindowProc(UINT nMsg, WPARAM wParam, LPARAM lParam)
 	{
 		case WM_CREATE:
 			np2class_wmcreate(m_hWnd);
-			winloc_setclientsize(m_hWnd, m_nWidth, m_nHeight);
+			if (s_skbdcfg.width == 0) s_skbdcfg.width = m_nWidth;
+			if (s_skbdcfg.height == 0) s_skbdcfg.height = m_nHeight;
+			winloc_setclientsize(m_hWnd, s_skbdcfg.width, s_skbdcfg.height);
 			np2class_windowtype(m_hWnd, (s_skbdcfg.type & 1) + 1);
+
+			// システムメニュー追加
+			{
+				HMENU hMenu = GetSystemMenu(FALSE);
+				int pos = menu_addmenures(hMenu, 0, IDR_SOFTKBD_SYS, FALSE);
+				InsertMenu(hMenu, pos, MF_BYPOSITION | MF_SEPARATOR, 0, NULL);
+			}
+
 			break;
 
 		case WM_PAINT:
@@ -139,20 +169,30 @@ LRESULT CSoftKeyboardWnd::WindowProc(UINT nMsg, WPARAM wParam, LPARAM lParam)
 			break;
 
 		case WM_LBUTTONDOWN:
-			if ((softkbd_down(LOWORD(lParam), HIWORD(lParam))) && (s_skbdcfg.type & 1))
+		{
+			int x = LOWORD(lParam);
+			int y = HIWORD(lParam);
+			ConvertClientPointToSoftkbdPoint(x, y);
+			if ((softkbd_down(x, y)) && (s_skbdcfg.type & 1))
 			{
 				return SendMessage(WM_NCLBUTTONDOWN, HTCAPTION, 0L);
 			}
 			break;
+		}
 
 		case WM_LBUTTONDBLCLK:
-			if (softkbd_down(LOWORD(lParam), HIWORD(lParam)))
+		{
+			int x = LOWORD(lParam);
+			int y = HIWORD(lParam);
+			ConvertClientPointToSoftkbdPoint(x, y);
+			if (softkbd_down(x, y))
 			{
 				s_skbdcfg.type ^= 1;
 				SetWndType((s_skbdcfg.type & 1) + 1);
 				sysmng_update(SYS_UPDATEOSCFG);
 			}
 			break;
+		}
 
 		case WM_LBUTTONUP:
 			softkbd_up();
@@ -168,6 +208,33 @@ LRESULT CSoftKeyboardWnd::WindowProc(UINT nMsg, WPARAM wParam, LPARAM lParam)
 				sysmng_update(SYS_UPDATEOSCFG);
 			}
 			break;
+
+		case WM_SIZE:
+			if (!(GetWindowLong(m_hWnd, GWL_STYLE) & (WS_MAXIMIZE | WS_MINIMIZE)))
+			{
+				RECT rc;
+				GetClientRect(&rc);
+				s_skbdcfg.width = rc.right - rc.left;
+				s_skbdcfg.height = rc.bottom - rc.top;
+				sysmng_update(SYS_UPDATEOSCFG);
+			}
+			break;
+
+		case WM_GETMINMAXINFO:
+		{
+			MINMAXINFO* pInfo = (MINMAXINFO*)lParam;
+			RECT rc = { 0, 0, m_nWidth, m_nHeight }; // 最小サイズ
+			AdjustWindowRectEx(
+				&rc,
+				GetWindowLong(m_hWnd, GWL_STYLE),
+				FALSE,
+				GetWindowLong(m_hWnd, GWL_EXSTYLE)
+			);
+
+			pInfo->ptMinTrackSize.x = rc.right - rc.left;
+			pInfo->ptMinTrackSize.y = rc.bottom - rc.top;
+			return 0;
+		}
 			
 		case WM_CLOSE:
 			np2oscfg.skbdwin = 0;
@@ -177,6 +244,25 @@ LRESULT CSoftKeyboardWnd::WindowProc(UINT nMsg, WPARAM wParam, LPARAM lParam)
 
 		case WM_DESTROY:
 			OnDestroy();
+			break;
+
+		case WM_SYSCOMMAND:
+			if (IDM_SOFTKBD_X1 <= wParam && wParam <= IDM_SOFTKBD_XEND)
+			{
+				s_skbdcfg.width = m_nWidth * (wParam - IDM_SOFTKBD_X1 + 1);
+				s_skbdcfg.height = m_nHeight * (wParam - IDM_SOFTKBD_X1 + 1);
+				winloc_setclientsize(m_hWnd, s_skbdcfg.width, s_skbdcfg.height);
+
+				RECT rc;
+				GetClientRect(&rc);
+				s_skbdcfg.width = rc.right - rc.left;
+				s_skbdcfg.height = rc.bottom - rc.top;
+				sysmng_update(SYS_UPDATEOSCFG);
+			}
+			else 
+			{
+				return CSubWndBase::WindowProc(nMsg, wParam, lParam);
+			}
 			break;
 
 		default:
@@ -215,16 +301,21 @@ void CSoftKeyboardWnd::OnDraw(BOOL redraw)
 	GetClientRect(&rect);
 
 	RECT draw;
+	RECT dstrect;
 	draw.left = 0;
 	draw.top = 0;
-	draw.right = min(m_nWidth, rect.right - rect.left);
-	draw.bottom = min(m_nHeight, rect.bottom - rect.top);
+	draw.right = m_nWidth;
+	draw.bottom = m_nHeight;
+	dstrect.left = 0;
+	dstrect.top = 0;
+	dstrect.right = rect.right - rect.left;
+	dstrect.bottom = rect.bottom - rect.top;
 	CMNVRAM* vram = m_dd2.Lock();
 	if (vram)
 	{
 		softkbd_paint(vram, skpalcnv, redraw);
 		m_dd2.Unlock();
-		m_dd2.Blt(NULL, &draw);
+		m_dd2.Blt(NULL, &dstrect, &draw);
 	}
 }
 
@@ -270,6 +361,8 @@ void skbdwin_readini()
 {
 	s_skbdcfg.posx = CW_USEDEFAULT;
 	s_skbdcfg.posy = CW_USEDEFAULT;
+	s_skbdcfg.width = 0;
+	s_skbdcfg.height = 0;
 
 	TCHAR szPath[MAX_PATH];
 	initgetfile(szPath, _countof(szPath));

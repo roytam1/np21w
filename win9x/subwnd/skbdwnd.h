@@ -32,10 +32,11 @@ protected:
 private:
 	static CSoftKeyboardWnd sm_instance;	//!< インスタンス
 	DD2Surface m_dd2;						//!< DirectDraw2 インスタンス
-	int m_nWidth;							//!< 幅
-	int m_nHeight;							//!< 高さ
+	int m_nWidth;							//!< Dot by dot幅
+	int m_nHeight;							//!< Dot by dot高さ
 	void OnDraw(BOOL redraw);
 	static void skpalcnv(CMNPAL *dst, const RGB32 *src, UINT pals, UINT bpp);
+	void ConvertClientPointToSoftkbdPoint(int& x, int& y);
 };
 
 /**

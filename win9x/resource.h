@@ -46,6 +46,7 @@
 #define IDR_SYSSOFTKBD                  203
 #define IDR_SYSDEBUG32                  204
 #define IDR_SYSDEBUG                    205
+#define IDR_SOFTKBD_SYS                 206
 #define IDR_MAIN                        211
 #define IDR_STAT                        212
 #define IDR_FDD1MENU                    221
@@ -575,6 +576,10 @@
 #define IDM_DEBUGUTY                    40011
 #define IDM_VIEWER                      40012
 #define IDM_RESTOREBORDER               40013
+#define IDM_SOFTKBD_X1                  40014
+#define IDM_SOFTKBD_X2                  40015
+#define IDM_SOFTKBD_X3                  40016
+#define IDM_SOFTKBD_XEND                40019
 #define IDM_ALLOWRESIZE					40048
 #define IDM_SAVEWINDOWSIZE				40049
 #define IDM_SCRNMUL                     40050

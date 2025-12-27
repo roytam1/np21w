@@ -267,6 +267,39 @@ void DD2Surface::Blt(const POINT* pt, const RECT* lpRect)
 }
 
 /**
+ * blt
+ * @param[in] pt 位置
+ * @param[in] lpRect 領域
+ */
+void DD2Surface::Blt(const POINT* pt, const RECT* lpDstRect, const RECT* lpSrcRect)
+{
+	if (m_pBackSurface)
+	{
+		POINT clipt;
+		if (pt)
+		{
+			clipt = *pt;
+		}
+		else
+		{
+			clipt.x = 0;
+			clipt.y = 0;
+		}
+		::ClientToScreen(m_hWnd, &clipt);
+		RECT scrn;
+		scrn.left = clipt.x + lpDstRect->left;
+		scrn.top = clipt.y + lpDstRect->top;
+		scrn.right = scrn.left + lpDstRect->right - lpDstRect->left;
+		scrn.bottom = scrn.top + lpDstRect->bottom - lpDstRect->top;
+		if (m_pPrimarySurface->Blt(&scrn, m_pBackSurface, const_cast<LPRECT>(lpSrcRect), DDBLT_WAIT, NULL) == DDERR_SURFACELOST)
+		{
+			m_pBackSurface->Restore();
+			m_pPrimarySurface->Restore();
+		}
+	}
+}
+
+/**
  * 16BPP 色を得る
  * @param[in] pal 色
  * @return 16BPP色

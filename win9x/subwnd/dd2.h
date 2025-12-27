@@ -22,6 +22,7 @@ public:
 	CMNVRAM* Lock();
 	void Unlock();
 	void Blt(const POINT* pt, const RECT* lpRect = NULL);
+	void Blt(const POINT* pt, const RECT* lpDstRect, const RECT* lpSrcRect);
 	UINT16 GetPalette16(RGB32 pal) const;
 
 protected:

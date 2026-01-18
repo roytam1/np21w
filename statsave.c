@@ -1331,7 +1331,7 @@ static int flagcheck_sxsi(STFLAGH sfh, const SFENTRY *tbl) {
 	}
 	for (i=0; i<NELEMENTS(sds.scsi); i++) {
 		if (sds.scsi[i] != SXSIDEV_NC) {
-			if(sds.ide[i] != SXSIDEV_CDROM) {
+			if(sds.scsi[i] != SXSIDEV_CDROM) {
 				OEMSPRINTF(buf, str_scsix, i);
 				ret |= statflag_checkpath(sfh, buf);
 			}else{

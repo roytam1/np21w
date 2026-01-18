@@ -9,6 +9,7 @@
 #include	"diskimage/fddfile.h"
 #include	"fdd/fdd_mtr.h"
 #include	"fdd/sxsi.h"
+#include	"ideio.h"
 
 
 enum {
@@ -17,7 +18,6 @@ enum {
 };
 
 extern int sxsi_unittbl[];
-
 
 // ---- FDD
 
@@ -487,6 +487,11 @@ static REG8 fdd_operate(REG8 type, REG8 rpm, BOOL ndensity) {
 			}
 			size = CPU_BX;
 			addr = ES_BASE + CPU_BP;
+			if ((addr & 0xffff) > ((addr + size - 1) & 0xffff)) {
+				ret_ah = 0x20;
+				result = FDCBIOS_WRITEERROR;
+				break;
+			}
 			while(size) {
 				if (size > secsize) {
 					accesssize = secsize;
@@ -553,6 +558,11 @@ static REG8 fdd_operate(REG8 type, REG8 rpm, BOOL ndensity) {
 			}
 			size = CPU_BX;
 			addr = ES_BASE + CPU_BP;
+			if ((addr & 0xffff) > ((addr + size - 1) & 0xffff)) {
+				ret_ah = 0x20;
+				result = FDCBIOS_READERROR;
+				break;
+			}
 			while(size) {
 				if (size > secsize) {
 					accesssize = secsize;
@@ -923,9 +933,16 @@ void bios0x1b(void) {
 
 	REG8	ret_ah;
 	REG8	flag;
+	REG8	devtype;
+#if defined(SUPPORT_IDEIO)
+	int		useidebios = ideio.bios == IDETC_BIOS;
+#else
+	int		useidebios = 0;
+#endif
 
+	devtype = (CPU_AL & 0xf0);
 #if 1			// bypass to disk bios
-	if ((CPU_AL & 0xf0) != 0x20 && (CPU_AL & 0xf0) != 0xa0 && (CPU_AL & 0xf0) != 0xc0) // SCSIは除外
+	if (devtype != 0x20 && devtype != 0xa0 && devtype != 0xc0 && (useidebios || (devtype != 0x80 && devtype != 0x00))) // エミュレーションSASI, IDE　あるいは SCSIは除外
 	{
 		REG8	seg;
 		UINT	sp;
@@ -965,7 +982,7 @@ void bios0x1b(void) {
 #endif
 
 #if defined(SUPPORT_SCSI)
-	if ((CPU_AL & 0xf0) == 0xc0) {
+	if (devtype == 0xc0) {
 		TRACEOUT(("%.4x:%.4x AX=%.4x BX=%.4x CX=%.4x DX=%.4 ES=%.4x BP=%.4x",
 							MEMR_READ16(CPU_SS, CPU_SP+2),
 							MEMR_READ16(CPU_SS, CPU_SP),
@@ -975,7 +992,7 @@ void bios0x1b(void) {
 	}
 #endif
 
-	switch(CPU_AL & 0xf0) {
+	switch(devtype) {
 		case 0x90:
 			ret_ah = fdd_operate(3, 0, FALSE);
 			break;

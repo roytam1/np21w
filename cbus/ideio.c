@@ -209,7 +209,9 @@ static void setintr(IDEDRV drv) {
 		TRACEOUT(("ideio: setintr()"));
 		ideio.bank[0] = ideio.bank[1] | 0x80;			// ????
 		pic_setirq(IDE_IRQ);
-		mem[MEMB_DISK_INTH] |= 0x01; 
+		if (ideio.bios != IDETC_BIOS) {
+			mem[MEMB_DISK_INTH] |= 0x01; // エミュレーションIDE BIOSなら代理で立てる
+		}
 	}
 }
 
@@ -244,7 +246,9 @@ void ideioint(NEVENTITEM item) {
 	if(!(dev->drv[0].ctrl & IDECTRL_NIEN) || !(dev->drv[1].ctrl & IDECTRL_NIEN)){
 		TRACEOUT(("ideio: run setdintr()"));
 		pic_setirq(IDE_IRQ);
-		mem[MEMB_DISK_INTH] |= 0x01; 
+		if (ideio.bios != IDETC_BIOS) {
+			mem[MEMB_DISK_INTH] |= 0x01; // エミュレーションIDE BIOSなら代理で立てる
+		}
 	}
    (void)item;
 }
@@ -279,7 +283,9 @@ void ideioint2(NEVENTITEM item) {
 	if(!(dev->drv[0].ctrl & IDECTRL_NIEN) || !(dev->drv[1].ctrl & IDECTRL_NIEN)){
 		TRACEOUT(("ideio: run setdintr()"));
 		pic_setirq(IDE_IRQ);
-		mem[MEMB_DISK_INTH] |= 0x01; 
+		if (ideio.bios != IDETC_BIOS) {
+			mem[MEMB_DISK_INTH] |= 0x01; // エミュレーションIDE BIOSなら代理で立てる
+		}
 	}
    (void)item;
 }
@@ -1424,7 +1430,9 @@ static REG8 IOINPCALL ideio_i64e(UINT port) {
 		if (!(drv->ctrl & IDECTRL_NIEN)) {
 			TRACEOUT(("ideio: resetirq"));
 			pic_resetirq(IDE_IRQ);
-			mem[MEMB_DISK_INTH] &= ~0x01; 
+			if (ideio.bios != IDETC_BIOS) {
+				mem[MEMB_DISK_INTH] &= ~0x01; // エミュレーションIDE BIOSなら代理で下ろす
+			}
 		}
 		return(drv->status);
 	}
@@ -1954,12 +1962,12 @@ void ideio_reset(const NP2CFG *pConfig) {
 					_tcscpy(ideio.biosname, tmpbiosname);
 					CPU_RAM_D000 &= ~(0x3 << 8);
 				}else{
-					//CopyMemory(mem + biosaddr, idebios, sizeof(idebios));
+					CopyMemory(mem + biosaddr, idebios, sizeof(idebios));
 					TRACEOUT(("use simulate ide.rom"));
 				}
 				file_close(fh);
 			}else{
-				//CopyMemory(mem + biosaddr, idebios, sizeof(idebios));
+				CopyMemory(mem + biosaddr, idebios, sizeof(idebios));
 				TRACEOUT(("use simulate ide.rom"));
 			}
 		}

@@ -468,22 +468,27 @@ REG8 sasibios_operate(void) {
 	else {
 		return(0x60);
 	}
-	//sxsi = sxsi_getptr(CPU_AL);
-	sxsi = sxsi_getptr(sxsi_unittbl[CPU_AL & 0x3]);
-	if (sxsi == NULL) {
-		return(0x60);
-	}
-	if (sxsi->devtype == SXSIDEV_CDROM && !(sxsi->flag & SXSIFLAG_READY)) {
-		return(0x60);
-	}
-	// XXX: WORKAROUND for Win9x boot menu & PC-98 HDD boot menu
-	if(sxsi_workaround_bootwait > 0){
-		sxsi_workaround_bootwait--;
-		if(keystat.ref[0x1c] != NKEYREF_NC || keystat.ref[0x0f] != NKEYREF_NC){
-			CPU_REMCLOCK = -1;
-			if((CPU_AH & 0x0f) == 4){ // sasibios_sense
-				keystat.ref[0x1c] = NKEYREF_NC;//keystat_keyup(0x1c);
-				sxsi_workaround_bootwait = 0;
+	if ((CPU_AH & 0x0f) != 0x03) {
+		//sxsi = sxsi_getptr(CPU_AL);
+		if ((CPU_AL & 0x0f) >= SASIHDD_MAX) {
+			return(0x60);
+		}
+		sxsi = sxsi_getptr(sxsi_unittbl[CPU_AL & 0x3]);
+		if (sxsi == NULL) {
+			return(0x60);
+		}
+		if (sxsi->devtype == SXSIDEV_CDROM && !(sxsi->flag & SXSIFLAG_READY)) {
+			return(0x60);
+		}
+		// XXX: WORKAROUND for Win9x boot menu & PC-98 HDD boot menu
+		if(sxsi_workaround_bootwait > 0){
+			sxsi_workaround_bootwait--;
+			if(keystat.ref[0x1c] != NKEYREF_NC || keystat.ref[0x0f] != NKEYREF_NC){
+				CPU_REMCLOCK = -1;
+				if((CPU_AH & 0x0f) == 4){ // sasibios_sense
+					keystat.ref[0x1c] = NKEYREF_NC;//keystat_keyup(0x1c);
+					sxsi_workaround_bootwait = 0;
+				}
 			}
 		}
 	}

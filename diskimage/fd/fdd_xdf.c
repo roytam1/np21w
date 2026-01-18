@@ -57,7 +57,11 @@ static const _XDFINFO supportxdf[] = {
 			{162, 160, 16, 1, DISKTYPE_2DD, 0},	//	DCP／DCU	19h	BASIC-2DD
 			{162, 154, 26, 1, DISKTYPE_2HD, 0},	//	DCP／DCU	21h	2HD-26セクタ
 #endif
-			//
+
+			// BKDSK(HDM)	MS-DOS 1.25M(2HD) の77-79シリンダへ強引に書き込んだフォーマット
+			{0, 156,  8, 3, DISKTYPE_2HD, 0},
+			{0, 158,  8, 3, DISKTYPE_2HD, 0},
+			{0, 160,  8, 3, DISKTYPE_2HD, 0},
 };
 
 //	FDIヘッダ
@@ -477,6 +481,13 @@ BRESULT fdd_formatinit_xdf(FDDFILE fdd) {
 		seekp = fdd->inf.xdf.tracks * size + fdd->inf.xdf.headersize;
 		file_seek(hdl, seekp, FSEEK_SET);
 		file_write(hdl, fdc.buf, 0);
+	}
+	else if (77 <= fdc.treg[fdc.us] && fdc.treg[fdc.us] < 80) {
+		// 1.25M 77-79シリンダフォーマット
+		if ((fdd->inf.xdf.tracks == 154 || fdd->inf.xdf.tracks == 156 || fdd->inf.xdf.tracks == 158) && 
+			fdd->inf.xdf.sectors == 8 && fdd->inf.xdf.n == 3 && fdd->inf.xdf.disktype == DISKTYPE_2HD && fdd->inf.xdf.rpm == 0) {
+			fdd->inf.xdf.tracks = max(fdd->inf.xdf.tracks, (fdc.treg[fdc.us] + 1) * 2);
+		}
 	}
 
 	file_close(hdl);

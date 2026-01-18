@@ -16,6 +16,8 @@
 #if defined(SUPPORT_NAMED_PIPE)
 #include "commng/cmpipe.h"
 #endif
+#include "commng/cmfile.h"
+#include "commng/cmspooler.h"
 #include "generic/cmjasts.h"
 
 /**
@@ -66,6 +68,7 @@ COMMNG commng_create(UINT nDevice, BOOL onReset)
 			{
 				ret = cmjasts_create();
 			}
+			pComCfg = &np2oscfg.lpt1;
 			break;
 
 		case COMCREATE_MPU98II:
@@ -116,6 +119,18 @@ COMMNG commng_create(UINT nDevice, BOOL onReset)
 			ret = CComPipe::CreateInstance(pComCfg->pipename, pComCfg->pipeserv);
 		}
 #endif
+		else if ((pComCfg->port >= COMPORT_LPT1) && (pComCfg->port <= COMPORT_LPT4))
+		{
+			ret = CComPara::CreateInstance(pComCfg->port - COMPORT_LPT1 + 1);
+		}
+		else if (pComCfg->port == COMPORT_FILE)
+		{
+			ret = CComFile::CreateInstance(pComCfg->dirpath, pComCfg->fileTimeout);
+		}
+		else if (pComCfg->port == COMPORT_SPOOLER)
+		{
+			ret = CComSpooler::CreateInstance(pComCfg->spoolPrinterName, pComCfg->spoolTimeout, pComCfg->spoolEmulation);
+		}
 	}
 
 	if (ret == NULL)

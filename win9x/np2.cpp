@@ -135,42 +135,55 @@ static	TCHAR		szClassName[] = _T("NP2-MainWindow");
 						0, 1, KEY_UNKNOWN, 0, 0,
 						0, 0, 0, {1, 2, 2, 1}, {1, 2, 2, 1}, 0, 1, 0, 0,
 						{5, 0, 0x3e, 19200,
-						 OEMTEXT(""), OEMTEXT(""), OEMTEXT(""), OEMTEXT(""), 0, 1,
+						 OEMTEXT(""), OEMTEXT(""), OEMTEXT(""), OEMTEXT(""), 0, 1, OEMTEXT(""), 5000,
 #if defined(SUPPORT_NAMED_PIPE)
 						 OEMTEXT("NP2-NamedPipe"), OEMTEXT("."),
 #endif
+						 OEMTEXT(""), 5000, 0,
 						},
 #if defined(SUPPORT_SMPU98)
 						{5, 0, 0x3e, 19200,
-						 OEMTEXT(""), OEMTEXT(""), OEMTEXT(""), OEMTEXT(""), 0, 1, 
+						 OEMTEXT(""), OEMTEXT(""), OEMTEXT(""), OEMTEXT(""), 0, 1, OEMTEXT(""), 5000,
 #if defined(SUPPORT_NAMED_PIPE)
 						 OEMTEXT("NP2-NamedPipe"), OEMTEXT("."),
 #endif
+						 OEMTEXT(""), 5000, 0,
 						},
 						{5, 0, 0x3e, 19200,
-						 OEMTEXT(""), OEMTEXT(""), OEMTEXT(""), OEMTEXT(""), 0, 1,
+						 OEMTEXT(""), OEMTEXT(""), OEMTEXT(""), OEMTEXT(""), 0, 1, OEMTEXT(""), 5000,
 #if defined(SUPPORT_NAMED_PIPE)
 						 OEMTEXT("NP2-NamedPipe"), OEMTEXT("."),
 #endif
+						 OEMTEXT(""), 5000, 0,
 						},
 #endif
 						{0, 0, 0x3e, 19200,
-						 OEMTEXT(""), OEMTEXT(""), OEMTEXT(""), OEMTEXT(""), 0, 1,
+						 OEMTEXT(""), OEMTEXT(""), OEMTEXT(""), OEMTEXT(""), 0, 1, OEMTEXT(""), 5000,
 #if defined(SUPPORT_NAMED_PIPE)
 						 OEMTEXT("NP2-NamedPipe"), OEMTEXT("."),
 #endif
+						 OEMTEXT(""), 5000, 0,
 						},
 						{0, 0, 0x3e, 19200,
-						 OEMTEXT(""), OEMTEXT(""), OEMTEXT(""), OEMTEXT(""), 0, 1,
+						 OEMTEXT(""), OEMTEXT(""), OEMTEXT(""), OEMTEXT(""), 0, 1, OEMTEXT(""), 5000,
 #if defined(SUPPORT_NAMED_PIPE)
 						 OEMTEXT("NP2-NamedPipe"), OEMTEXT("."),
 #endif
+						 OEMTEXT(""), 5000, 0,
 						},
 						{0, 0, 0x3e, 19200,
-						 OEMTEXT(""), OEMTEXT(""), OEMTEXT(""), OEMTEXT(""), 0, 1,
+						 OEMTEXT(""), OEMTEXT(""), OEMTEXT(""), OEMTEXT(""), 0, 1, OEMTEXT(""), 5000,
 #if defined(SUPPORT_NAMED_PIPE)
 						 OEMTEXT("NP2-NamedPipe"), OEMTEXT("."),
 #endif
+						 OEMTEXT(""), 5000, 0,
+						},
+						{0, 0, 0x3e, 19200,
+						 OEMTEXT(""), OEMTEXT(""), OEMTEXT(""), OEMTEXT(""), 0, 1, OEMTEXT(""), 5000,
+#if defined(SUPPORT_NAMED_PIPE)
+						 OEMTEXT("NP2-NamedPipeLPT"), OEMTEXT("."),
+#endif
+						 OEMTEXT(""), 5000, 0,
 						},
 						0xffffff, 0xffbf6a, 0, 0,
 						0, 1,
@@ -203,9 +216,7 @@ static	TCHAR		szClassName[] = _T("NP2-MainWindow");
 						1,
 #endif	// defined(SUPPORT_MULTITHREAD)
 						0, 200,
-						1,
-						0,
-						1
+						1, 0, 1, 0
 					};
 
 		OEMCHAR		fddfolder[MAX_PATH];

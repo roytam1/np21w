@@ -749,10 +749,15 @@ static const PFTBL s_IniItems[] =
 	PFSTR("com1mmap", PFTYPE_STR,		np2oscfg.com1.mout),
 	PFSTR("com1mmdl", PFTYPE_STR,		np2oscfg.com1.mdl),
 	PFSTR("com1mdef", PFTYPE_STR,		np2oscfg.com1.def),
+	PFSTR("com1path", PFTYPE_STR,		np2oscfg.com1.dirpath),
+	PFVAL("com1fitm", PFTYPE_UINT32,	&np2oscfg.com1.fileTimeout),
 #if defined(SUPPORT_NAMED_PIPE)
 	PFSTR("com1pnam", PFTYPE_STR,		np2oscfg.com1.pipename),
 	PFSTR("com1psrv", PFTYPE_STR,		np2oscfg.com1.pipeserv),
 #endif
+	PFSTR("com1spnm", PFTYPE_STR,		np2oscfg.com1.spoolPrinterName),
+	PFVAL("com1sptm", PFTYPE_UINT32,	&np2oscfg.com1.spoolTimeout),
+	PFVAL("com1spem", PFTYPE_UINT8,		&np2oscfg.com1.spoolEmulation),
 
 	PFMAX("com2port", PFTYPE_UINT8,		&np2oscfg.com2.port,	5),
 	PFVAL("com2para", PFTYPE_UINT8,		&np2oscfg.com2.param),
@@ -762,10 +767,15 @@ static const PFTBL s_IniItems[] =
 	PFSTR("com2mmap", PFTYPE_STR,		np2oscfg.com2.mout),
 	PFSTR("com2mmdl", PFTYPE_STR,		np2oscfg.com2.mdl),
 	PFSTR("com2mdef", PFTYPE_STR,		np2oscfg.com2.def),
+	PFSTR("com2path", PFTYPE_STR,		np2oscfg.com2.dirpath),
+	PFVAL("com2fitm", PFTYPE_UINT32,	&np2oscfg.com2.fileTimeout),
 #if defined(SUPPORT_NAMED_PIPE)
 	PFSTR("com2pnam", PFTYPE_STR,		np2oscfg.com2.pipename),
 	PFSTR("com2psrv", PFTYPE_STR,		np2oscfg.com2.pipeserv),
 #endif
+	PFSTR("com2spnm", PFTYPE_STR,		np2oscfg.com2.spoolPrinterName),
+	PFVAL("com2sptm", PFTYPE_UINT32,	&np2oscfg.com2.spoolTimeout),
+	PFVAL("com2spem", PFTYPE_UINT8,		&np2oscfg.com2.spoolEmulation),
 
 	PFMAX("com3port", PFTYPE_UINT8,		&np2oscfg.com3.port,	5),
 	PFVAL("com3para", PFTYPE_UINT8,		&np2oscfg.com3.param),
@@ -775,10 +785,33 @@ static const PFTBL s_IniItems[] =
 	PFSTR("com3mmap", PFTYPE_STR,		np2oscfg.com3.mout),
 	PFSTR("com3mmdl", PFTYPE_STR,		np2oscfg.com3.mdl),
 	PFSTR("com3mdef", PFTYPE_STR,		np2oscfg.com3.def),
+	PFSTR("com3path", PFTYPE_STR,		np2oscfg.com3.dirpath),
+	PFVAL("com3fitm", PFTYPE_UINT32,	&np2oscfg.com3.fileTimeout),
 #if defined(SUPPORT_NAMED_PIPE)
 	PFSTR("com3pnam", PFTYPE_STR,		np2oscfg.com3.pipename),
 	PFSTR("com3psrv", PFTYPE_STR,		np2oscfg.com3.pipeserv),
 #endif
+	PFSTR("com3spnm", PFTYPE_STR,		np2oscfg.com3.spoolPrinterName),
+	PFVAL("com3sptm", PFTYPE_UINT32,	&np2oscfg.com3.spoolTimeout),
+	PFVAL("com3spem", PFTYPE_UINT8,		&np2oscfg.com3.spoolEmulation),
+
+	PFMAX("lpt1port", PFTYPE_UINT8,		&np2oscfg.lpt1.port,	5),
+	PFVAL("lpt1para", PFTYPE_UINT8,		&np2oscfg.lpt1.param),
+	PFVAL("lpt1_bps", PFTYPE_UINT32,	&np2oscfg.lpt1.speed),
+	PFVAL("lpt1fbps", PFTYPE_BOOL,		&np2oscfg.lpt1.fixedspeed),
+	PFVAL("lpt1dsrc", PFTYPE_BOOL,		&np2oscfg.lpt1.DSRcheck),
+	PFSTR("lpt1mmap", PFTYPE_STR,		np2oscfg.lpt1.mout),
+	PFSTR("lpt1mmdl", PFTYPE_STR,		np2oscfg.lpt1.mdl),
+	PFSTR("lpt1mdef", PFTYPE_STR,		np2oscfg.lpt1.def),
+	PFSTR("lpt1path", PFTYPE_STR,		np2oscfg.lpt1.dirpath),
+	PFVAL("lpt1fitm", PFTYPE_UINT32,	&np2oscfg.lpt1.fileTimeout),
+#if defined(SUPPORT_NAMED_PIPE)
+	PFSTR("lpt1pnam", PFTYPE_STR,		np2oscfg.lpt1.pipename),
+	PFSTR("lpt1psrv", PFTYPE_STR,		np2oscfg.lpt1.pipeserv),
+#endif
+	PFSTR("lpt1spnm", PFTYPE_STR,		np2oscfg.lpt1.spoolPrinterName),
+	PFVAL("lpt1sptm", PFTYPE_UINT32,	&np2oscfg.lpt1.spoolTimeout),
+	PFVAL("lpt1spem", PFTYPE_UINT8,		&np2oscfg.lpt1.spoolEmulation),
 
 	PFVAL("force400", PFRO_BOOL,		&np2oscfg.force400),
 	PFVAL("e_resume", PFTYPE_BOOL,		&np2oscfg.resume),
@@ -853,6 +886,7 @@ static const PFTBL s_IniItems[] =
 	PFVAL("knjpaste", PFTYPE_UINT8,		&np2oscfg.knjpaste), // クリップボードからテキスト貼り付けの際の漢字の扱い（0=漢字無視, 1=BASIC, 2=FEPなしDOS）
 	PFVAL("scrscfix", PFRO_UINT8,		&np2oscfg.scrscfix), // 画面拡大転送時の補正（0=自動, 1=通常転送, 2=NVDIA向け）
 	PFVAL("dirfdlst", PFRO_BOOL,		&np2oscfg.dirfdlst), // 同じディレクトリにあるFDイメージファイルのリストを表示する
+	PFVAL("allports", PFRO_BOOL,		&np2oscfg.allports), // 設定でシリアル・パラレルに関係なく任意のポートを選べるようにする
 
 };
 

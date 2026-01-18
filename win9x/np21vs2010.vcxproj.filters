@@ -2361,6 +2361,12 @@
     <ClCompile Include="..\sound\mamebsdsub\np2compatible.cpp">
       <Filter>ソース ファイル\sound\mamebsdsub</Filter>
     </ClCompile>
+    <ClCompile Include="commng\cmfile.cpp">
+      <Filter>ソース ファイル\win9x\commng</Filter>
+    </ClCompile>
+    <ClCompile Include="commng\cmspooler.cpp">
+      <Filter>ソース ファイル\win9x\commng</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\calendar.h">
@@ -3487,6 +3493,12 @@
     </ClInclude>
     <ClInclude Include="..\sound\mamebsdsub\np2ymfm.h">
       <Filter>ヘッダー ファイル\sound\mamebsdsub</Filter>
+    </ClInclude>
+    <ClInclude Include="commng\cmfile.h">
+      <Filter>ヘッダー ファイル\win9x\commng</Filter>
+    </ClInclude>
+    <ClInclude Include="commng\cmspooler.h">
+      <Filter>ヘッダー ファイル\win9x\commng</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

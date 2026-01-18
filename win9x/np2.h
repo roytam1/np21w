@@ -22,10 +22,15 @@ typedef struct {
 	OEMCHAR	def[MAX_PATH];
 	UINT8	fixedspeed;
 	UINT8	DSRcheck;
+	OEMCHAR	dirpath[MAX_PATH]; // Path to the output directory for dump files
+	UINT32	fileTimeout;
 #if defined(SUPPORT_NAMED_PIPE)
 	OEMCHAR	pipename[MAX_PATH]; // The name of the named-pipe
 	OEMCHAR	pipeserv[MAX_PATH]; // The server name of the named-pipe
 #endif
+	OEMCHAR	spoolPrinterName[MAX_PATH];
+	UINT32	spoolTimeout;
+	UINT8	spoolEmulation;
 } COMCFG;
 
 typedef struct {
@@ -67,6 +72,7 @@ typedef struct {
 	COMCFG	com1;
 	COMCFG	com2;
 	COMCFG	com3;
+	COMCFG	lpt1;
 
 	UINT32	clk_color1;
 	UINT32	clk_color2;
@@ -145,10 +151,9 @@ typedef struct {
 	UINT32	midiaint; // MIDI Active Sensingを送る間隔（ミリ秒）
 
 	UINT8	knjpaste; // クリップボードからテキスト貼り付けの際の漢字の扱い（0=漢字無視, 1=BASIC, 2=FEPなしDOS）
-
 	UINT8	scrscfix; // 画面拡大転送時の補正（0=自動, 1=通常転送, 2=NVDIA向け）
-
 	UINT8	dirfdlst; // 同じディレクトリにあるFDイメージファイルのリストを表示する
+	UINT8	allports; // 設定でシリアル・パラレルに関係なく任意のポートを選べるようにする
 } NP2OSCFG;
 
 

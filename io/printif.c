@@ -7,6 +7,8 @@
 
 	COMMNG	cm_prt;
 
+	static REG8 lastData = 0xff;
+	static REG8 i44Data = 0x00;
 
 // ---- I/O
 
@@ -20,10 +22,21 @@ static void IOOUTCALL prt_o40(UINT port, REG8 dat) {
 		cm_prt = prt;
 	}
 	prt->write(prt, (UINT8)dat);
+	lastData = dat;
 //	TRACEOUT(("prt - %.2x", dat));
 	(void)port;
 }
+static void IOOUTCALL prt_o44(UINT port, REG8 dat) {
 
+	i44Data = dat;
+	(void)port;
+}
+
+static REG8 IOINPCALL prt_i40(UINT port) {
+
+	(void)port;
+	return(lastData);
+}
 static REG8 IOINPCALL prt_i42(UINT port) {
 
 	REG8	ret;
@@ -51,15 +64,20 @@ static REG8 IOINPCALL prt_i42(UINT port) {
 	(void)port;
 	return(ret);
 }
+static REG8 IOINPCALL prt_i44(UINT port) {
+
+	(void)port;
+	return(i44Data);
+}
 
 
 // ---- I/F
 
 static const IOOUT prto40[4] = {
-					prt_o40,	NULL,		NULL,		NULL};
+					prt_o40,	NULL, prt_o44,	 NULL};
 
 static const IOINP prti40[4] = {
-					NULL,		prt_i42,	NULL,		NULL};
+					prt_i40, prt_i42, prt_i44,	 NULL};
 
 void printif_reset(const NP2CFG *pConfig) {
 

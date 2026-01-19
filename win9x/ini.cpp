@@ -758,6 +758,8 @@ static const PFTBL s_IniItems[] =
 	PFSTR("com1spnm", PFTYPE_STR,		np2oscfg.com1.spoolPrinterName),
 	PFVAL("com1sptm", PFTYPE_UINT32,	&np2oscfg.com1.spoolTimeout),
 	PFVAL("com1spem", PFTYPE_UINT8,		&np2oscfg.com1.spoolEmulation),
+	PFVAL("com1spds", PFTYPE_UINT8,		&np2oscfg.com1.spoolDotSize),
+	PFVAL("com1sprd", PFTYPE_BOOL,		&np2oscfg.com1.spoolRectDot),
 
 	PFMAX("com2port", PFTYPE_UINT8,		&np2oscfg.com2.port,	5),
 	PFVAL("com2para", PFTYPE_UINT8,		&np2oscfg.com2.param),
@@ -776,6 +778,8 @@ static const PFTBL s_IniItems[] =
 	PFSTR("com2spnm", PFTYPE_STR,		np2oscfg.com2.spoolPrinterName),
 	PFVAL("com2sptm", PFTYPE_UINT32,	&np2oscfg.com2.spoolTimeout),
 	PFVAL("com2spem", PFTYPE_UINT8,		&np2oscfg.com2.spoolEmulation),
+	PFVAL("com2spds", PFTYPE_UINT8,		&np2oscfg.com2.spoolDotSize),
+	PFVAL("com2sprd", PFTYPE_BOOL,		&np2oscfg.com2.spoolRectDot),
 
 	PFMAX("com3port", PFTYPE_UINT8,		&np2oscfg.com3.port,	5),
 	PFVAL("com3para", PFTYPE_UINT8,		&np2oscfg.com3.param),
@@ -794,6 +798,8 @@ static const PFTBL s_IniItems[] =
 	PFSTR("com3spnm", PFTYPE_STR,		np2oscfg.com3.spoolPrinterName),
 	PFVAL("com3sptm", PFTYPE_UINT32,	&np2oscfg.com3.spoolTimeout),
 	PFVAL("com3spem", PFTYPE_UINT8,		&np2oscfg.com3.spoolEmulation),
+	PFVAL("com3spds", PFTYPE_UINT8,		&np2oscfg.com3.spoolDotSize),
+	PFVAL("com3sprd", PFTYPE_BOOL,		&np2oscfg.com3.spoolRectDot),
 
 	PFMAX("lpt1port", PFTYPE_UINT8,		&np2oscfg.lpt1.port,	5),
 	PFVAL("lpt1para", PFTYPE_UINT8,		&np2oscfg.lpt1.param),
@@ -812,6 +818,8 @@ static const PFTBL s_IniItems[] =
 	PFSTR("lpt1spnm", PFTYPE_STR,		np2oscfg.lpt1.spoolPrinterName),
 	PFVAL("lpt1sptm", PFTYPE_UINT32,	&np2oscfg.lpt1.spoolTimeout),
 	PFVAL("lpt1spem", PFTYPE_UINT8,		&np2oscfg.lpt1.spoolEmulation),
+	PFVAL("lpt1spds", PFTYPE_UINT8,		&np2oscfg.lpt1.spoolDotSize),
+	PFVAL("lpt1sprd", PFTYPE_BOOL,		&np2oscfg.lpt1.spoolRectDot),
 
 	PFVAL("force400", PFRO_BOOL,		&np2oscfg.force400),
 	PFVAL("e_resume", PFTYPE_BOOL,		&np2oscfg.resume),

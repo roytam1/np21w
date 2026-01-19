@@ -31,6 +31,8 @@ typedef struct {
 	OEMCHAR	spoolPrinterName[MAX_PATH];
 	UINT32	spoolTimeout;
 	UINT8	spoolEmulation;
+	UINT8	spoolDotSize;
+	UINT8	spoolRectDot;
 } COMCFG;
 
 typedef struct {

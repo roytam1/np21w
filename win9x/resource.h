@@ -182,6 +182,9 @@
 #define IDC_COM1SPOOLERTIMEOUT          14140
 #define IDC_COM1SPOOLEREMU              14141
 #define IDC_COM1SPOOLERTIMEOUTSPIN      14142
+#define IDC_COM1SPOOLERSTR03            14143
+#define IDC_COM1SPOOLEREMU_DOTSIZE      14144
+#define IDC_COM1SPOOLEREMU_RECTDOT      14145
 #define IDC_PC9861E                     14201
 #define IDC_CH1SPEED                    14202
 #define IDC_CH1INT                      14203

@@ -129,7 +129,7 @@ COMMNG commng_create(UINT nDevice, BOOL onReset)
 		}
 		else if (pComCfg->port == COMPORT_SPOOLER)
 		{
-			ret = CComSpooler::CreateInstance(pComCfg->spoolPrinterName, pComCfg->spoolTimeout, pComCfg->spoolEmulation);
+			ret = CComSpooler::CreateInstance(pComCfg);
 		}
 	}
 

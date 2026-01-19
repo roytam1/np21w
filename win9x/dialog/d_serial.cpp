@@ -73,6 +73,8 @@ private:
 	CComboData m_cmbspname;		//!< Printer name
 	CWndProc m_nudsptimeout;	//!< Spooler timeout
 	CWndProc m_chkspemumode;	//!< Spooler emulation mode
+	CWndProc m_nudspemu_dotsize;//!< Spooler dot size
+	CWndProc m_chkspemu_rectdot;//!< Spooler rectangle dot mode
 	void UpdateControls();
 };
 
@@ -287,6 +289,11 @@ BOOL SerialOptComPage::OnInitDialog()
 	m_nudsptimeout.SetWindowTextW(numbuf);
 	m_chkspemumode.SubclassDlgItem(IDC_COM1SPOOLEREMU, this);
 	CheckDlgButton(IDC_COM1SPOOLEREMU, (m_cfg.spoolEmulation) ? BST_CHECKED : BST_UNCHECKED);
+	m_nudspemu_dotsize.SubclassDlgItem(IDC_COM1SPOOLEREMU_DOTSIZE, this);
+	_stprintf(numbuf, _T("%d"), m_cfg.spoolDotSize);
+	m_nudspemu_dotsize.SetWindowTextW(numbuf);
+	m_chkspemu_rectdot.SubclassDlgItem(IDC_COM1SPOOLEREMU_RECTDOT, this);
+	CheckDlgButton(IDC_COM1SPOOLEREMU_RECTDOT, (m_cfg.spoolRectDot) ? BST_CHECKED : BST_UNCHECKED);
 	if(m_cmbspname)
 	{
 		int indexsel = -1;
@@ -444,7 +451,7 @@ void SerialOptComPage::OnOK()
 		milstr_ncpy(m_cfg.dirpath, dirpath, _countof(m_cfg.dirpath));
 		nUpdated |= SYS_UPDATEOSCFG;
 	}
-	UINT fileTimeout = GetDlgItemInt(IDC_COM1FILETIMEOUT, NULL, FALSE);
+	const UINT fileTimeout = GetDlgItemInt(IDC_COM1FILETIMEOUT, NULL, FALSE);
 	if (m_cfg.fileTimeout != fileTimeout)
 	{
 		m_cfg.fileTimeout = fileTimeout;
@@ -458,7 +465,7 @@ void SerialOptComPage::OnOK()
 		milstr_ncpy(m_cfg.spoolPrinterName, printername, _countof(m_cfg.spoolPrinterName));
 		nUpdated |= SYS_UPDATEOSCFG;
 	}
-	UINT spoolTimeout = GetDlgItemInt(IDC_COM1SPOOLERTIMEOUT, NULL, FALSE);
+	const UINT spoolTimeout = GetDlgItemInt(IDC_COM1SPOOLERTIMEOUT, NULL, FALSE);
 	if (m_cfg.spoolTimeout != spoolTimeout)
 	{
 		m_cfg.spoolTimeout = spoolTimeout;
@@ -469,6 +476,23 @@ void SerialOptComPage::OnOK()
 	{
 		m_cfg.spoolEmulation = spoolEmulation;
 		nUpdated |= SYS_UPDATEOSCFG;
+	}
+	UINT spoolDotSize = GetDlgItemInt(IDC_COM1SPOOLEREMU_DOTSIZE, NULL, FALSE);
+	if (m_cfg.spoolDotSize != spoolDotSize)
+	{
+		if (spoolDotSize < 50) spoolDotSize = 50;
+		if (spoolDotSize > 200) spoolDotSize = 200;
+		m_cfg.spoolDotSize = spoolDotSize;
+		nUpdated |= SYS_UPDATEOSCFG;
+	}
+	const UINT8 spoolRectDot = (IsDlgButtonChecked(IDC_COM1SPOOLEREMU_RECTDOT) != BST_UNCHECKED) ? 1 : 0;
+	if (m_cfg.spoolRectDot != spoolRectDot)
+	{
+		m_cfg.spoolRectDot = spoolRectDot;
+		nUpdated |= SYS_UPDATEOSCFG;
+	}
+	if (nUpdated && cm_prt) {
+		cm_prt->msg(cm_prt, COMMSG_REOPEN, (INTPTR)(&np2oscfg.lpt1));
 	}
 
 	sysmng_update(nUpdated);
@@ -629,7 +653,7 @@ void SerialOptComPage::UpdateControls()
 	static const UINT filedump[] =
 	{
 		IDC_COM1FILEPATH, IDC_COM1FILEBROWSE, IDC_COM1FILETIMEOUT,
-		IDC_COM1FILESTR00, IDC_COM1FILESTR01,IDC_COM1FILESTR02,
+		IDC_COM1FILESTR00, IDC_COM1FILESTR01, IDC_COM1FILESTR02,
 	};
 	for (UINT i = 0; i < _countof(filedump); i++)
 	{
@@ -641,8 +665,8 @@ void SerialOptComPage::UpdateControls()
 	// Spooler
 	static const UINT spooler[] =
 	{
-		IDC_COM1SPOOLERNAME, IDC_COM1SPOOLERTIMEOUT, IDC_COM1SPOOLERTIMEOUTSPIN, IDC_COM1SPOOLEREMU,
-		IDC_COM1SPOOLERSTR00, IDC_COM1SPOOLERSTR01,IDC_COM1SPOOLERSTR02,
+		IDC_COM1SPOOLERNAME, IDC_COM1SPOOLERTIMEOUT, IDC_COM1SPOOLERTIMEOUTSPIN, IDC_COM1SPOOLEREMU, IDC_COM1SPOOLEREMU_DOTSIZE, IDC_COM1SPOOLEREMU_RECTDOT,
+		IDC_COM1SPOOLERSTR00, IDC_COM1SPOOLERSTR01, IDC_COM1SPOOLERSTR02, IDC_COM1SPOOLERSTR03,
 	};
 	for (UINT i = 0; i < _countof(spooler); i++)
 	{

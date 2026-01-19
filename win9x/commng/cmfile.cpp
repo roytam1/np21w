@@ -5,6 +5,7 @@
 
 #include "compiler.h"
 #include "cmfile.h"
+#include "np2.h"
 
 #include <process.h>
 
@@ -298,5 +299,26 @@ UINT8 CComFile::GetStat()
  */
 INTPTR CComFile::Message(UINT nMessage, INTPTR nParam)
 {
-	return 0;
+    switch (nMessage)
+    {
+    case COMMSG_REOPEN:
+            CCEndThread();
+
+            EnterCriticalSection(&m_csPrint);
+
+            CCCloseFile();
+
+            if (nParam) {
+                COMCFG* cfg = (COMCFG*)nParam;
+                m_pageTimeout = cfg->fileTimeout;
+                GetFullPathName(cfg->dirpath, NELEMENTS(m_dirpath), m_dirpath, NULL);
+            }
+
+            LeaveCriticalSection(&m_csPrint);
+        break;
+
+    default:
+        break;
+    }
+    return 0;
 }

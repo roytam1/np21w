@@ -9,7 +9,7 @@
 
 	static REG8 lastData = 0xff;
 	static REG8 i44Data = 0x00;
-
+	
 // ---- I/O
 
 static void IOOUTCALL prt_o40(UINT port, REG8 dat) {
@@ -97,5 +97,13 @@ void printif_finalize(void) {
 
 	commng_destroy(cm_prt);
 	cm_prt = NULL;
+}
+
+// Finish current print job
+void printif_finishjob(void) {
+
+	if (cm_prt) {
+		cm_prt->msg(cm_prt, COMMSG_REOPEN, NULL);
+	}
 }
 

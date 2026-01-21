@@ -1187,7 +1187,9 @@ BEGIN
             MENUITEM "x1/3",                        IDM_MOUSED3X
             MENUITEM "x1/4",                        IDM_MOUSED4X
         END
+        MENUITEM SEPARATOR
         MENUITEM "Se&rial/Parallel option...",      IDM_SERIAL1
+        MENUITEM "Finish Current Print Job",        IDM_PARALLEL_ENDPRINTJOB
         MENUITEM SEPARATOR
         MENUITEM "MIDI &option...",                 IDM_MPUPC98
         MENUITEM "MIDI &panic",                     IDM_MIDIPANIC

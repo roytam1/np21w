@@ -803,6 +803,7 @@
 #define IDM_WABOPT                      40677
 #define IDM_HOSTDRVOPT                  40678
 #define IDM_PCIOPT                      40679
+#define IDM_PARALLEL_ENDPRINTJOB        40680
 #define IDM_FPU80                       49680
 #define IDM_FPU64                       49681
 #define IDM_FPU64INT                    49682

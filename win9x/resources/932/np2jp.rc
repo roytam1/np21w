@@ -1179,7 +1179,9 @@ BEGIN
             MENUITEM "x1/3",                        IDM_MOUSED3X
             MENUITEM "x1/4",                        IDM_MOUSED4X
         END
+        MENUITEM SEPARATOR
         MENUITEM "シリアル・パラレルポート設定(&R)...",   IDM_SERIAL1
+        MENUITEM "現在の印刷ジョブを完了",        IDM_PARALLEL_ENDPRINTJOB
         MENUITEM SEPARATOR
         MENUITEM "MIDI設定(&O)...",             IDM_MPUPC98
         MENUITEM "MIDIパニック(&P)",            IDM_MIDIPANIC

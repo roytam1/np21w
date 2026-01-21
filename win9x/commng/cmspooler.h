@@ -16,6 +16,7 @@ typedef struct {
 	HFONT fontbold;			/*!< ESC/P Bold Font Base */
 	HFONT fontboldrot90;	/*!< ESC/P Bold Font Rotation */
 	HPEN penline; // ライン用ペン
+	HBRUSH brsDot[8]; // ドット描画用ブラシ8色分
 } ESCP_GDIOBJ;
 
 typedef struct {
@@ -27,6 +28,8 @@ typedef struct {
 	float renderofsy;		/*!< ESC/P Render Offset Y */
 	int scalex;				/*!< ESC/P Scale X */
 	int scaley;				/*!< ESC/P Scale Y */
+	int scalex_graph;		/*!< ESC/P Scale X graph */
+	int scaley_graph;		/*!< ESC/P Scale Y graph */
 	int maxscaley;			/*!< ESC/P Maximum Scale Y */
 	int maxlineheight;		/*!< ESC/P 行内最大高さ */
 	bool so;				/*!< ESC/P 横倍角 */
@@ -37,10 +40,15 @@ typedef struct {
 	int linep1;				/*!< ESC/P param1 S=実線 */
 	int linep2;				/*!< ESC/P param2 1=一重線, 1=二重線 */
 	int linep3;				/*!< ESC/P param3 線の太さ 2=細線, 4=中線 */
+	int linecolor;			/*!< ESC/P 線色 */
 	bool lineenable;		/*!< ESC/P 下線・上線有効 */
 	int dotsp_left;			/*!< ESC/P 左ドットスペース */
 	int dotsp_right;		/*!< ESC/P 右ドットスペース */
 	bool setVFUmode;		/*!< ESC/P VFU設定モード */
+	int color;				/*!< ESC/P 色 */
+	int hasgraphic;			/*!< ESC/P グラフィック描画ありフラグ */
+	bool copymode;			/*!< ESC/P コピーモード */
+	float delaynewpageposy;	/*!< ESC/P Delay New Page Position Y */
 } ESCP_STAT;
 
 /**
@@ -77,6 +85,7 @@ private:
 	TCHAR m_printerName[MAX_PATH];  /*!< プリンタ名 */
 	HANDLE m_hPrinter;				/*!< プリンタ ハンドル */
 	DWORD m_jobId;					/*!< プリンタジョブID */
+	bool m_lastHasError;			/*!< プリンタオープン等に失敗 */
 
 	// ESC/Pエミュレーション用
 	HDC m_hdc;						/*!< GDIプリンタHDC */
@@ -96,6 +105,9 @@ private:
 	ESCP_STAT m_escpr;				/*!< ESC/P 描画用状態 */
 	bool m_escp_rectdot;			/*!< ESC/P で点を矩形で描画 */
 	float m_escp_dotscale;			/*!< ESC/P で点の大きさ補正 */
+	UINT8 *m_escp_colorbuf;			/*!< ESC/P カラーバッファ */
+	int m_escp_colorbuf_w;			/*!< ESC/P カラーバッファ幅 */
+	int m_escp_colorbuf_h;			/*!< ESC/P カラーバッファ高さ */
 
 	bool Initialize(COMCFG* comcfg);
 	bool CCOpenPrinter();
@@ -106,8 +118,8 @@ private:
 
 	void CCResetESCP();
 	void CCUpdateFont();
-	void CCUpdateLinePen(UINT8 param1, UINT8 param2, UINT8 param3);
-	void CCCheckNewPage();
+	void CCUpdateLinePen(UINT8 param1, UINT8 param2, UINT8 param3, UINT8 color);
+	void CCCheckNewPage(bool delay = false);
 	void CCCheckNewLine(int nextCharWidth = 0);
 	void CCRenderAllESCP();
 	void CCRenderESCP(UINT8 cData);

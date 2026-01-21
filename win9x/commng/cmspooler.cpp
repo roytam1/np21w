@@ -10,6 +10,65 @@
 #include <process.h>
 #include <codecnv/codecnv.h>
 
+#if 1
+#undef	TRACEOUT
+static void trace_fmt_ex(const char* fmt, ...)
+{
+	char stmp[2048];
+	va_list ap;
+	va_start(ap, fmt);
+	vsprintf(stmp, fmt, ap);
+	strcat(stmp, "\n");
+	va_end(ap);
+	OutputDebugStringA(stmp);
+}
+#define	TRACEOUT(s)	trace_fmt_ex s
+static void trace_fmt_exw(const WCHAR* fmt, ...)
+{
+	WCHAR stmp[2048];
+	va_list ap;
+	va_start(ap, fmt);
+	vswprintf(stmp, 2048, fmt, ap);
+	wcscat(stmp, L"\n");
+	va_end(ap);
+	OutputDebugStringW(stmp);
+}
+#define	TRACEOUTW(s)	trace_fmt_exw s
+#else
+#define	TRACEOUTW(s)	(void)0
+#endif	/* 1 */
+
+static float graph_escp_lpi = (float)160 / 24;
+
+ // モーダルダイアログを勝手に表示されたときに、マウスカーソルを出すようにする
+static HHOOK g_hCbt = nullptr;
+static bool g_mouseOn = false;
+static LRESULT CALLBACK CbtProc(int nCode, WPARAM wParam, LPARAM lParam)
+{
+	if (nCode == HCBT_CREATEWND)
+	{
+		g_mouseOn = true;
+		ShowCursor(TRUE);
+	}
+	return CallNextHookEx(g_hCbt, nCode, wParam, lParam);
+}
+static void InstallThreadModalDetectHook()
+{
+	if (g_hCbt) return;
+	g_mouseOn = false;
+	DWORD tid = GetCurrentThreadId();
+	g_hCbt = SetWindowsHookExW(WH_CBT, CbtProc, nullptr, tid);
+}
+static void UninstallThreadModalDetectHook()
+{
+	if (!g_hCbt) return;
+	UnhookWindowsHookEx(g_hCbt);
+	g_hCbt = nullptr;
+	if (g_mouseOn) {
+		ShowCursor(FALSE);
+	}
+}
+
 static unsigned int __stdcall cComSpooler_TimeoutThread(LPVOID vdParam)
 {
 	CComSpooler* t = (CComSpooler*)vdParam;
@@ -75,6 +134,29 @@ static unsigned short jis_to_sjis(unsigned short jis)
 	return (UINT16)((UINT16)s1 << 8 | s2);
 }
 
+static COLORREF ColorCodeToColorRef(UINT8 colorCode)
+{
+	switch (colorCode) {
+	case 0:
+		return RGB(0,0,0);
+	case 1:
+		return RGB(0, 0, 255);
+	case 2:
+		return RGB(255, 0, 0);
+	case 3:
+		return RGB(255, 0, 255);
+	case 4:
+		return RGB(0, 255, 0);
+	case 5:
+		return RGB(0, 255, 255);
+	case 6:
+		return RGB(255, 255, 0);
+	case 7:
+		return RGB(255, 255, 255);
+	}
+	return RGB(0, 0, 0);
+}
+
 
 /**
  * インスタンス作成
@@ -117,6 +199,10 @@ CComSpooler::CComSpooler()
 	, m_escpr()
 	, m_escp_rectdot(false)
 	, m_escp_dotscale(1.0f)
+	, m_escp_colorbuf(NULL)
+	, m_escp_colorbuf_w(0)
+	, m_escp_colorbuf_h(0)
+
 {
 	InitializeCriticalSection(&m_csPrint);
 	m_hThreadExitEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
@@ -172,6 +258,7 @@ finalize:
  */
 void CComSpooler::CCStartDocPrinter()
 {
+	InstallThreadModalDetectHook();
 	EnterCriticalSection(&m_csPrint);
 
 	if (!m_isOpened) goto finalize;
@@ -241,6 +328,7 @@ void CComSpooler::CCStartDocPrinter()
 	m_isStart = true;
 finalize:
 	LeaveCriticalSection(&m_csPrint);
+	UninstallThreadModalDetectHook();
 }
 /**
  * タイムアウト監視スレッド終了
@@ -283,6 +371,7 @@ void CComSpooler::CCEndDocPrinter()
 			::AbortDoc(m_hdc);
 		}
 		else {
+			CCRenderAllESCP();
 			CCEndESCPPage();
 
 			::EndPage(m_hdc);
@@ -313,6 +402,9 @@ bool CComSpooler::Initialize(COMCFG* comcfg)
 	m_pageTimeout = comcfg->spoolTimeout;
 	m_escp_dotscale = comcfg->spoolDotSize / 100.0;
 	m_escp_rectdot = comcfg->spoolRectDot ? true : false;
+
+	m_lastHasError = false;
+
 	return true;
 }
 
@@ -334,13 +426,23 @@ UINT CComSpooler::Read(UINT8* pData)
 UINT CComSpooler::Write(UINT8 cData)
 {
 	UINT ret = 0;
+	DWORD lastSendTime = m_lastSendTime;
+	m_lastSendTime = GetTickCounter();
 
 	EnterCriticalSection(&m_csPrint);
 	DWORD dwWrittenSize;
 	if (!m_isOpened) {
-		if (!CCOpenPrinter()) {
+		if (m_lastHasError && m_lastSendTime - lastSendTime < 1000) {
+			// 短時間で送られ過ぎないようにする
+			m_lastSendTime = GetTickCounter();
 			goto finalize;
 		}
+		if (!CCOpenPrinter()) {
+			m_lastHasError = true;
+			m_lastSendTime = GetTickCounter();
+			goto finalize;
+		}
+		m_lastHasError = false;
 	}
 
 	if (!m_isStart) {
@@ -350,11 +452,20 @@ UINT CComSpooler::Write(UINT8 cData)
 			goto finalize;
 		}
 
+		if (m_lastHasError && !m_isStart && m_lastSendTime - lastSendTime < 1000) {
+			// 短時間で送られ過ぎないようにする
+			m_lastSendTime = GetTickCounter();
+			goto finalize;
+		}
 		CCStartDocPrinter();
 		if (!m_isStart) {
+			m_lastHasError = true;
+			m_lastSendTime = GetTickCounter();
 			goto finalize;
 		}
 	}
+
+	m_lastHasError = false;
 
 	m_lastSendTime = GetTickCounter();
 	if (m_dataCounter < 10000) {
@@ -413,6 +524,7 @@ INTPTR CComSpooler::Message(UINT nMessage, INTPTR nParam)
 				::ClosePrinter(m_hPrinter);
 				m_hPrinter = NULL;
 				m_isOpened = false;
+				m_lastHasError = false;
 			}
 
 			if (nParam) {
@@ -469,6 +581,12 @@ void CComSpooler::CCStartESCPPage(bool reset)
 
 	memset(&m_escp_gdi, 0, sizeof(m_escp_gdi));
 
+	const float dotPitch = 1.0f / 160;
+	m_escp_colorbuf_w = (int)ceil(m_physWidth / (m_dpiX * dotPitch));
+	m_escp_colorbuf_h = 24;
+	m_escp_colorbuf = new UINT8[m_escp_colorbuf_w * m_escp_colorbuf_h];
+	memset(m_escp_colorbuf, 0xff, m_escp_colorbuf_w * m_escp_colorbuf_h);
+
 	const int fontPx = MulDiv(12, m_dpiY, 72); // 12pt
 	LOGFONTW lf = {0};
 	lf.lfHeight = -fontPx;
@@ -495,7 +613,13 @@ void CComSpooler::CCStartESCPPage(bool reset)
 
 	CCUpdateFont();
 
-	CCUpdateLinePen(m_escpr.linep1, m_escpr.linep2, m_escpr.linep3);
+	CCUpdateLinePen(m_escpr.linep1, m_escpr.linep2, m_escpr.linep3, m_escpr.linecolor);
+	m_escp_gdi.brsDot[0] = (HBRUSH)GetStockObject(BLACK_BRUSH);
+	for (int i = 1; i < _countof(m_escp_gdi.brsDot); i++) {
+		if (!m_escp_gdi.brsDot[i]) {
+			m_escp_gdi.brsDot[i] = CreateSolidBrush(ColorCodeToColorRef(i));
+		}
+	}
 
 	SetGraphicsMode(m_hdc, GM_ADVANCED);
 
@@ -509,6 +633,24 @@ void CComSpooler::CCEndESCPPage()
 	if (m_escp_gdi.fontbold) DeleteObject(m_escp_gdi.fontbold);
 	if (m_escp_gdi.fontboldrot90) DeleteObject(m_escp_gdi.fontboldrot90);
 	if (m_escp_gdi.penline) DeleteObject(m_escp_gdi.penline);
+	m_escp_gdi.fontbase = NULL;
+	m_escp_gdi.fontrot90 = NULL;
+	m_escp_gdi.fontbold = NULL;
+	m_escp_gdi.fontboldrot90 = NULL;
+	m_escp_gdi.penline = NULL;
+
+	m_escp_gdi.brsDot[0] = NULL;
+	for (int i = 1; i < _countof(m_escp_gdi.brsDot); i++) {
+		if (m_escp_gdi.brsDot[i]) {
+			DeleteObject(m_escp_gdi.brsDot[i]);
+			m_escp_gdi.brsDot[i] = NULL;
+		}
+	}
+
+	if (m_escp_colorbuf) {
+		delete[] m_escp_colorbuf;
+		m_escp_colorbuf = NULL;
+	}
 }
 
 void CComSpooler::CCResetESCP()
@@ -524,6 +666,8 @@ void CComSpooler::CCResetESCP()
 	m_escp.escmode = 0x48;
 	m_escp.scalex = 1.0;
 	m_escp.scaley = 1.0;
+	m_escp.scalex_graph = 1.0;
+	m_escp.scaley_graph = 1.0;
 	m_escp.maxscaley = 1.0;
 	m_escp.maxlineheight = 0;
 	m_escp.bold = false;
@@ -532,8 +676,12 @@ void CComSpooler::CCResetESCP()
 	m_escp.linep2 = 1;
 	m_escp.linep3 = 2;
 	m_escp.lineenable = false;
+	m_escp.linecolor = 0;
 	m_escp.dotsp_left = 0;
 	m_escp.dotsp_right = 0;
+	m_escp.color = 0;
+	m_escp.hasgraphic = 0;
+	m_escp.delaynewpageposy = 0;
 
 	m_escpr = m_escp;
 
@@ -545,6 +693,18 @@ void CComSpooler::CCResetESCP()
 	m_physOffY = GetDeviceCaps(m_hdc, PHYSICALOFFSETY);
 	m_horzRes = GetDeviceCaps(m_hdc, HORZRES);
 	m_vertRes = GetDeviceCaps(m_hdc, VERTRES);
+
+	SetTextColor(m_hdc, ColorCodeToColorRef(m_escp.color));
+
+	if (m_escp_colorbuf) {
+		delete[] m_escp_colorbuf;
+		m_escp_colorbuf = NULL;
+	}
+	const float dotPitch = 1.0f / 160;
+	m_escp_colorbuf_w = (int)ceil(m_physWidth / (m_dpiX * dotPitch));
+	m_escp_colorbuf_h = 24;
+	m_escp_colorbuf = new UINT8[m_escp_colorbuf_w * m_escp_colorbuf_h];
+	memset(m_escp_colorbuf, 0xff, m_escp_colorbuf_w * m_escp_colorbuf_h);
 }
 
 void CComSpooler::CCUpdateFont()
@@ -557,9 +717,9 @@ void CComSpooler::CCUpdateFont()
 	}
 }
 
-void CComSpooler::CCUpdateLinePen(UINT8 param1, UINT8 param2, UINT8 param3)
+void CComSpooler::CCUpdateLinePen(UINT8 param1, UINT8 param2, UINT8 param3, UINT8 color)
 {
-	if (m_escp_gdi.penline == NULL || m_escpr.linep1 != param1 || m_escpr.linep2 != param2 || m_escpr.linep3 != param3) {
+	if (m_escp_gdi.penline == NULL || m_escpr.linep1 != param1 || m_escpr.linep2 != param2 || m_escpr.linep3 != param3 || m_escpr.linecolor != color) {
 		if (m_escp_gdi.penline) {
 			DeleteObject(m_escp_gdi.penline);
 			m_escp_gdi.penline = NULL;
@@ -568,23 +728,34 @@ void CComSpooler::CCUpdateLinePen(UINT8 param1, UINT8 param2, UINT8 param3)
 		int dotsize = (float)m_dpiX * dotPitch;
 		dotsize *= param3 / 2;
 		if (dotsize <= 0) dotsize = 1;
-		m_escp_gdi.penline = CreatePen(PS_SOLID, dotsize, RGB(0, 0, 0));
+		m_escp_gdi.penline = CreatePen(PS_SOLID, dotsize, ColorCodeToColorRef(color));
 
 		m_escpr.linep1 = param1;
 		m_escpr.linep2 = param2;
 		m_escpr.linep3 = param3;
+		m_escpr.linecolor = color;
 	}
 }
 
-void CComSpooler::CCCheckNewPage()
+void CComSpooler::CCCheckNewPage(bool delay)
 {
 	if (m_escp.posy + m_dpiY / m_escp.lpi > m_vertRes) {
-		CCRenderAllESCP();
-		CCEndESCPPage();
-		::EndPage(m_hdc);
-		::StartPage(m_hdc);
-		CCStartESCPPage(false);
-		m_escpr = m_escp;
+		if (delay) {
+			if (m_escp.delaynewpageposy == 0) {
+				m_escp.delaynewpageposy = m_escp.posy;
+			}
+		}
+		else {
+			float posyoffset = m_escp.delaynewpageposy <= 0 ? 0 : (m_escp.posy - m_escp.delaynewpageposy);
+			CCRenderAllESCP();
+			CCEndESCPPage();
+			::EndPage(m_hdc);
+			::StartPage(m_hdc);
+			CCStartESCPPage(false);
+			m_escp.posy = posyoffset;
+			m_escp.delaynewpageposy = 0;
+			m_escpr = m_escp;
+		}
 	}
 }
 void CComSpooler::CCCheckNewLine(int nextCharWidth)
@@ -599,7 +770,16 @@ void CComSpooler::CCCheckNewLine(int nextCharWidth)
 
 void CComSpooler::CCWriteLF()
 {
-	m_escp.posy += m_escp.maxlineheight;
+	if (m_escp.maxlineheight == 0) {
+		m_escp.maxlineheight = max(m_escp.maxlineheight, (float)m_dpiY / m_escp.lpi * m_escp.maxscaley);
+	}
+	if (m_escp.copymode) {
+		float pitchy = (float)m_dpiY / graph_escp_lpi / 24 * m_escpr.scaley_graph;
+		m_escp.posy += m_escp.maxlineheight * 120 / 160;// -pitchy * 2;
+	}
+	else {
+		m_escp.posy += m_escp.maxlineheight;
+	}
 	m_escp.maxlineheight = 0;
 	m_escp.maxscaley = 1.0;
 	m_escpr = m_escp;
@@ -613,9 +793,52 @@ void CComSpooler::CCRenderAllESCP()
 	m_escpr.maxscaley = m_escp.maxscaley;
 	m_escpr.lpi = m_escp.lpi;
 	m_escpr.cpi = m_escp.cpi;
+	m_escpr.hasgraphic = 0;
 	//m_escpr.posx = 0;
 	for (auto it = m_escprlin.begin(); it != m_escprlin.end(); ++it) {
 		CCRenderESCP(*it);
+	}
+	if (m_escpr.hasgraphic) {
+		if (m_escp.posy + m_dpiY / m_escp.lpi > m_vertRes) {
+			m_escpr.hasgraphic = 0; // check
+		}
+		const float dotPitch = 1.0f / 160;
+		float pitchx = (float)m_dpiX * dotPitch * m_escpr.scalex_graph;
+		float pitchy = (float)m_dpiY / graph_escp_lpi / 24 * m_escpr.scaley_graph;
+		if (m_escp.copymode) {
+			pitchy *= (float)24 / 16 * 120 / 160 * 160 / 24 / 6; // なぞのほせい
+		}
+		int r = (float)m_dpiX * dotPitch / 2 * m_escp_dotscale;
+		int rx = (float)pitchx / 2 + 1;
+		int ry = (float)pitchy / 2 + 1;
+		if (r == 0) r = 1;
+		HBRUSH hBrush = m_escp_gdi.brsDot[m_escpr.color];
+		HPEN hPen = (HPEN)GetStockObject(NULL_PEN);
+		HGDIOBJ oldPen = SelectObject(m_hdc, hPen);
+		HGDIOBJ oldBrush = SelectObject(m_hdc, hBrush);
+		int curColor = m_escpr.color;
+		for (int y = 0; y < m_escp_colorbuf_h; y++) {
+			int cy = m_physOffY + (int)(m_escpr.posy + y * pitchy);
+			for (int x = 0; x < m_escp_colorbuf_w; x++) {
+				int cx = m_physOffX + (int)(x * pitchx);
+				int idx = y * m_escp_colorbuf_w + x;
+				if ((m_escp_colorbuf[idx] & 0x7) != 0x7) {
+					if ((m_escp_colorbuf[idx] & 0x7) != curColor) {
+						curColor = (m_escp_colorbuf[idx] & 0x7);
+						SelectObject(m_hdc, m_escp_gdi.brsDot[curColor]);
+					}
+					if (m_escp_rectdot) {
+						Rectangle(m_hdc, cx - rx, cy - ry, cx + rx, cy + ry);
+					}
+					else {
+						Ellipse(m_hdc, cx - r, cy - r, cx + r, cy + r);
+					}
+				}
+			}
+		}
+		SelectObject(m_hdc, oldBrush);
+		SelectObject(m_hdc, oldPen);
+		memset(m_escp_colorbuf, 0xff, m_escp_colorbuf_w * m_escp_colorbuf_h);
 	}
 	m_escprlin.clear();
 	m_escpr = m_escp;
@@ -625,7 +848,6 @@ void CComSpooler::CCRenderESCP(UINT8 cData)
 	m_escprbuf.push_back(cData);
 
 	const float dotPitch = 1.0f / 160;
-	const float graph_escp_lpi = 6;
 
 	UINT8 cmd = m_escprbuf.at(0);
 	if (cmd == 0x1d) {
@@ -663,7 +885,6 @@ void CComSpooler::CCRenderESCP(UINT8 cData)
 
 	case 0x0c: // FF
 		m_escprbuf.erase(m_escprbuf.begin());
-		m_escpr.posy = m_vertRes + m_dpiY / m_escpr.lpi;
 		break;
 
 	case 0x0e: // SO
@@ -887,42 +1108,29 @@ void CComSpooler::CCRenderESCP(UINT8 cData)
 			}
 			int gw = (m_escprbuf.at(2) - '0') * 1000 + (m_escprbuf.at(3) - '0') * 100 + (m_escprbuf.at(4) - '0') * 10 + (m_escprbuf.at(5) - '0');
 			if (m_escprbuf.size() < 6 + gw) return;
-			float pitchx = (float)m_dpiX * dotPitch * (m_escpr.so ? 2.0f : 1.0f) * m_escpr.scalex;
-			float pitchy = (float)m_dpiY / graph_escp_lpi / 24 * 2 * m_escpr.scaley;
-			float posx = m_escpr.posx;
-			float base_escp_posy = m_escpr.posy;
-			float posy = base_escp_posy;
-			int r = (float)m_dpiX * dotPitch / 2 * m_escp_dotscale;
-			int rx = (float)pitchx / 2 + 1;
-			int ry = (float)pitchy / 2 + 1;
-			if (r == 0) r = 1;
-			HBRUSH hBrush = (HBRUSH)GetStockObject(BLACK_BRUSH);
-			HPEN hPen = (HPEN)GetStockObject(NULL_PEN);
-			HGDIOBJ oldBrush = SelectObject(m_hdc, hBrush);
-			HGDIOBJ oldPen = SelectObject(m_hdc, hPen);
+			m_escpr.hasgraphic = 1;
+			m_escpr.scalex_graph = m_escp.scalex;
+			m_escpr.scaley_graph = m_escp.scaley;
+			int posx = (int)floor(m_escpr.posx / (m_dpiX * dotPitch) + 0.5);
+			int extstep = (m_escp.so ? 2.0f : 1.0f);
 			for (int i = 0; i < gw; i++) {
-				int cx = m_physOffX + (int)posx;
+				int cx = posx + i * extstep;
+				if (cx + extstep - 1 >= m_escp_colorbuf_w) break;
 				UINT8 data = m_escprbuf.at(6 + i);
-				posy = base_escp_posy;
-				while (data) {
-					int cy = m_physOffY + (int)posy;
+				for (int cy = 0; cy < 16; cy += 2) {
 					if (data & 1) {
-						if (m_escp_rectdot) {
-							Rectangle(m_hdc, cx - rx, cy - ry, cx + rx, cy + ry);
-						}
-						else {
-							Ellipse(m_hdc, cx - r, cy - r, cx + r, cy + r);
+						int idx = cy * m_escp_colorbuf_w + cx;
+						m_escp_colorbuf[idx] &= m_escpr.color;
+						if (extstep == 2) {
+							m_escp_colorbuf[idx + 1] &= m_escpr.color;
 						}
 					}
 					data >>= 1;
-					posy += pitchy;
 				}
-				posx += pitchx;
 			}
-			m_escpr.posx = posx;
-			m_escpr.maxlineheight = max(m_escpr.maxlineheight, m_dpiY / m_escpr.lpi * m_escpr.scaley);
-			SelectObject(m_hdc, oldBrush);
-			SelectObject(m_hdc, oldPen);
+			float pitchx = (float)m_dpiX * dotPitch * (m_escp.so ? 2.0f : 1.0f) * m_escp.scalex;
+			m_escpr.posx += gw * pitchx;
+			m_escpr.maxlineheight = max(m_escpr.maxlineheight, m_dpiY / graph_escp_lpi * m_escpr.scaley);
 			m_escprbuf.erase(m_escprbuf.begin(), m_escprbuf.begin() + 6 + gw);
 			break;
 		}
@@ -939,42 +1147,29 @@ void CComSpooler::CCRenderESCP(UINT8 cData)
 			}
 			int gw = ((m_escprbuf.at(2) - '0') * 1000 + (m_escprbuf.at(3) - '0') * 100 + (m_escprbuf.at(4) - '0') * 10 + (m_escprbuf.at(5) - '0')) * 2;
 			if (m_escprbuf.size() < 6 + gw) return;
-			float pitchx = (float)m_dpiX * dotPitch * (m_escpr.so ? 2.0f : 1.0f) * m_escpr.scalex;
-			float pitchy = (float)m_dpiY / graph_escp_lpi / 24 * m_escpr.scaley;
-			float posx = m_escpr.posx;
-			float base_escp_posy = m_escpr.posy;
-			float posy = base_escp_posy;
-			int r = (float)m_dpiX * dotPitch / 2 * m_escp_dotscale;
-			int rx = (float)pitchx / 2 + 1;
-			int ry = (float)pitchy / 2 + 1;
-			if (r == 0) r = 1;
-			HBRUSH hBrush = (HBRUSH)GetStockObject(BLACK_BRUSH);
-			HPEN hPen = (HPEN)GetStockObject(NULL_PEN);
-			HGDIOBJ oldBrush = SelectObject(m_hdc, hBrush);
-			HGDIOBJ oldPen = SelectObject(m_hdc, hPen);
-			for (int i = 0; i < gw; i += 2) {
-				int cx = m_physOffX + (int)posx;
+			m_escpr.hasgraphic = 1;
+			m_escpr.scalex_graph = m_escp.scalex;
+			m_escpr.scaley_graph = m_escp.scaley;
+			int posx = (int)floor(m_escpr.posx / (m_dpiX * dotPitch) + 0.5);
+			int extstep = (m_escp.so ? 2.0f : 1.0f);
+			for (int i = 0; i < gw; i+= 2) {
+				int cx = posx + i / 2 * extstep;
+				if (cx + extstep - 1 >= m_escp_colorbuf_w) break;
 				UINT16 data = ((UINT16)m_escprbuf.at(6 + i + 1) << 8) | m_escprbuf.at(6 + i);
-				posy = base_escp_posy;
-				while (data) {
-					int cy = m_physOffY + (int)posy;
+				for (int cy = 0; cy < 16; cy++) {
 					if (data & 1) {
-						if (m_escp_rectdot) {
-							Rectangle(m_hdc, cx - rx, cy - ry, cx + rx, cy + ry);
-						}
-						else {
-							Ellipse(m_hdc, cx - r, cy - r, cx + r, cy + r);
+						int idx = cy * m_escp_colorbuf_w + cx;
+						m_escp_colorbuf[idx] &= m_escpr.color;
+						if (extstep == 2) {
+							m_escp_colorbuf[idx + 1] &= m_escpr.color;
 						}
 					}
 					data >>= 1;
-					posy += pitchy;
 				}
-				posx += pitchx;
 			}
-			m_escpr.posx = posx;
-			m_escpr.maxlineheight = max(m_escpr.maxlineheight, m_dpiY / m_escpr.lpi * m_escpr.scaley);
-			SelectObject(m_hdc, oldBrush);
-			SelectObject(m_hdc, oldPen);
+			float pitchx = (float)m_dpiX * dotPitch * (m_escp.so ? 2.0f : 1.0f) * m_escp.scalex;
+			m_escpr.posx += gw * pitchx / 2;
+			m_escpr.maxlineheight = max(m_escpr.maxlineheight, m_dpiY / graph_escp_lpi * m_escpr.scaley);
 			m_escprbuf.erase(m_escprbuf.begin(), m_escprbuf.begin() + 6 + gw);
 			break;
 		}
@@ -991,42 +1186,29 @@ void CComSpooler::CCRenderESCP(UINT8 cData)
 			}
 			int gw = ((m_escprbuf.at(2) - '0') * 1000 + (m_escprbuf.at(3) - '0') * 100 + (m_escprbuf.at(4) - '0') * 10 + (m_escprbuf.at(5) - '0')) * 3;
 			if (m_escprbuf.size() < 6 + gw) return;
-			float pitchx = (float)m_dpiX * dotPitch * (m_escpr.so ? 2.0f : 1.0f) * m_escpr.scalex;
-			float pitchy = (float)m_dpiY / graph_escp_lpi / 24 * m_escpr.scaley;
-			float posx = m_escpr.posx;
-			float base_escp_posy = m_escpr.posy;
-			float posy = base_escp_posy;
-			int r = (float)m_dpiX * dotPitch / 2 * m_escp_dotscale;
-			int rx = (float)pitchx / 2 + 1;
-			int ry = (float)pitchy / 2 + 1;
-			if (r == 0) r = 1;
-			HBRUSH hBrush = (HBRUSH)GetStockObject(BLACK_BRUSH);
-			HPEN hPen = (HPEN)GetStockObject(NULL_PEN);
-			HGDIOBJ oldBrush = SelectObject(m_hdc, hBrush);
-			HGDIOBJ oldPen = SelectObject(m_hdc, hPen);
+			m_escpr.hasgraphic = 1;
+			m_escpr.scalex_graph = m_escp.scalex;
+			m_escpr.scaley_graph = m_escp.scaley;
+			int posx = (int)floor(m_escpr.posx / (m_dpiX * dotPitch) + 0.5);
+			int extstep = (m_escp.so ? 2.0f : 1.0f);
 			for (int i = 0; i < gw; i += 3) {
-				int cx = m_physOffX + (int)posx;
+				int cx = posx + i / 3 * extstep;
+				if (cx + extstep - 1 >= m_escp_colorbuf_w) break;
 				UINT32 data = ((UINT32)m_escprbuf.at(6 + i + 2) << 16) | ((UINT32)m_escprbuf.at(6 + i + 1) << 8) | m_escprbuf.at(6 + i);
-				posy = base_escp_posy;
-				while (data) {
-					int cy = m_physOffY + (int)posy;
+				for (int cy = 0; cy < 24; cy++) {
 					if (data & 1) {
-						if (m_escp_rectdot) {
-							Rectangle(m_hdc, cx - rx, cy - ry, cx + rx, cy + ry);
-						}
-						else {
-							Ellipse(m_hdc, cx - r, cy - r, cx + r, cy + r);
+						int idx = cy * m_escp_colorbuf_w + cx;
+						m_escp_colorbuf[idx] &= m_escpr.color;
+						if (extstep == 2) {
+							m_escp_colorbuf[idx + 1] &= m_escpr.color;
 						}
 					}
 					data >>= 1;
-					posy += pitchy;
 				}
-				posx += pitchx;
 			}
-			m_escpr.posx = posx;
-			m_escpr.maxlineheight = max(m_escpr.maxlineheight, m_dpiY / m_escpr.lpi * m_escpr.scaley);
-			SelectObject(m_hdc, oldBrush);
-			SelectObject(m_hdc, oldPen);
+			float pitchx = (float)m_dpiX * dotPitch * (m_escp.so ? 2.0f : 1.0f) * m_escp.scalex;
+			m_escpr.posx += gw * pitchx / 3;
+			m_escpr.maxlineheight = max(m_escpr.maxlineheight, m_dpiY / graph_escp_lpi * m_escpr.scaley);
 			m_escprbuf.erase(m_escprbuf.begin(), m_escprbuf.begin() + 6 + gw);
 			break;
 		}
@@ -1043,43 +1225,30 @@ void CComSpooler::CCRenderESCP(UINT8 cData)
 			}
 			int gw = (m_escprbuf.at(2) - '0') * 1000 + (m_escprbuf.at(3) - '0') * 100 + (m_escprbuf.at(4) - '0') * 10 + (m_escprbuf.at(5) - '0');
 			if (m_escprbuf.size() < 6 + 1) return;
-			float pitchx = (float)m_dpiX * dotPitch * (m_escpr.so ? 2.0f : 1.0f) * m_escpr.scalex;
-			float pitchy = (float)m_dpiY / graph_escp_lpi / 24 * 2 * m_escpr.scaley;
-			float posx = m_escpr.posx;
-			float base_escp_posy = m_escpr.posy;
-			float posy = base_escp_posy;
-			int r = (float)m_dpiX * dotPitch / 2 * m_escp_dotscale;
-			int rx = (float)pitchx / 2 + 1;
-			int ry = (float)pitchy / 2 + 1;
-			if (r == 0) r = 1;
-			HBRUSH hBrush = (HBRUSH)GetStockObject(BLACK_BRUSH);
-			HPEN hPen = (HPEN)GetStockObject(NULL_PEN);
-			HGDIOBJ oldBrush = SelectObject(m_hdc, hBrush);
-			HGDIOBJ oldPen = SelectObject(m_hdc, hPen);
+			m_escpr.hasgraphic = 1;
+			m_escpr.scalex_graph = m_escp.scalex;
+			m_escpr.scaley_graph = m_escp.scaley;
 			UINT8 odata = m_escprbuf.at(6);
+			int posx = (int)floor(m_escpr.posx / (m_dpiX * dotPitch) + 0.5);
+			int extstep = (m_escp.so ? 2.0f : 1.0f);
 			for (int i = 0; i < gw; i++) {
-				int cx = m_physOffX + (int)posx;
-				posy = base_escp_posy;
+				int cx = posx + i * extstep;
+				if (cx + extstep - 1 >= m_escp_colorbuf_w) break;
 				UINT8 data = odata;
-				while (data) {
-					int cy = m_physOffY + (int)posy;
+				for (int cy = 0; cy < 16; cy += 2) {
 					if (data & 1) {
-						if (m_escp_rectdot) {
-							Rectangle(m_hdc, cx - rx, cy - ry, cx + rx, cy + ry);
-						}
-						else {
-							Ellipse(m_hdc, cx - r, cy - r, cx + r, cy + r);
+						int idx = cy * m_escp_colorbuf_w + cx;
+						m_escp_colorbuf[idx] &= m_escpr.color;
+						if (extstep == 2) {
+							m_escp_colorbuf[idx + 1] &= m_escpr.color;
 						}
 					}
 					data >>= 1;
-					posy += pitchy;
 				}
-				posx += pitchx;
 			}
-			m_escpr.posx = posx;
-			m_escpr.maxlineheight = max(m_escpr.maxlineheight, m_dpiY / m_escpr.lpi * m_escpr.scaley);
-			SelectObject(m_hdc, oldBrush);
-			SelectObject(m_hdc, oldPen);
+			float pitchx = (float)m_dpiX * dotPitch * (m_escp.so ? 2.0f : 1.0f) * m_escp.scalex;
+			m_escpr.posx += gw * pitchx;
+			m_escpr.maxlineheight = max(m_escpr.maxlineheight, m_dpiY / graph_escp_lpi * m_escpr.scaley);
 			m_escprbuf.erase(m_escprbuf.begin(), m_escprbuf.begin() + 6 + 1);
 			break;
 		}
@@ -1096,43 +1265,30 @@ void CComSpooler::CCRenderESCP(UINT8 cData)
 			}
 			int gw = ((m_escprbuf.at(2) - '0') * 1000 + (m_escprbuf.at(3) - '0') * 100 + (m_escprbuf.at(4) - '0') * 10 + (m_escprbuf.at(5) - '0')) * 2;
 			if (m_escprbuf.size() < 6 + 2) return;
-			float pitchx = (float)m_dpiX * dotPitch * (m_escpr.so ? 2.0f : 1.0f) * m_escpr.scalex;
-			float pitchy = (float)m_dpiY / graph_escp_lpi / 24 * m_escpr.scaley;
-			float posx = m_escpr.posx;
-			float base_escp_posy = m_escpr.posy;
-			float posy = base_escp_posy;
-			int r = (float)m_dpiX * dotPitch / 2 * m_escp_dotscale;
-			int rx = (float)pitchx / 2 + 1;
-			int ry = (float)pitchy / 2 + 1;
-			if (r == 0) r = 1;
-			HBRUSH hBrush = (HBRUSH)GetStockObject(BLACK_BRUSH);
-			HPEN hPen = (HPEN)GetStockObject(NULL_PEN);
-			HGDIOBJ oldBrush = SelectObject(m_hdc, hBrush);
-			HGDIOBJ oldPen = SelectObject(m_hdc, hPen);
+			m_escpr.hasgraphic = 1;
+			m_escpr.scalex_graph = m_escp.scalex;
+			m_escpr.scaley_graph = m_escp.scaley;
 			UINT16 odata = ((UINT16)m_escprbuf.at(6 + 1) << 8) | m_escprbuf.at(6);
+			int posx = (int)floor(m_escpr.posx / (m_dpiX * dotPitch) + 0.5);
+			int extstep = (m_escp.so ? 2.0f : 1.0f);
 			for (int i = 0; i < gw; i += 2) {
-				int cx = m_physOffX + (int)posx;
-				posy = base_escp_posy;
+				int cx = posx + i / 2 * extstep;
+				if (cx + extstep - 1 >= m_escp_colorbuf_w) break;
 				UINT16 data = odata;
-				while (data) {
-					int cy = m_physOffY + (int)posy;
+				for (int cy = 0; cy < 16; cy++) {
 					if (data & 1) {
-						if (m_escp_rectdot) {
-							Rectangle(m_hdc, cx - rx, cy - ry, cx + rx, cy + ry);
-						}
-						else {
-							Ellipse(m_hdc, cx - r, cy - r, cx + r, cy + r);
+						int idx = cy * m_escp_colorbuf_w + cx;
+						m_escp_colorbuf[idx] &= m_escpr.color;
+						if (extstep == 2) {
+							m_escp_colorbuf[idx + 1] &= m_escpr.color;
 						}
 					}
 					data >>= 1;
-					posy += pitchy;
 				}
-				posx += pitchx;
 			}
-			m_escpr.posx = posx;
-			m_escpr.maxlineheight = max(m_escpr.maxlineheight, m_dpiY / m_escpr.lpi * m_escpr.scaley);
-			SelectObject(m_hdc, oldBrush);
-			SelectObject(m_hdc, oldPen);
+			float pitchx = (float)m_dpiX * dotPitch * (m_escp.so ? 2.0f : 1.0f) * m_escp.scalex;
+			m_escpr.posx += gw * pitchx / 2;
+			m_escpr.maxlineheight = max(m_escpr.maxlineheight, m_dpiY / graph_escp_lpi * m_escpr.scaley);
 			m_escprbuf.erase(m_escprbuf.begin(), m_escprbuf.begin() + 6 + 2);
 			break;
 		}
@@ -1149,55 +1305,44 @@ void CComSpooler::CCRenderESCP(UINT8 cData)
 			}
 			int gw = ((m_escprbuf.at(2) - '0') * 1000 + (m_escprbuf.at(3) - '0') * 100 + (m_escprbuf.at(4) - '0') * 10 + (m_escprbuf.at(5) - '0')) * 3;
 			if (m_escprbuf.size() < 6 + 3) return;
-			float pitchx = (float)m_dpiX * dotPitch * (m_escpr.so ? 2.0f : 1.0f) * m_escpr.scalex;
-			float pitchy = (float)m_dpiY / graph_escp_lpi / 24 * m_escpr.scaley;
-			float posx = m_escpr.posx;
-			float base_escp_posy = m_escpr.posy;
-			float posy = base_escp_posy;
-			int r = (float)m_dpiX * dotPitch / 2 * m_escp_dotscale;
-			int rx = (float)pitchx / 2 + 1;
-			int ry = (float)pitchy / 2 + 1;
-			if (r == 0) r = 1;
-			HBRUSH hBrush = (HBRUSH)GetStockObject(BLACK_BRUSH);
-			HPEN hPen = (HPEN)GetStockObject(NULL_PEN);
-			HGDIOBJ oldBrush = SelectObject(m_hdc, hBrush);
-			HGDIOBJ oldPen = SelectObject(m_hdc, hPen);
+			m_escpr.hasgraphic = 1;
+			m_escpr.scalex_graph = m_escp.scalex;
+			m_escpr.scaley_graph = m_escp.scaley;
 			UINT32 odata = ((UINT32)m_escprbuf.at(6 + 2) << 16) | ((UINT32)m_escprbuf.at(6 + 1) << 8) | m_escprbuf.at(6);
+			int posx = (int)floor(m_escpr.posx / (m_dpiX * dotPitch) + 0.5);
+			int extstep = (m_escp.so ? 2.0f : 1.0f);
 			for (int i = 0; i < gw; i += 3) {
-				int cx = m_physOffX + (int)posx;
-				posy = base_escp_posy;
+				int cx = posx + i / 3 * extstep;
+				if (cx + extstep - 1 >= m_escp_colorbuf_w) break;
 				UINT32 data = odata;
-				while (data) {
-					int cy = m_physOffY + (int)posy;
+				for (int cy = 0; cy < 24; cy++) {
 					if (data & 1) {
-						if (m_escp_rectdot) {
-							Rectangle(m_hdc, cx - rx, cy - ry, cx + rx, cy + ry);
-						}
-						else {
-							Ellipse(m_hdc, cx - r, cy - r, cx + r, cy + r);
+						int idx = cy * m_escp_colorbuf_w + cx;
+						m_escp_colorbuf[idx] &= m_escpr.color;
+						if (extstep == 2) {
+							m_escp_colorbuf[idx + 1] &= m_escpr.color;
 						}
 					}
 					data >>= 1;
-					posy += pitchy;
 				}
-				posx += pitchx;
 			}
-			m_escpr.posx = posx;
-			m_escpr.maxlineheight = max(m_escpr.maxlineheight, m_dpiY / m_escpr.lpi * m_escpr.scaley);
-			SelectObject(m_hdc, oldBrush);
-			SelectObject(m_hdc, oldPen);
+			float pitchx = (float)m_dpiX * dotPitch * (m_escp.so ? 2.0f : 1.0f) * m_escp.scalex;
+			m_escpr.posx += gw * pitchx / 3;
+			m_escpr.maxlineheight = max(m_escpr.maxlineheight, m_dpiY / graph_escp_lpi * m_escpr.scaley);
 			m_escprbuf.erase(m_escprbuf.begin(), m_escprbuf.begin() + 6 + 3);
 			break;
 		}
 		case 0x41:
 		{
 			m_escpr.lpi = 6; // 1/6
+			m_escpr.maxlineheight = 0; // 強制リセット
 			m_escprbuf.erase(m_escprbuf.begin(), m_escprbuf.begin() + 2);
 			break;
 		}
 		case 0x42:
 		{
 			m_escpr.lpi = 8; // 1/8
+			m_escpr.maxlineheight = 0; // 強制リセット
 			m_escprbuf.erase(m_escprbuf.begin(), m_escprbuf.begin() + 2);
 			break;
 		}
@@ -1206,6 +1351,7 @@ void CComSpooler::CCRenderESCP(UINT8 cData)
 			if (m_escprbuf.size() < 4) return;
 			int value = (m_escprbuf.at(2) - '0') * 10 + (m_escprbuf.at(3) - '0');
 			m_escpr.lpi = 120.0f / value; // n/240
+			m_escpr.maxlineheight = 0; // 強制リセット
 			m_escprbuf.erase(m_escprbuf.begin(), m_escprbuf.begin() + 4);
 			break;
 		}
@@ -1215,9 +1361,24 @@ void CComSpooler::CCRenderESCP(UINT8 cData)
 			m_escprbuf.erase(m_escprbuf.begin(), m_escprbuf.begin() + 3);
 			break;
 		}
+		case 0x44:
+		{
+			m_escpr.copymode = true;
+			m_escprbuf.erase(m_escprbuf.begin(), m_escprbuf.begin() + 2);
+			break;
+		}
+		case 0x4d:
+		{
+			m_escpr.copymode = false;
+			m_escprbuf.erase(m_escprbuf.begin(), m_escprbuf.begin() + 2);
+			break;
+		}
 		case 0x43:
 		{
 			if (m_escprbuf.size() < 3) return;
+			m_escpr.color = (m_escprbuf.at(2) - '0') & 0x7;
+			CCUpdateLinePen(m_escpr.linep1, m_escpr.linep2, m_escpr.linep3, m_escprbuf.at(2) - '0');
+			SetTextColor(m_hdc, ColorCodeToColorRef(m_escprbuf.at(2) - '0'));
 			m_escprbuf.erase(m_escprbuf.begin(), m_escprbuf.begin() + 3);
 			break;
 		}
@@ -1267,7 +1428,7 @@ void CComSpooler::CCRenderESCP(UINT8 cData)
 			}
 			else if (param2 = 0x34 && param3 == 0x4c) {
 				if (m_escprbuf.size() < 7) return;
-				CCUpdateLinePen(m_escprbuf.at(4), m_escprbuf.at(5) - '0', m_escprbuf.at(6) - '0');
+				CCUpdateLinePen(m_escprbuf.at(4), m_escprbuf.at(5) - '0', m_escprbuf.at(6) - '0', m_escpr.linecolor);
 				m_escprbuf.erase(m_escprbuf.begin(), m_escprbuf.begin() + 7);
 			}
 			else {
@@ -1319,30 +1480,27 @@ void CComSpooler::CCRenderESCP(UINT8 cData)
 		if (0x20 <= cmd || (isKanji && cmd == 0 && 0x20 <= m_escprbuf.at(1))) {
 			float charWidth = (float)m_dpiX / m_escpr.cpi * (m_escpr.so ? 2 : 1);
 			TCHAR buf[3] = { 9 };
+			UINT8 th[3] = { 0 };
 			if (isKanji) {
 				if (cmd == 0) {
 					// 実質1バイト文字
-					buf[0] = (TCHAR)m_escprbuf.at(1);
-					if (buf[0] == 0xff) buf[0] = ' ';
+					th[0] = m_escprbuf.at(1);
 				}
 				else {
 					UINT16 sjis = jis_to_sjis(cmd << 8 | m_escprbuf.at(1));
-					UINT8 th[3];
-					UINT16 thw[2];
 					th[0] = sjis >> 8;
 					th[1] = sjis & 0xff;
-					th[2] = '\0';
-					codecnv_sjistoucs2(thw, 1, (const char*)th, 2);
-					buf[0] = (TCHAR)thw[0];
-					buf[1] = (TCHAR)thw[1];
 					charWidth *= 2;
 				}
 				m_escprbuf.erase(m_escprbuf.begin());
 			}
 			else {
-				buf[0] = (TCHAR)cmd;
-				if (buf[0] == 0xff) buf[0] = ' ';
+				th[0] = cmd;
 			}
+			UINT16 thw[2];
+			codecnv_sjistoucs2(thw, 1, (const char*)th, 2);
+			buf[0] = (TCHAR)thw[0];
+			buf[1] = (TCHAR)thw[1];
 			m_escprbuf.erase(m_escprbuf.begin());
 
 			float pitchx = (float)m_dpiX * dotPitch;
@@ -1351,7 +1509,7 @@ void CComSpooler::CCRenderESCP(UINT8 cData)
 			if (!m_escpr.deselect) {
 				int yOfsEx = (m_escpr.escmode == 0x74) ? (m_dpiY / m_escpr.lpi) : 0;
 				float base_escp_posy = m_escpr.posy + m_escpr.maxlineheight - m_dpiY / m_escpr.lpi * m_escpr.scaley;
-				if (m_escpr.so || m_escpr.escmode == 0x51 || m_escpr.scalex != 1 || m_escpr.scaley != 1) {
+				if (m_escpr.so || m_escpr.escmode == 0x45 || m_escpr.escmode == 0x50 || m_escpr.escmode == 0x51 || m_escpr.scalex != 1 || m_escpr.scaley != 1) {
 					XFORM xf = {0};
 					xf.eM11 = (m_escpr.so ? 2.0f : 1.0f) * m_escpr.scalex;  // X倍率
 					xf.eM22 = 1.0f * m_escpr.scaley;  // Y倍率
@@ -1359,7 +1517,18 @@ void CComSpooler::CCRenderESCP(UINT8 cData)
 					xf.eDx = 0.0f;
 					xf.eDy = 0.0f;
 
-					if (m_escpr.escmode == 0x51) xf.eM11 *= 0.6;
+					if (m_escpr.escmode == 0x51) { // コンデンス
+						xf.eM11 *= 0.6;
+						charWidth *= 0.6;
+					}
+					else if (m_escpr.escmode == 0x45) { // エリート
+						xf.eM11 *= 0.8;
+						charWidth *= 0.8;
+					}
+					else if (m_escp.escmode == 0x50) { // プロポーショナル XXX; 本当は字の幅が可変
+						xf.eM11 *= 0.9;
+						charWidth *= 0.9;
+					}
 
 					charWidth *= m_escpr.scalex;
 
@@ -1372,26 +1541,24 @@ void CComSpooler::CCRenderESCP(UINT8 cData)
 					TextOut(m_hdc, m_physOffX + (int)m_escpr.posx, m_physOffY + (int)base_escp_posy + yOfsEx, buf, 1);
 				}
 				if (m_escpr.lineenable) {
-					if (m_escp_gdi.penline) {
-						float lineBeginX = m_escpr.posx - m_escpr.dotsp_left * pitchx;
-						float lineEndX = m_escpr.posx + charWidth + m_escpr.dotsp_right * pitchx;
-						const float dotPitch = 1.0f / 160;
-						int dotsize = (float)m_dpiX * dotPitch;
-						dotsize *= m_escpr.linep3 / 2;
-						HPEN hOldPen = (HPEN)SelectObject(m_hdc, m_escp_gdi.penline);
-						int ypos = 0;
-						if (m_escpr.lineselect == 1) {
-							// 下線
-							ypos = m_physOffY + base_escp_posy + m_dpiY / m_escpr.lpi - dotsize / 2;
-						}
-						else if (m_escpr.lineselect == 2) {
-							// 上線
-							ypos = m_physOffY + base_escp_posy + dotsize / 2;
-						}
-						MoveToEx(m_hdc, m_physOffX + lineBeginX, ypos, NULL);
-						LineTo(m_hdc, m_physOffX + lineEndX, ypos);
-						SelectObject(m_hdc, hOldPen);
+					float lineBeginX = m_escpr.posx - m_escpr.dotsp_left * pitchx;
+					float lineEndX = m_escpr.posx + charWidth + m_escpr.dotsp_right * pitchx;
+					const float dotPitch = 1.0f / 160;
+					int dotsize = (float)m_dpiX * dotPitch;
+					dotsize *= m_escpr.linep3 / 2;
+					HPEN hOldPen = (HPEN)SelectObject(m_hdc, m_escp_gdi.penline);
+					int ypos = 0;
+					if (m_escpr.lineselect == 1) {
+						// 下線
+						ypos = m_physOffY + base_escp_posy + m_dpiY / m_escpr.lpi - dotsize / 2;
 					}
+					else if (m_escpr.lineselect == 2) {
+						// 上線
+						ypos = m_physOffY + base_escp_posy + dotsize / 2;
+					}
+					MoveToEx(m_hdc, m_physOffX + lineBeginX, ypos, NULL);
+					LineTo(m_hdc, m_physOffX + lineEndX, ypos);
+					SelectObject(m_hdc, hOldPen);
 				}
 			}
 			m_escpr.posx += charWidth;
@@ -1413,7 +1580,6 @@ void CComSpooler::CCWriteESCP(UINT8 cData)
 	m_escprlin.push_back(cData);
 	
 	float dotPitch = 1.0f / 160;
-	float graph_escp_lpi = 6;
 
 	UINT8 cmd = m_escpbuf.at(0);
 	if (cmd == 0x1d) {
@@ -1675,10 +1841,13 @@ void CComSpooler::CCWriteESCP(UINT8 cData)
 			}
 			int gw = (m_escpbuf.at(2) - '0') * 1000 + (m_escpbuf.at(3) - '0') * 100 + (m_escpbuf.at(4) - '0') * 10 + (m_escpbuf.at(5) - '0');
 			if (m_escpbuf.size() < 6 + gw) return;
+			m_escpr.hasgraphic = 1;
+			m_escpr.scalex_graph = m_escp.scalex;
+			m_escpr.scaley_graph = m_escp.scaley;
 			float pitchx = (float)m_dpiX * dotPitch * (m_escp.so ? 2.0f : 1.0f) * m_escp.scalex;
 			float pitchy = (float)m_dpiY / graph_escp_lpi / 24 * 2 * m_escp.scaley;
 			m_escp.posx += gw * pitchx;
-			m_escp.maxlineheight = max(m_escp.maxlineheight, m_dpiY / 6);
+			m_escp.maxlineheight = max(m_escp.maxlineheight, m_dpiY / graph_escp_lpi * m_escpr.scaley);
 			m_escpbuf.erase(m_escpbuf.begin(), m_escpbuf.begin() + 6 + gw);
 			m_escp.maxscaley = max(m_escp.maxscaley, m_escp.scaley);
 			break;
@@ -1697,10 +1866,13 @@ void CComSpooler::CCWriteESCP(UINT8 cData)
 			}
 			int gw = ((m_escpbuf.at(2) - '0') * 1000 + (m_escpbuf.at(3) - '0') * 100 + (m_escpbuf.at(4) - '0') * 10 + (m_escpbuf.at(5) - '0')) * 2;
 			if (m_escpbuf.size() < 6 + gw) return;
+			m_escpr.hasgraphic = 1;
+			m_escpr.scalex_graph = m_escp.scalex;
+			m_escpr.scaley_graph = m_escp.scaley;
 			float pitchx = (float)m_dpiX * dotPitch * (m_escp.so ? 2.0f : 1.0f) * m_escp.scalex;
 			float pitchy = (float)m_dpiY / graph_escp_lpi / 24 * m_escp.scaley;
-			m_escp.posx += gw * pitchx;
-			m_escp.maxlineheight = max(m_escp.maxlineheight, m_dpiY / 6);
+			m_escp.posx += gw * pitchx / 2;
+			m_escp.maxlineheight = max(m_escp.maxlineheight, m_dpiY / graph_escp_lpi * m_escpr.scaley);
 			m_escpbuf.erase(m_escpbuf.begin(), m_escpbuf.begin() + 6 + gw);
 			m_escp.maxscaley = max(m_escp.maxscaley, m_escp.scaley);
 			break;
@@ -1719,10 +1891,13 @@ void CComSpooler::CCWriteESCP(UINT8 cData)
 			}
 			int gw = ((m_escpbuf.at(2) - '0') * 1000 + (m_escpbuf.at(3) - '0') * 100 + (m_escpbuf.at(4) - '0') * 10 + (m_escpbuf.at(5) - '0')) * 3;
 			if (m_escpbuf.size() < 6 + gw) return;
+			m_escpr.hasgraphic = 1;
+			m_escpr.scalex_graph = m_escp.scalex;
+			m_escpr.scaley_graph = m_escp.scaley;
 			float pitchx = (float)m_dpiX * dotPitch * (m_escp.so ? 2.0f : 1.0f) * m_escp.scalex;
 			float pitchy = (float)m_dpiY / graph_escp_lpi / 24 * m_escp.scaley;
-			m_escp.posx += gw * pitchx;
-			m_escp.maxlineheight = max(m_escp.maxlineheight, m_dpiY / 6);
+			m_escp.posx += gw * pitchx / 3;
+			m_escp.maxlineheight = max(m_escp.maxlineheight, m_dpiY / graph_escp_lpi * m_escpr.scaley);
 			m_escpbuf.erase(m_escpbuf.begin(), m_escpbuf.begin() + 6 + gw);
 			m_escp.maxscaley = max(m_escp.maxscaley, m_escp.scaley);
 			break;
@@ -1741,10 +1916,13 @@ void CComSpooler::CCWriteESCP(UINT8 cData)
 			}
 			int gw = (m_escpbuf.at(2) - '0') * 1000 + (m_escpbuf.at(3) - '0') * 100 + (m_escpbuf.at(4) - '0') * 10 + (m_escpbuf.at(5) - '0');
 			if (m_escpbuf.size() < 6 + 1) return;
+			m_escpr.hasgraphic = 1;
+			m_escpr.scalex_graph = m_escp.scalex;
+			m_escpr.scaley_graph = m_escp.scaley;
 			float pitchx = (float)m_dpiX * dotPitch * (m_escp.so ? 2.0f : 1.0f) * m_escp.scalex;
 			float pitchy = (float)m_dpiY / graph_escp_lpi / 24 * 2 * m_escp.scaley;
 			m_escp.posx += gw * pitchx;
-			m_escp.maxlineheight = max(m_escp.maxlineheight, m_dpiY / 6);
+			m_escp.maxlineheight = max(m_escp.maxlineheight, m_dpiY / graph_escp_lpi * m_escpr.scaley);
 			m_escpbuf.erase(m_escpbuf.begin(), m_escpbuf.begin() + 6 + 1);
 			m_escp.maxscaley = max(m_escp.maxscaley, m_escp.scaley);
 			break;
@@ -1763,10 +1941,13 @@ void CComSpooler::CCWriteESCP(UINT8 cData)
 			}
 			int gw = ((m_escpbuf.at(2) - '0') * 1000 + (m_escpbuf.at(3) - '0') * 100 + (m_escpbuf.at(4) - '0') * 10 + (m_escpbuf.at(5) - '0')) * 2;
 			if (m_escpbuf.size() < 6 + 2) return;
+			m_escpr.hasgraphic = 1;
+			m_escpr.scalex_graph = m_escp.scalex;
+			m_escpr.scaley_graph = m_escp.scaley;
 			float pitchx = (float)m_dpiX * dotPitch * (m_escp.so ? 2.0f : 1.0f) * m_escp.scalex;
 			float pitchy = (float)m_dpiY / graph_escp_lpi / 24 * m_escp.scaley;
-			m_escp.posx += gw * pitchx;
-			m_escp.maxlineheight = max(m_escp.maxlineheight, m_dpiY / 6);
+			m_escp.posx += gw * pitchx / 2;
+			m_escp.maxlineheight = max(m_escp.maxlineheight, m_dpiY / graph_escp_lpi * m_escpr.scaley);
 			m_escpbuf.erase(m_escpbuf.begin(), m_escpbuf.begin() + 6 + 2);
 			m_escp.maxscaley = max(m_escp.maxscaley, m_escp.scaley);
 			break;
@@ -1785,10 +1966,13 @@ void CComSpooler::CCWriteESCP(UINT8 cData)
 			}
 			int gw = ((m_escpbuf.at(2) - '0') * 1000 + (m_escpbuf.at(3) - '0') * 100 + (m_escpbuf.at(4) - '0') * 10 + (m_escpbuf.at(5) - '0')) * 3;
 			if (m_escpbuf.size() < 6 + 3) return;
+			m_escpr.hasgraphic = 1;
+			m_escpr.scalex_graph = m_escp.scalex;
+			m_escpr.scaley_graph = m_escp.scaley;
 			float pitchx = (float)m_dpiX * dotPitch * (m_escp.so ? 2.0f : 1.0f) * m_escp.scalex;
 			float pitchy = (float)m_dpiY / graph_escp_lpi / 24 * m_escp.scaley;
-			m_escp.posx += gw * pitchx;
-			m_escp.maxlineheight = max(m_escp.maxlineheight, m_dpiY / 6);
+			m_escp.posx += gw * pitchx / 3;
+			m_escp.maxlineheight = max(m_escp.maxlineheight, m_dpiY / graph_escp_lpi * m_escpr.scaley);
 			m_escpbuf.erase(m_escpbuf.begin(), m_escpbuf.begin() + 6 + 3);
 			m_escp.maxscaley = max(m_escp.maxscaley, m_escp.scaley);
 			break;
@@ -1796,13 +1980,17 @@ void CComSpooler::CCWriteESCP(UINT8 cData)
 		case 0x41:
 		{
 			m_escp.lpi = 6; // 1/6
+			m_escp.maxlineheight = 0; // 強制リセット
 			m_escpbuf.erase(m_escpbuf.begin(), m_escpbuf.begin() + 2);
+			CCCheckNewPage(true);
 			break;
 		}
 		case 0x42:
 		{
 			m_escp.lpi = 8; // 1/8
+			m_escp.maxlineheight = 0; // 強制リセット
 			m_escpbuf.erase(m_escpbuf.begin(), m_escpbuf.begin() + 2);
+			CCCheckNewPage(true);
 			break;
 		}
 		case 0x54:
@@ -1810,7 +1998,9 @@ void CComSpooler::CCWriteESCP(UINT8 cData)
 			if (m_escpbuf.size() < 4) return;
 			int value = (m_escpbuf.at(2) - '0') * 10 + (m_escpbuf.at(3) - '0');
 			m_escp.lpi = 120.0f / value; // n/240
+			m_escp.maxlineheight = 0; // 強制リセット
 			m_escpbuf.erase(m_escpbuf.begin(), m_escpbuf.begin() + 4);
+			CCCheckNewPage(true);
 			break;
 		}
 		case 0x4f:
@@ -1819,9 +2009,22 @@ void CComSpooler::CCWriteESCP(UINT8 cData)
 			m_escpbuf.erase(m_escpbuf.begin(), m_escpbuf.begin() + 3);
 			break;
 		}
+		case 0x44:
+		{
+			m_escp.copymode = true;
+			m_escpbuf.erase(m_escpbuf.begin(), m_escpbuf.begin() + 2);
+			break;
+		}
+		case 0x4d:
+		{
+			m_escp.copymode = false;
+			m_escpbuf.erase(m_escpbuf.begin(), m_escpbuf.begin() + 2);
+			break;
+		}
 		case 0x43:
 		{
 			if (m_escpbuf.size() < 3) return;
+			m_escp.color = (m_escpbuf.at(2) - '0') & 0x7;
 			m_escpbuf.erase(m_escpbuf.begin(), m_escpbuf.begin() + 3);
 			break;
 		}
@@ -1928,28 +2131,27 @@ void CComSpooler::CCWriteESCP(UINT8 cData)
 			CCCheckNewPage();
 			float charWidth = (float)m_dpiX / m_escp.cpi * (m_escp.so ? 2 : 1);
 			TCHAR buf[3] = { 9 };
+			UINT8 th[3] = { 0 };
 			if (isKanji) {
 				if (cmd == 0) {
 					// 実質1バイト文字
-					buf[0] = (TCHAR)m_escpbuf.at(1);
+					th[0] = m_escpbuf.at(1);
 				}
 				else {
 					UINT16 sjis = jis_to_sjis(cmd << 8 | m_escpbuf.at(1));
-					UINT8 th[3];
-					UINT16 thw[2];
 					th[0] = sjis >> 8;
 					th[1] = sjis & 0xff;
-					th[2] = '\0';
-					codecnv_sjistoucs2(thw, 1, (const char*)th, 2);
-					buf[0] = (TCHAR)thw[0];
-					buf[1] = (TCHAR)thw[1];
 					charWidth *= 2;
 				}
 				m_escpbuf.erase(m_escpbuf.begin());
 			}
 			else {
-				buf[0] = (TCHAR)cmd;
+				th[0] = cmd;
 			}
+			UINT16 thw[2];
+			codecnv_sjistoucs2(thw, 1, (const char*)th, 2);
+			buf[0] = (TCHAR)thw[0];
+			buf[1] = (TCHAR)thw[1];
 			m_escpbuf.erase(m_escpbuf.begin());
 
 			float pitchx = (float)m_dpiX * dotPitch;
@@ -1962,8 +2164,17 @@ void CComSpooler::CCWriteESCP(UINT8 cData)
 			if(isKanji) m_escprlin.push_back(dat1);
 			m_escprlin.push_back(dat2);
 			if (!m_escp.deselect) {
-				if (m_escp.so || m_escp.escmode == 0x51 || m_escp.scalex != 1 || m_escp.scaley != 1) {
+				if (m_escp.so || m_escp.escmode == 0x45 || m_escp.escmode == 0x50 || m_escp.escmode == 0x51 || m_escp.scalex != 1 || m_escp.scaley != 1) {
 					charWidth *= m_escp.scalex;
+					if (m_escp.escmode == 0x51) { // コンデンス
+						charWidth *= 0.6;
+					}
+					else if (m_escp.escmode == 0x45) { // エリート
+						charWidth *= 0.8;
+					}
+					else if (m_escp.escmode == 0x50) { // プロポーショナル XXX; 本当は字の幅が可変
+						charWidth *= 0.9;
+					}
 				}
 				m_escp.maxscaley = max(m_escp.maxscaley, m_escp.scaley);
 			}

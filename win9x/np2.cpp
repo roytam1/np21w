@@ -1934,6 +1934,10 @@ static void OnCommand(HWND hWnd, WPARAM wParam)
 			winuileave();
 			break;
 
+		case IDM_PARALLEL_ENDPRINTJOB:
+			printif_finishjob();
+			break;
+			
 		case IDM_MPUPC98:
 			winuienter();
 			dialog_mpu98(hWnd);

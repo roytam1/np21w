@@ -33,6 +33,10 @@ typedef struct {
 	UINT8	spoolEmulation;
 	UINT8	spoolDotSize;
 	UINT8	spoolRectDot;
+	UINT8	spoolPageAlignment;
+	UINT32	spoolOffsetXmm;
+	UINT32	spoolOffsetYmm;
+	UINT32	spoolScale;
 } COMCFG;
 
 typedef struct {

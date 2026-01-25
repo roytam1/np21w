@@ -998,6 +998,10 @@
     <ClCompile Include="commng\cmserial.cpp" />
     <ClCompile Include="commng\cmspooler.cpp" />
     <ClCompile Include="commng\cmwacom.cpp" />
+    <ClCompile Include="commng\print\cmdparser.cpp" />
+    <ClCompile Include="commng\print\pmbase.cpp" />
+    <ClCompile Include="commng\print\pmescp.cpp" />
+    <ClCompile Include="commng\print\pmpr201.cpp" />
     <ClCompile Include="commng\vsthost\vstbuffer.cpp" />
     <ClCompile Include="commng\vsthost\vsteditwnd.cpp" />
     <ClCompile Include="commng\vsthost\vsteffect.cpp" />
@@ -1387,6 +1391,10 @@
     <ClInclude Include="commng\cmserial.h" />
     <ClInclude Include="commng\cmspooler.h" />
     <ClInclude Include="commng\cmwacom.h" />
+    <ClInclude Include="commng\print\cmdparser.h" />
+    <ClInclude Include="commng\print\pmbase.h" />
+    <ClInclude Include="commng\print\pmescp.h" />
+    <ClInclude Include="commng\print\pmpr201.h" />
     <ClInclude Include="commng\vsthost\vstbuffer.h" />
     <ClInclude Include="commng\vsthost\vsteditwnd.h" />
     <ClInclude Include="commng\vsthost\vsteditwndbase.h" />

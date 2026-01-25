@@ -352,6 +352,12 @@
     <Filter Include="ヘッダー ファイル\i386c\ia32\instructions\fpu\softfloat">
       <UniqueIdentifier>{37a93fa2-a871-4b8a-8d6e-64a4bfc7e3aa}</UniqueIdentifier>
     </Filter>
+    <Filter Include="ソース ファイル\win9x\commng\print">
+      <UniqueIdentifier>{9037492e-b065-40c4-bce6-1afa57041f96}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ヘッダー ファイル\win9x\commng\print">
+      <UniqueIdentifier>{dbff6607-6ee4-474d-a723-dbea076c0af7}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\calendar.c">
@@ -2388,6 +2394,18 @@
     <ClCompile Include="commng\cmspooler.cpp">
       <Filter>ソース ファイル\win9x\commng</Filter>
     </ClCompile>
+    <ClCompile Include="commng\print\cmdparser.cpp">
+      <Filter>ソース ファイル\win9x\commng\print</Filter>
+    </ClCompile>
+    <ClCompile Include="commng\print\pmbase.cpp">
+      <Filter>ソース ファイル\win9x\commng\print</Filter>
+    </ClCompile>
+    <ClCompile Include="commng\print\pmescp.cpp">
+      <Filter>ソース ファイル\win9x\commng\print</Filter>
+    </ClCompile>
+    <ClCompile Include="commng\print\pmpr201.cpp">
+      <Filter>ソース ファイル\win9x\commng\print</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\calendar.h">
@@ -3550,6 +3568,18 @@
     </ClInclude>
     <ClInclude Include="commng\cmspooler.h">
       <Filter>ヘッダー ファイル\win9x\commng</Filter>
+    </ClInclude>
+    <ClInclude Include="commng\print\cmdparser.h">
+      <Filter>ヘッダー ファイル\win9x\commng\print</Filter>
+    </ClInclude>
+    <ClInclude Include="commng\print\pmbase.h">
+      <Filter>ヘッダー ファイル\win9x\commng\print</Filter>
+    </ClInclude>
+    <ClInclude Include="commng\print\pmescp.h">
+      <Filter>ヘッダー ファイル\win9x\commng\print</Filter>
+    </ClInclude>
+    <ClInclude Include="commng\print\pmpr201.h">
+      <Filter>ヘッダー ファイル\win9x\commng\print</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

@@ -760,6 +760,10 @@ static const PFTBL s_IniItems[] =
 	PFVAL("com1spem", PFTYPE_UINT8,		&np2oscfg.com1.spoolEmulation),
 	PFVAL("com1spds", PFTYPE_UINT8,		&np2oscfg.com1.spoolDotSize),
 	PFVAL("com1sprd", PFTYPE_BOOL,		&np2oscfg.com1.spoolRectDot),
+	PFVAL("com1sppa", PFTYPE_UINT8,		&np2oscfg.com1.spoolPageAlignment),
+	PFVAL("com1spox", PFTYPE_UINT32,	&np2oscfg.com1.spoolOffsetXmm),
+	PFVAL("com1spoy", PFTYPE_UINT32,	&np2oscfg.com1.spoolOffsetYmm),
+	PFVAL("com1spsc", PFTYPE_UINT32,	&np2oscfg.com1.spoolScale),
 
 	PFMAX("com2port", PFTYPE_UINT8,		&np2oscfg.com2.port,	5),
 	PFVAL("com2para", PFTYPE_UINT8,		&np2oscfg.com2.param),
@@ -780,6 +784,10 @@ static const PFTBL s_IniItems[] =
 	PFVAL("com2spem", PFTYPE_UINT8,		&np2oscfg.com2.spoolEmulation),
 	PFVAL("com2spds", PFTYPE_UINT8,		&np2oscfg.com2.spoolDotSize),
 	PFVAL("com2sprd", PFTYPE_BOOL,		&np2oscfg.com2.spoolRectDot),
+	PFVAL("com2sppa", PFTYPE_UINT8,		&np2oscfg.com2.spoolPageAlignment),
+	PFVAL("com2spox", PFTYPE_UINT32,	&np2oscfg.com2.spoolOffsetXmm),
+	PFVAL("com2spoy", PFTYPE_UINT32,	&np2oscfg.com2.spoolOffsetYmm),
+	PFVAL("com2spsc", PFTYPE_UINT32,	&np2oscfg.com2.spoolScale),
 
 	PFMAX("com3port", PFTYPE_UINT8,		&np2oscfg.com3.port,	5),
 	PFVAL("com3para", PFTYPE_UINT8,		&np2oscfg.com3.param),
@@ -800,6 +808,10 @@ static const PFTBL s_IniItems[] =
 	PFVAL("com3spem", PFTYPE_UINT8,		&np2oscfg.com3.spoolEmulation),
 	PFVAL("com3spds", PFTYPE_UINT8,		&np2oscfg.com3.spoolDotSize),
 	PFVAL("com3sprd", PFTYPE_BOOL,		&np2oscfg.com3.spoolRectDot),
+	PFVAL("com3sppa", PFTYPE_UINT8,		&np2oscfg.com3.spoolPageAlignment),
+	PFVAL("com3spox", PFTYPE_UINT32,	&np2oscfg.com3.spoolOffsetXmm),
+	PFVAL("com3spoy", PFTYPE_UINT32,	&np2oscfg.com3.spoolOffsetYmm),
+	PFVAL("com3spsc", PFTYPE_UINT32,	&np2oscfg.com3.spoolScale),
 
 	PFMAX("lpt1port", PFTYPE_UINT8,		&np2oscfg.lpt1.port,	5),
 	PFVAL("lpt1para", PFTYPE_UINT8,		&np2oscfg.lpt1.param),
@@ -820,6 +832,10 @@ static const PFTBL s_IniItems[] =
 	PFVAL("lpt1spem", PFTYPE_UINT8,		&np2oscfg.lpt1.spoolEmulation),
 	PFVAL("lpt1spds", PFTYPE_UINT8,		&np2oscfg.lpt1.spoolDotSize),
 	PFVAL("lpt1sprd", PFTYPE_BOOL,		&np2oscfg.lpt1.spoolRectDot),
+	PFVAL("lpt1sppa", PFTYPE_UINT8,		&np2oscfg.lpt1.spoolPageAlignment),
+	PFVAL("lpt1spox", PFTYPE_UINT32,	&np2oscfg.lpt1.spoolOffsetXmm),
+	PFVAL("lpt1spoy", PFTYPE_UINT32,	&np2oscfg.lpt1.spoolOffsetYmm),
+	PFVAL("lpt1spsc", PFTYPE_UINT32,	&np2oscfg.lpt1.spoolScale),
 
 	PFVAL("force400", PFRO_BOOL,		&np2oscfg.force400),
 	PFVAL("e_resume", PFTYPE_BOOL,		&np2oscfg.resume),

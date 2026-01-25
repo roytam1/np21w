@@ -283,6 +283,12 @@
     <Filter Include="ヘッダー ファイル\sound\mamebsdsub">
       <UniqueIdentifier>{e20317aa-841c-485e-8d42-037e378c64cb}</UniqueIdentifier>
     </Filter>
+    <Filter Include="ソース ファイル\win9x\commng\print">
+      <UniqueIdentifier>{4d710113-ea45-4858-a90b-f27a5dae7af5}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ヘッダー ファイル\win9x\commng\print">
+      <UniqueIdentifier>{242879d1-31d6-498f-b49f-6a537827d97e}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\calendar.c">
@@ -1284,6 +1290,18 @@
     <ClCompile Include="commng\cmspooler.cpp">
       <Filter>ソース ファイル\win9x\commng</Filter>
     </ClCompile>
+    <ClCompile Include="commng\print\cmdparser.cpp">
+      <Filter>ソース ファイル\win9x\commng\print</Filter>
+    </ClCompile>
+    <ClCompile Include="commng\print\pmbase.cpp">
+      <Filter>ソース ファイル\win9x\commng\print</Filter>
+    </ClCompile>
+    <ClCompile Include="commng\print\pmescp.cpp">
+      <Filter>ソース ファイル\win9x\commng\print</Filter>
+    </ClCompile>
+    <ClCompile Include="commng\print\pmpr201.cpp">
+      <Filter>ソース ファイル\win9x\commng\print</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\calendar.h">
@@ -2284,6 +2302,18 @@
     </ClInclude>
     <ClInclude Include="commng\cmspooler.h">
       <Filter>ヘッダー ファイル\win9x\commng</Filter>
+    </ClInclude>
+    <ClInclude Include="commng\print\pmpr201.h">
+      <Filter>ヘッダー ファイル\win9x\commng\print</Filter>
+    </ClInclude>
+    <ClInclude Include="commng\print\cmdparser.h">
+      <Filter>ヘッダー ファイル\win9x\commng\print</Filter>
+    </ClInclude>
+    <ClInclude Include="commng\print\pmbase.h">
+      <Filter>ヘッダー ファイル\win9x\commng\print</Filter>
+    </ClInclude>
+    <ClInclude Include="commng\print\pmescp.h">
+      <Filter>ヘッダー ファイル\win9x\commng\print</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

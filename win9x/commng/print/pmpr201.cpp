@@ -5,7 +5,7 @@
 
 #include "compiler.h"
 #include "pmpr201.h"
-#include <codecnv/codecnv.h>
+#include "codecnv/codecnv.h"
 
 static unsigned short jis_to_sjis(unsigned short jis)
 {
@@ -65,8 +65,8 @@ typedef enum {
 	COMMANDFUNC_RESULT_OK = 0, // コマンド実行成功
 	COMMANDFUNC_RESULT_COMPLETELINE = 1, // 改行必要
 	COMMANDFUNC_RESULT_COMPLETEPAGE = 2, // 改ページ必要
-	COMMANDFUNC_RESULT_OVERFLOWLINE = 3, // 最後のコマンドの後で改行必要
-	COMMANDFUNC_RESULT_OVERFLOWPAGE = 4, // 最後のコマンドの前で改ページ必要
+	COMMANDFUNC_RESULT_OVERFLOWLINE = 3, // 最後のコマンドの手前で改行必要
+	COMMANDFUNC_RESULT_OVERFLOWPAGE = 4, // 最後のコマンドの手前で改ページ必要
 	COMMANDFUNC_RESULT_RENDERLINE = 5, // 行描画必要（改行はせず左に戻るだけ）
 } COMMANDFUNC_RESULT;
 
@@ -621,7 +621,7 @@ static COMMANDFUNC_RESULT pmpr201_PutChar(void* param, const PRINTCMD_DATA& data
 		owner->m_state.actualLineHeight = lineHeight;
 	}
 	owner->m_state.posX += charWidth;
-	owner->m_state.posY += owner->m_state.dotsp_right * pitchX;
+	owner->m_state.posX += owner->m_state.dotsp_right * pitchX;
 	return COMMANDFUNC_RESULT_OK;
 }
 
@@ -653,8 +653,8 @@ static PRINTCMD_DEFINE s_commandTablePR201[] = {
 	PRINTCMD_DEFINE_FIXEDLEN("\x18", 0, pmpr201_CommandCAN), // CAN
 	PRINTCMD_DEFINE_FIXEDLEN("\x19", 0, NULL), // EM
 	PRINTCMD_DEFINE_FIXEDLEN("\x1a", 0, NULL), // SUB
-	//PRINTCMD_DEFINE_FIXEDLEN("\x1b", 0, NULL), // ESC
-	//PRINTCMD_DEFINE_FIXEDLEN("\x1c", 0, NULL), // FS
+	//PRINTCMD_DEFINE_FIXEDLEN("\x1b", 0, NULL), // ESC -> 下の拡張制御コードへ
+	//PRINTCMD_DEFINE_FIXEDLEN("\x1c", 0, NULL), // FS -> 下の拡張制御コードへ
 	PRINTCMD_DEFINE_TERMINATOR("\x1d", '\x1e', pmpr201_CommandVFU), // GS VFU設定　RSで解除
 	PRINTCMD_DEFINE_FIXEDLEN("\x1e", 0, NULL), // RS
 	PRINTCMD_DEFINE_FIXEDLEN("\x1f", 1, pmpr201_CommandUS), // US
@@ -818,6 +818,10 @@ static PRINTCMD_CALLBACK_RESULT pmpr201_CommandParseCallback(void* param, const 
 	// 通常は1byte文字 漢字モードなら2byte
 	if (owner->m_state.isKanji) {
 		if (curBuffer.size() == 1) return PRINTCMD_CALLBACK_RESULT_CONTINUE;
+		if (curBuffer[1] < 0x20) {
+			// 制御文字が来たらコマンド無効で再解釈し直す
+			return PRINTCMD_CALLBACK_RESULT_CANCEL;
+		}
 	}
 
 	return PRINTCMD_CALLBACK_RESULT_COMPLETE;
@@ -858,11 +862,12 @@ CPrintPR201::~CPrintPR201()
 
 void CPrintPR201::StartPrint(HDC hdc, int offsetXPixel, int offsetYPixel, int widthPixel, int heightPixel, float dpiX, float dpiY, float dotscale, bool rectdot)
 {
+	CPrintBase::StartPrint(hdc, offsetXPixel, offsetYPixel, widthPixel, heightPixel, dpiX, dpiY, dotscale, rectdot);
+
 	m_state.SetDefault();
+	m_renderstate = m_state;
 	m_cmdIndex = 0;
 	m_lastNewPage = false;
-
-	CPrintBase::StartPrint(hdc, offsetXPixel, offsetYPixel, widthPixel, heightPixel, dpiX, dpiY, dotscale, rectdot);
 
 	const float dotPitch = CalcDotPitchX();
 	m_colorbuf_w = (int)ceil(widthPixel / dotPitch);
@@ -968,8 +973,8 @@ void CPrintPR201::RenderGraphic()
 			//pitchy *= (float)24 / 16 * 120 / 160 * 160 / 24 / 6; // なぞのほせい
 		}
 		int r = pitchx / 2 * m_dotscale;
-		int rx = (float)pitchx / 2 + 1;
-		int ry = (float)pitchy / 2 + 1;
+		int rx = (float)ceil(pitchx / 2 * m_dotscale);
+		int ry = (float)ceil(pitchy / 2 * m_dotscale);
 		if (r == 0) r = 1;
 		HBRUSH hBrush = m_gdiobj.brsDot[m_state.color];
 		HPEN hPen = (HPEN)GetStockObject(NULL_PEN);
@@ -978,20 +983,54 @@ void CPrintPR201::RenderGraphic()
 		int curColor = m_state.color;
 		for (int y = 0; y < m_colorbuf_h; y++) {
 			int cy = m_offsetYPixel + m_state.topMargin * m_dpiY + (int)(m_state.graphicPosY + y * pitchy);
-			for (int x = 0; x < m_colorbuf_w; x++) {
-				int cx = m_offsetXPixel + m_state.leftMargin * m_dpiX + (int)(m_state.posX + x * pitchx);
+			int beginX = -1;
+			for (int x = 0; x <= m_colorbuf_w; x++) { // わざと右端+1回分回す
 				int idx = y * m_colorbuf_w + x;
-				if ((m_colorbuf[idx] & 0x7) != 0x7) {
-					if ((m_colorbuf[idx] & 0x7) != curColor) {
-						curColor = (m_colorbuf[idx] & 0x7);
-						SelectObject(m_hdc, m_gdiobj.brsDot[curColor]);
+				int drawBeginX = -1;
+				int drawEndX = -1;
+				bool updateBrush = false;
+				if (x < m_colorbuf_w) {
+					// 連続してドットがある範囲を求める
+					if ((m_colorbuf[idx] & 0x7) != 0x7) {
+						if (beginX == -1) {
+							beginX = x;
+						}
+						if ((m_colorbuf[idx] & 0x7) != curColor) {
+							drawBeginX = beginX;
+							drawEndX = x - 1;
+							beginX = x;
+							updateBrush = true;
+						}
 					}
+					else if (beginX != -1) {
+						drawBeginX = beginX;
+						drawEndX = x - 1;
+						beginX = -1;
+					}
+				}
+				else if (beginX != -1) {
+					// 右端に到達したら絶対描画
+					drawBeginX = beginX;
+					drawEndX = x - 1;
+				}
+				if (drawBeginX != -1) {
 					if (m_rectdot) {
-						Rectangle(m_hdc, cx - rx, cy - ry, cx + rx, cy + ry);
+						// ドットをくっつけて1つにして描画
+						int cxBegin = m_offsetXPixel + m_state.leftMargin * m_dpiX + (int)(drawBeginX * pitchx);
+						int cxEnd = m_offsetXPixel + m_state.leftMargin * m_dpiX + (int)(drawEndX * pitchx);
+						Rectangle(m_hdc, cxBegin - rx, cy - ry, cxEnd + rx, cy + ry);
 					}
 					else {
-						Ellipse(m_hdc, cx - r, cy - r, cx + r, cy + r);
+						// 1個ずつ点を打っていく
+						for (int i = drawBeginX; i <= drawEndX; i++) {
+							int cx = m_offsetXPixel + m_state.leftMargin * m_dpiX + (int)(i * pitchx);
+							Ellipse(m_hdc, cx - r, cy - r, cx + r, cy + r);
+						}
 					}
+				}
+				if (updateBrush) {
+					curColor = (m_colorbuf[idx] & 0x7);
+					SelectObject(m_hdc, m_gdiobj.brsDot[curColor]);
 				}
 			}
 		}

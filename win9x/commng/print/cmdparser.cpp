@@ -69,9 +69,15 @@ bool PrinterCommandParser::PushByte(UINT8 data)
 	if (m_dataRemainValid) {
 		m_dataRemain--;
 		if (m_dataRemain <= 0) {
-			// 可変長コールバックは読めるだけ読んでから送る
-			if (!m_addLengthChecked && m_cmddef->varlength && m_variableLengthCallback) {
-				m_dataRemain += (*m_variableLengthCallback)(m_callbackParam, *m_cmddef, m_buffer); // 加算
+			if (!m_addLengthChecked){
+				// コマンドの次がnullなら拡張
+				if (m_cmddef->nullextend && m_buffer[m_cmddef->cmdlen] == '\0') {
+					m_dataRemain++;
+				}
+				// 可変長コールバックは読めるだけ読んでから送る
+				if (m_cmddef->varlength && m_variableLengthCallback) {
+					m_dataRemain += (*m_variableLengthCallback)(m_callbackParam, *m_cmddef, m_buffer); // 加算
+				}
 				m_addLengthChecked = true;
 			}
 			if (m_dataRemain == 0) {
@@ -238,6 +244,11 @@ bool PrinterCommandParser::PushByte(UINT8 data)
 			// 無効
 			m_buffer.clear();
 			return false;
+
+		case PRINTCMD_CALLBACK_RESULT_CANCEL:
+			// コマンド継続を取り消し、改めて現在のデータからコマンドを解釈する
+			m_buffer.clear();
+			return PushByte(data);
 
 		}
 	}

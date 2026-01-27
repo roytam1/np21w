@@ -34,39 +34,44 @@
 
 // コマンド定義用マクロ　将来コマンド長さ上限が増える場合はPRINTCMD_DEFINE構造体内のchar cmdの長さも増やすこと
 // コマンド文字列リテラル
-#define PRINTCMD_DEFINE_FIXEDLEN(cmdstr, datalength, proc)				{cmdstr, sizeof(cmdstr)-1, PRINTCMD_TYPE_FIXEDLEN, datalength, 0, 0, 0, proc, false}
-#define PRINTCMD_DEFINE_LENFIELD(cmdstr, fieldlen, elementsize, proc)	{cmdstr, sizeof(cmdstr)-1, PRINTCMD_TYPE_LENFIELD, 0, fieldlen, elementsize, 0, proc, false}
-#define PRINTCMD_DEFINE_TERMINATOR(cmdstr, terminator_char, proc)		{cmdstr, sizeof(cmdstr)-1, PRINTCMD_TYPE_TERMINATOR, 0, 0, 0, terminator_char, proc, false}
-#define PRINTCMD_DEFINE_FIXEDLEN_V(cmdstr, datalength, proc)			{cmdstr, sizeof(cmdstr)-1, PRINTCMD_TYPE_FIXEDLEN, datalength, 0, 0, 0, proc, true}
-#define PRINTCMD_DEFINE_LENFIELD_V(cmdstr, fieldlen, elementsize, proc)	{cmdstr, sizeof(cmdstr)-1, PRINTCMD_TYPE_LENFIELD, 0, fieldlen, elementsize, 0, proc, true}
+#define PRINTCMD_DEFINE_FIXEDLEN(cmdstr, datalength, proc)				{cmdstr, sizeof(cmdstr)-1, PRINTCMD_TYPE_FIXEDLEN, datalength, 0, 0, 0, proc, false, false}
+#define PRINTCMD_DEFINE_LENFIELD(cmdstr, fieldlen, elementsize, proc)	{cmdstr, sizeof(cmdstr)-1, PRINTCMD_TYPE_LENFIELD, 0, fieldlen, elementsize, 0, proc, false, false}
+#define PRINTCMD_DEFINE_TERMINATOR(cmdstr, terminator_char, proc)		{cmdstr, sizeof(cmdstr)-1, PRINTCMD_TYPE_TERMINATOR, 0, 0, 0, terminator_char, proc, false, false}
+#define PRINTCMD_DEFINE_FIXEDLEN_V(cmdstr, datalength, proc)			{cmdstr, sizeof(cmdstr)-1, PRINTCMD_TYPE_FIXEDLEN, datalength, 0, 0, 0, proc, true, false}
+#define PRINTCMD_DEFINE_LENFIELD_V(cmdstr, fieldlen, elementsize, proc)	{cmdstr, sizeof(cmdstr)-1, PRINTCMD_TYPE_LENFIELD, 0, fieldlen, elementsize, 0, proc, true, false}
+#define PRINTCMD_DEFINE_FIXEDLEN_NEX(cmdstr, datalength, proc)			{cmdstr, sizeof(cmdstr)-1, PRINTCMD_TYPE_FIXEDLEN, datalength, 0, 0, 0, proc, false, true}
 
 // コマンド長さ1byte
-#define PRINTCMD1_DEFINE_FIXEDLEN(cmd, datalength, proc)				{{cmd, '\0'}, 1, PRINTCMD_TYPE_FIXEDLEN, datalength, 0, 0, 0, proc, false}
-#define PRINTCMD1_DEFINE_LENFIELD(cmd, fieldlen, elementsize, proc)		{{cmd, '\0'}, 1, PRINTCMD_TYPE_LENFIELD, 0, fieldlen, elementsize, 0, proc, false}
-#define PRINTCMD1_DEFINE_TERMINATOR(cmd, terminator_char, proc)			{{cmd, '\0'}, 1, PRINTCMD_TYPE_TERMINATOR, 0, 0, 0, terminator_char, proc, false}
-#define PRINTCMD1_DEFINE_FIXEDLEN_V(cmd, datalength, proc)				{{cmd, '\0'}, 1, PRINTCMD_TYPE_FIXEDLEN, datalength, 0, 0, 0, proc, true}
-#define PRINTCMD1_DEFINE_LENFIELD_V(cmd, fieldlen, elementsize, proc)	{{cmd, '\0'}, 1, PRINTCMD_TYPE_LENFIELD, 0, fieldlen, elementsize, 0, proc, true}
+#define PRINTCMD1_DEFINE_FIXEDLEN(cmd, datalength, proc)				{{cmd, '\0'}, 1, PRINTCMD_TYPE_FIXEDLEN, datalength, 0, 0, 0, proc, false, false}
+#define PRINTCMD1_DEFINE_LENFIELD(cmd, fieldlen, elementsize, proc)		{{cmd, '\0'}, 1, PRINTCMD_TYPE_LENFIELD, 0, fieldlen, elementsize, 0, proc, false, false}
+#define PRINTCMD1_DEFINE_TERMINATOR(cmd, terminator_char, proc)			{{cmd, '\0'}, 1, PRINTCMD_TYPE_TERMINATOR, 0, 0, 0, terminator_char, proc, false, false}
+#define PRINTCMD1_DEFINE_FIXEDLEN_V(cmd, datalength, proc)				{{cmd, '\0'}, 1, PRINTCMD_TYPE_FIXEDLEN, datalength, 0, 0, 0, proc, true, false}
+#define PRINTCMD1_DEFINE_LENFIELD_V(cmd, fieldlen, elementsize, proc)	{{cmd, '\0'}, 1, PRINTCMD_TYPE_LENFIELD, 0, fieldlen, elementsize, 0, proc, true, false}
+#define PRINTCMD1_DEFINE_FIXEDLEN_NEX(cmd, datalength, proc)			{{cmd, '\0'}, 1, PRINTCMD_TYPE_FIXEDLEN, datalength, 0, 0, 0, proc, false, true}
 
 // コマンド長さ2byte
-#define PRINTCMD2_DEFINE_FIXEDLEN(cmd1, cmd2, datalength, proc)					{{cmd1, cmd2, '\0'}, 2, PRINTCMD_TYPE_FIXEDLEN, datalength, 0, 0, 0, proc, false}
-#define PRINTCMD2_DEFINE_LENFIELD(cmd1, cmd2, fieldlen, elementsize, proc)		{{cmd1, cmd2, '\0'}, 2, PRINTCMD_TYPE_LENFIELD, 0, fieldlen, elementsize, 0, proc, false}
-#define PRINTCMD2_DEFINE_TERMINATOR(cmd1, cmd2, terminator_char, proc)			{{cmd1, cmd2, '\0'}, 2, PRINTCMD_TYPE_TERMINATOR, 0, 0, 0, terminator_char, proc, false}
-#define PRINTCMD2_DEFINE_FIXEDLEN_V(cmd1, cmd2, datalength, proc)				{{cmd1, cmd2, '\0'}, 2, PRINTCMD_TYPE_FIXEDLEN, datalength, 0, 0, 0, proc, true}
-#define PRINTCMD2_DEFINE_LENFIELD_V(cmd1, cmd2, fieldlen, elementsize, proc)	{{cmd1, cmd2, '\0'}, 2, PRINTCMD_TYPE_LENFIELD, 0, fieldlen, elementsize, 0, proc, true}
+#define PRINTCMD2_DEFINE_FIXEDLEN(cmd1, cmd2, datalength, proc)					{{cmd1, cmd2, '\0'}, 2, PRINTCMD_TYPE_FIXEDLEN, datalength, 0, 0, 0, proc, false, false}
+#define PRINTCMD2_DEFINE_LENFIELD(cmd1, cmd2, fieldlen, elementsize, proc)		{{cmd1, cmd2, '\0'}, 2, PRINTCMD_TYPE_LENFIELD, 0, fieldlen, elementsize, 0, proc, false, false}
+#define PRINTCMD2_DEFINE_TERMINATOR(cmd1, cmd2, terminator_char, proc)			{{cmd1, cmd2, '\0'}, 2, PRINTCMD_TYPE_TERMINATOR, 0, 0, 0, terminator_char, proc, false, false}
+#define PRINTCMD2_DEFINE_FIXEDLEN_V(cmd1, cmd2, datalength, proc)				{{cmd1, cmd2, '\0'}, 2, PRINTCMD_TYPE_FIXEDLEN, datalength, 0, 0, 0, proc, true, false}
+#define PRINTCMD2_DEFINE_LENFIELD_V(cmd1, cmd2, fieldlen, elementsize, proc)	{{cmd1, cmd2, '\0'}, 2, PRINTCMD_TYPE_LENFIELD, 0, fieldlen, elementsize, 0, proc, true, false}
+#define PRINTCMD2_DEFINE_FIXEDLEN_NEX(cmd1, cmd2, datalength, proc)					{{cmd1, cmd2, '\0'}, 2, PRINTCMD_TYPE_FIXEDLEN, datalength, 0, 0, 0, proc, false, true}
 
 // コマンド長さ3byte
-#define PRINTCMD3_DEFINE_FIXEDLEN(cmd1, cmd2, cmd3, datalength, proc)				{{cmd1, cmd2, cmd3, '\0'}, 3, PRINTCMD_TYPE_FIXEDLEN, datalength, 0, 0, 0, proc, false}
-#define PRINTCMD3_DEFINE_LENFIELD(cmd1, cmd2, cmd3, fieldlen, elementsize, proc)	{{cmd1, cmd2, cmd3, '\0'}, 3, PRINTCMD_TYPE_LENFIELD, 0, fieldlen, elementsize, 0, proc, false}
-#define PRINTCMD3_DEFINE_TERMINATOR(cmd1, cmd2, cmd3, terminator_char, proc)		{{cmd1, cmd2, cmd3, '\0'}, 3, PRINTCMD_TYPE_TERMINATOR, 0, 0, 0, terminator_char, proc, false}
-#define PRINTCMD3_DEFINE_FIXEDLEN_V(cmd1, cmd2, cmd3, datalength, proc)				{{cmd1, cmd2, cmd3, '\0'}, 3, PRINTCMD_TYPE_FIXEDLEN, datalength, 0, 0, 0, proc, true}
-#define PRINTCMD3_DEFINE_LENFIELD_V(cmd1, cmd2, cmd3, fieldlen, elementsize, proc)	{{cmd1, cmd2, cmd3, '\0'}, 3, PRINTCMD_TYPE_LENFIELD, 0, fieldlen, elementsize, 0, proc, true}
+#define PRINTCMD3_DEFINE_FIXEDLEN(cmd1, cmd2, cmd3, datalength, proc)				{{cmd1, cmd2, cmd3, '\0'}, 3, PRINTCMD_TYPE_FIXEDLEN, datalength, 0, 0, 0, proc, false, false}
+#define PRINTCMD3_DEFINE_LENFIELD(cmd1, cmd2, cmd3, fieldlen, elementsize, proc)	{{cmd1, cmd2, cmd3, '\0'}, 3, PRINTCMD_TYPE_LENFIELD, 0, fieldlen, elementsize, 0, proc, false, false}
+#define PRINTCMD3_DEFINE_TERMINATOR(cmd1, cmd2, cmd3, terminator_char, proc)		{{cmd1, cmd2, cmd3, '\0'}, 3, PRINTCMD_TYPE_TERMINATOR, 0, 0, 0, terminator_char, proc, false, false}
+#define PRINTCMD3_DEFINE_FIXEDLEN_V(cmd1, cmd2, cmd3, datalength, proc)				{{cmd1, cmd2, cmd3, '\0'}, 3, PRINTCMD_TYPE_FIXEDLEN, datalength, 0, 0, 0, proc, true, false}
+#define PRINTCMD3_DEFINE_LENFIELD_V(cmd1, cmd2, cmd3, fieldlen, elementsize, proc)	{{cmd1, cmd2, cmd3, '\0'}, 3, PRINTCMD_TYPE_LENFIELD, 0, fieldlen, elementsize, 0, proc, true, false}
+#define PRINTCMD3_DEFINE_FIXEDLEN_NEX(cmd1, cmd2, cmd3, datalength, proc)				{{cmd1, cmd2, cmd3, '\0'}, 3, PRINTCMD_TYPE_FIXEDLEN, datalength, 0, 0, 0, proc, false, true}
 
 // コマンド長さ4byte
-#define PRINTCMD4_DEFINE_FIXEDLEN(cmd1, cmd2, cmd3, cmd4, datalength, proc)					{{cmd1, cmd2, cmd3, cmd4, '\0'}, 4, PRINTCMD_TYPE_FIXEDLEN, datalength, 0, 0, 0, proc, false}
-#define PRINTCMD4_DEFINE_LENFIELD(cmd1, cmd2, cmd3, cmd4, fieldlen, elementsize, proc)		{{cmd1, cmd2, cmd3, cmd4, '\0'}, 4, PRINTCMD_TYPE_LENFIELD, 0, fieldlen, elementsize, 0, proc, false}
-#define PRINTCMD4_DEFINE_TERMINATOR(cmd1, cmd2, cmd3, cmd4, terminator_char, proc)			{{cmd1, cmd2, cmd3, cmd4, '\0'}, 4, PRINTCMD_TYPE_TERMINATOR, 0, 0, 0, terminator_char, proc, false}
-#define PRINTCMD4_DEFINE_FIXEDLEN_V(cmd1, cmd2, cmd3, cmd4, datalength, proc)				{{cmd1, cmd2, cmd3, cmd4, '\0'}, 4, PRINTCMD_TYPE_FIXEDLEN, datalength, 0, 0, 0, proc, true}
-#define PRINTCMD4_DEFINE_LENFIELD_V(cmd1, cmd2, cmd3, cmd4, fieldlen, elementsize, proc)	{{cmd1, cmd2, cmd3, cmd4, '\0'}, 4, PRINTCMD_TYPE_LENFIELD, 0, fieldlen, elementsize, 0, proc, true}
+#define PRINTCMD4_DEFINE_FIXEDLEN(cmd1, cmd2, cmd3, cmd4, datalength, proc)					{{cmd1, cmd2, cmd3, cmd4, '\0'}, 4, PRINTCMD_TYPE_FIXEDLEN, datalength, 0, 0, 0, proc, false, false}
+#define PRINTCMD4_DEFINE_LENFIELD(cmd1, cmd2, cmd3, cmd4, fieldlen, elementsize, proc)		{{cmd1, cmd2, cmd3, cmd4, '\0'}, 4, PRINTCMD_TYPE_LENFIELD, 0, fieldlen, elementsize, 0, proc, false, false}
+#define PRINTCMD4_DEFINE_TERMINATOR(cmd1, cmd2, cmd3, cmd4, terminator_char, proc)			{{cmd1, cmd2, cmd3, cmd4, '\0'}, 4, PRINTCMD_TYPE_TERMINATOR, 0, 0, 0, terminator_char, proc, false, false}
+#define PRINTCMD4_DEFINE_FIXEDLEN_V(cmd1, cmd2, cmd3, cmd4, datalength, proc)				{{cmd1, cmd2, cmd3, cmd4, '\0'}, 4, PRINTCMD_TYPE_FIXEDLEN, datalength, 0, 0, 0, proc, true, false}
+#define PRINTCMD4_DEFINE_LENFIELD_V(cmd1, cmd2, cmd3, cmd4, fieldlen, elementsize, proc)	{{cmd1, cmd2, cmd3, cmd4, '\0'}, 4, PRINTCMD_TYPE_LENFIELD, 0, fieldlen, elementsize, 0, proc, true, false}
+#define PRINTCMD4_DEFINE_FIXEDLEN_NEX(cmd1, cmd2, cmd3, cmd4, datalength, proc)					{{cmd1, cmd2, cmd3, cmd4, '\0'}, 4, PRINTCMD_TYPE_FIXEDLEN, datalength, 0, 0, 0, proc, false, true}
 
 typedef enum {
 	PRINTCMD_TYPE_FIXEDLEN = 0,
@@ -75,9 +80,10 @@ typedef enum {
 } PRINTCMD_TYPE;
 
 typedef enum {
-	PRINTCMD_CALLBACK_RESULT_CONTINUE = 0,
-	PRINTCMD_CALLBACK_RESULT_COMPLETE = 1,
-	PRINTCMD_CALLBACK_RESULT_INVALID = 2
+	PRINTCMD_CALLBACK_RESULT_CONTINUE = 0, // コマンドに続きあり
+	PRINTCMD_CALLBACK_RESULT_COMPLETE = 1, // コマンドが完了した
+	PRINTCMD_CALLBACK_RESULT_INVALID = 2, // コマンドが無効
+	PRINTCMD_CALLBACK_RESULT_CANCEL = 3 // コマンド継続を取り消し、改めて現在のデータからコマンドを解釈する
 } PRINTCMD_CALLBACK_RESULT;
 
 typedef struct {
@@ -100,6 +106,9 @@ typedef struct {
 
 	// ステータスによって長さが変わる
 	bool varlength;
+
+	// NULLで拡張
+	bool nullextend;
 } PRINTCMD_DEFINE;
 
 typedef struct {
@@ -119,7 +128,7 @@ public:
 	/// <param name="commandTable">コマンドの定義テーブル</param>
 	/// <param name="commandTableLength">コマンドの定義テーブルの長さ</param>
 	/// <param name="unknownCommandCallback">定義外のコマンドが来たときの処理関数（引数は現在のコマンドデータ全体）　nullの場合は常時無効コマンド(PRINTCMD_CALLBACK_RESULT_INVALID)扱い</param>
-	/// <param name="variableLengthCallback">状態によって長さが変わるコマンドの追加長さを返す関数　nullの場合は追加無し（=元の長さ）扱い 負の値にはできない</param>
+	/// <param name="variableLengthCallback">状態によって長さが変わるコマンドの追加長さを返す関数　nullの場合は追加無し（=元の長さ）扱い 負の値にはできない 　curBufferはコマンド部分を含めたデータ全体が取得できる</param>
 	/// <param name="callbackParam">定義外のコマンドが来たときの処理関数に渡す任意のポインタ</param>
 	PrinterCommandParser(const PRINTCMD_DEFINE *commandTable, int commandTableLength, PRINTCMD_CALLBACK_RESULT (*unknownCommandCallback)(void* param, const std::vector<UINT8>& curBuffer), UINT32 (*variableLengthCallback)(void* param, const PRINTCMD_DEFINE& cmddef, const std::vector<UINT8>& curBuffer), void* callbackParam);
 	/// <summary>

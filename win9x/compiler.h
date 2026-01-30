@@ -197,6 +197,10 @@ typedef	signed __int64		SINT64;
 
 #define	SUPPORT_TEXTCNV
 
+// プリンタエミュレーション
+#define SUPPORT_PRINT_PR201
+#define SUPPORT_PRINT_ESCP
+
 #if (_MSC_VER + 0) <= 1600
 // VS2017 より古い場合
 #define SUPPORT_WIN2000HOST

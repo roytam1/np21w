@@ -3,11 +3,40 @@
  * @brief	Windowsスプーラ印刷 クラスの動作の定義を行います
  */
 
+ /*
+  * Copyright (c) 2026 SimK
+  * All rights reserved.
+  *
+  * Redistribution and use in source and binary forms, with or without
+  * modification, are permitted provided that the following conditions
+  * are met:
+  * 1. Redistributions of source code must retain the above copyright
+  *    notice, this list of conditions and the following disclaimer.
+  * 2. Redistributions in binary form must reproduce the above copyright
+  *    notice, this list of conditions and the following disclaimer in the
+  *    documentation and/or other materials provided with the distribution.
+  *
+  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+  * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+  * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+  * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+  * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+  * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+  * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+  */
+
 #include "compiler.h"
 #include "np2.h"
 #include "cmspooler.h"
+#ifdef SUPPORT_PRINT_PR201
 #include "print/pmpr201.h"
+#endif
+#ifdef SUPPORT_PRINT_ESCP
 #include "print/pmescp.h"
+#endif
 
 #include <process.h>
 #include <codecnv/codecnv.h>
@@ -192,6 +221,7 @@ CComSpooler::CComSpooler()
 	, m_hThreadExitEvent(NULL)
 	, m_csPrint()
 	, m_hasValidData(false)
+	, m_lastData(0)
 	, m_dataCounter(0)
 	, m_jobId(0)
 	, m_hdc(NULL)
@@ -270,12 +300,16 @@ void CComSpooler::CCStartDocPrinter()
 		m_print = NULL;
 	}
 	switch (m_emulation) {
+#ifdef SUPPORT_PRINT_PR201
 	case PRINT_EMU_MODE_PR201:
 		m_print = new CPrintPR201();
 		break;
+#endif
+#ifdef SUPPORT_PRINT_ESCP
 	case PRINT_EMU_MODE_ESCP:
 		m_print = new CPrintESCP();
 		break;
+#endif
 	}
 
 	if (!m_print) {
@@ -399,7 +433,7 @@ void CComSpooler::CCEndDocPrinter()
 
 	if (!m_print) {
 		// RAW出力モード
-		if (!m_hasValidData && m_dataCounter <= 100) {
+		if ((m_dataCounter <= 1 && m_lastData >= 0x80) || (!m_hasValidData && m_dataCounter <= 100)) {
 			// ごみデータと思われるので捨てる
 			::SetJob(m_hPrinter, m_jobId, 0, NULL, JOB_CONTROL_CANCEL);
 		}
@@ -410,7 +444,7 @@ void CComSpooler::CCEndDocPrinter()
 		// エミュレーションモード
 		m_print->EndPrint();
 
-		if (!m_hasValidData && m_dataCounter <= 100) {
+		if ((m_dataCounter <= 1 && m_lastData >= 0x80) || (!m_hasValidData && m_dataCounter <= 100)) {
 			// ごみデータと思われるので捨てる
 			::AbortDoc(m_hdc);
 		}
@@ -553,6 +587,7 @@ UINT CComSpooler::Write(UINT8 cData)
 		}
 		ret = 1;
 	}
+	m_lastData = cData;
 
 finalize:
 	LeaveCriticalSection(&m_csPrint);

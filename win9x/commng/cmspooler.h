@@ -3,6 +3,31 @@
  * @brief	Windowsスプーラ印刷 クラスの宣言およびインターフェイスの定義をします
  */
 
+ /*
+  * Copyright (c) 2026 SimK
+  * All rights reserved.
+  *
+  * Redistribution and use in source and binary forms, with or without
+  * modification, are permitted provided that the following conditions
+  * are met:
+  * 1. Redistributions of source code must retain the above copyright
+  *    notice, this list of conditions and the following disclaimer.
+  * 2. Redistributions in binary form must reproduce the above copyright
+  *    notice, this list of conditions and the following disclaimer in the
+  *    documentation and/or other materials provided with the distribution.
+  *
+  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+  * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+  * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+  * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+  * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+  * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+  * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+  */
+
 #pragma once
 
 #include <vector>
@@ -29,6 +54,7 @@ public:
 	CRITICAL_SECTION m_csPrint;
 	DWORD m_lastSendTime;
 	bool m_hasValidData;			/*!< 有効なデータが送られたか */
+	UINT8 m_lastData;				/*!< 最後に送られたデータ */
 	int m_dataCounter;				/*!< プリンタに送られたデータ数 */
 
 	static CComSpooler* CreateInstance(COMCFG *comcfg);
@@ -61,9 +87,6 @@ private:
 
 	bool m_rectdot;				/*!< 点を矩形で描画 */
 	float m_dotscale;			/*!< 点の大きさ補正 */
-	UINT8* m_colorbuf;			/*!< カラーバッファ */
-	int m_colorbuf_w;			/*!< カラーバッファ幅 */
-	int m_colorbuf_h;			/*!< カラーバッファ高さ */
 	int m_pageAlignment;		/*!< ページアライメント */
 	int m_additionalOfsX;		/*!< 追加位置オフセット X */
 	int m_additionalOfsY;		/*!< 追加位置オフセット Y */

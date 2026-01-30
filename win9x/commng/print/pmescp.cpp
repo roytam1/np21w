@@ -3,7 +3,35 @@
  * @brief	ESC/P系印刷クラスの動作の実装を行います
  */
 
+ /*
+  * Copyright (c) 2026 SimK
+  * All rights reserved.
+  *
+  * Redistribution and use in source and binary forms, with or without
+  * modification, are permitted provided that the following conditions
+  * are met:
+  * 1. Redistributions of source code must retain the above copyright
+  *    notice, this list of conditions and the following disclaimer.
+  * 2. Redistributions in binary form must reproduce the above copyright
+  *    notice, this list of conditions and the following disclaimer in the
+  *    documentation and/or other materials provided with the distribution.
+  *
+  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+  * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+  * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+  * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+  * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+  * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+  * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+  */
+
 #include "compiler.h"
+
+#ifdef SUPPORT_PRINT_ESCP
+
 #include "pmescp.h"
 #include "codecnv/codecnv.h"
 
@@ -46,22 +74,27 @@ static COLORREF ColorCodeToColorRef(UINT8 colorCode)
 	case 0:
 		return RGB(0, 0, 0);
 	case 1:
-		return RGB(255, 0, 255);
-	case 2:
-		return RGB(0, 255, 255);
-	case 3:
 		return RGB(0, 0, 255);
-	case 4:
-		return RGB(255, 255, 0);
-	case 5:
+	case 2:
 		return RGB(255, 0, 0);
-	case 6:
+	case 3:
+		return RGB(255, 0, 255);
+	case 4:
 		return RGB(0, 255, 0);
+	case 5:
+		return RGB(0, 255, 255);
+	case 6:
+		return RGB(255, 255, 0);
 	case 7:
 		return RGB(255, 255, 255);
 	}
 	return RGB(0, 0, 0);
 }
+
+// PC-PR201のコードの方が扱いやすい（ビット演算できる）ので変換
+static UINT8 ColorCodeToPR201Table[] = {
+	0, 3, 5, 1, 6, 2, 4, 7
+};
 
 typedef enum {
 	COMMANDFUNC_RESULT_OK = 0, // コマンド実行成功
@@ -89,7 +122,7 @@ static COMMANDFUNC_RESULT pmescp_CommandLF(void* param, const PRINTCMD_DATA& dat
 #ifdef DEBUG_LINE
 	if (render) {
 		TCHAR txt[32];
-		_stprintf(txt, _T("p%.2f"), owner->m_state.linespacing);
+		_stprintf(txt, _T("h%.2f"), owner->m_state.linespacing);
 		TextOut(owner->m_hdc, 0, owner->m_offsetYPixel + owner->m_state.posY, txt, _tcslen(txt));
 		MoveToEx(owner->m_hdc, 0 , owner->m_offsetYPixel + owner->m_state.posY, NULL);
 		LineTo(owner->m_hdc, owner->m_widthPixel, owner->m_offsetYPixel + owner->m_state.posY);
@@ -270,6 +303,59 @@ static COMMANDFUNC_RESULT pmescp_CommandFSHalfKanjiOFF(void* param, const PRINTC
 	return COMMANDFUNC_RESULT_OK;
 }
 
+static COMMANDFUNC_RESULT pmescp_CommandFSSetSpcKanji(void* param, const PRINTCMD_DATA& data, bool render) {
+	CPrintESCP* owner = (CPrintESCP*)param;
+	float dotPitchX = owner->m_state.CalcDotPitchX();
+	owner->m_state.leftSpcKanji = data.data[0] * dotPitchX;
+	owner->m_state.rightSpcKanji = data.data[1] * dotPitchX;
+	return COMMANDFUNC_RESULT_OK;
+}
+static COMMANDFUNC_RESULT pmescp_CommandFSSetSpcHalfKanji(void* param, const PRINTCMD_DATA& data, bool render) {
+	CPrintESCP* owner = (CPrintESCP*)param;
+	float dotPitchX = owner->m_state.CalcDotPitchX();
+	owner->m_state.leftSpcHalfKanji = data.data[0] * dotPitchX;
+	owner->m_state.rightSpcHalfKanji = data.data[1] * dotPitchX;
+	return COMMANDFUNC_RESULT_OK;
+}
+static COMMANDFUNC_RESULT pmescp_CommandFSSet4Kanji(void* param, const PRINTCMD_DATA& data, bool render) {
+	CPrintESCP* owner = (CPrintESCP*)param;
+	float dotPitchX = owner->m_state.CalcDotPitchX();
+	if (data.data[0] == 0) {
+		owner->m_state.isDoubleWidth = false;
+		owner->m_state.isDoubleHeight = false;
+	}
+	else if (data.data[0] == 1) {
+		owner->m_state.isDoubleWidth = true;
+		owner->m_state.isDoubleHeight = true;
+	}
+	return COMMANDFUNC_RESULT_OK;
+}
+static COMMANDFUNC_RESULT pmescp_CommandFSSetTKanji(void* param, const PRINTCMD_DATA& data, bool render) {
+	CPrintESCP* owner = (CPrintESCP*)param;
+	owner->m_state.isRotKanji = true;
+	if (render) owner->UpdateFontSize();
+	return COMMANDFUNC_RESULT_OK;
+}
+static COMMANDFUNC_RESULT pmescp_CommandFSResetTKanji(void* param, const PRINTCMD_DATA& data, bool render) {
+	CPrintESCP* owner = (CPrintESCP*)param;
+	owner->m_state.isRotKanji = false;
+	if (render) owner->UpdateFontSize();
+	return COMMANDFUNC_RESULT_OK;
+}
+
+static COMMANDFUNC_RESULT pmescp_CommandFSSetFontKanji(void* param, const PRINTCMD_DATA& data, bool render) {
+	CPrintESCP* owner = (CPrintESCP*)param;
+	if (data.data[0] == 0) {
+		owner->m_state.isSansSerif = false;
+		if (render) owner->UpdateFont();
+	}
+	else if (data.data[0] == 1) {
+		owner->m_state.isSansSerif = true;
+		if (render) owner->UpdateFont();
+	}
+	return COMMANDFUNC_RESULT_OK;
+}
+
 static COMMANDFUNC_RESULT pmescp_CommandESCSetUnit(void* param, const PRINTCMD_DATA& data, bool render) {
 	CPrintESCP* owner = (CPrintESCP*)param;
 	if (data.data[0] == 1 && data.data[1] == 0) {
@@ -306,7 +392,7 @@ static COMMANDFUNC_RESULT pmescp_CommandESCSetAbsHPosition(void* param, const PR
 			owner->m_state.posY = 0;
 			return owner->CheckOverflowPage(0) ? COMMANDFUNC_RESULT_COMPLETEPAGE : COMMANDFUNC_RESULT_OVERFLOWPAGE;
 		}
-		return COMMANDFUNC_RESULT_OVERFLOWLINE;
+		return COMMANDFUNC_RESULT_COMPLETELINE;
 	}
 	else {
 		if (owner->CheckOverflowPage(0)) {
@@ -333,7 +419,7 @@ static COMMANDFUNC_RESULT pmescp_CommandESCSetHPosition(void* param, const PRINT
 			owner->m_state.posY = 0;
 			return owner->CheckOverflowPage(0) ? COMMANDFUNC_RESULT_COMPLETEPAGE : COMMANDFUNC_RESULT_OVERFLOWPAGE;
 		}
-		return COMMANDFUNC_RESULT_OVERFLOWLINE;
+		return COMMANDFUNC_RESULT_COMPLETELINE;
 	}
 	else {
 		if (owner->CheckOverflowPage(0)) {
@@ -386,7 +472,7 @@ static COMMANDFUNC_RESULT pmescp_CommandESCHVSkip(void* param, const PRINTCMD_DA
 				owner->m_state.posY = 0;
 				return owner->CheckOverflowPage(0) ? COMMANDFUNC_RESULT_COMPLETEPAGE : COMMANDFUNC_RESULT_OVERFLOWPAGE;
 			}
-			return COMMANDFUNC_RESULT_OVERFLOWLINE;
+			return COMMANDFUNC_RESULT_COMPLETELINE;
 		}
 		else {
 			if (owner->CheckOverflowPage(0)) {
@@ -698,7 +784,7 @@ static COMMANDFUNC_RESULT pmescp_CommandESCPrintBitImage(void* param, const PRIN
 	int hDotCount = n;
 	int dataLen = bytesPerCol * hDotCount;
 	if (render) {
-		int posIdx = owner->m_state.posX / (owner->m_dpiX * owner->m_state.graphicsPitchX);
+		int posIdx = (int)floor(owner->m_state.posX / (owner->m_dpiX * owner->m_state.graphicsPitchX) + 0.5);
 		int posIdxY = 0;
 		const UINT8* dataptr = &(data.data[0]) + 3;
 		if (vDotCount == 8) {
@@ -735,11 +821,6 @@ static COMMANDFUNC_RESULT pmescp_CommandESCPrintBitImage(void* param, const PRIN
 		}
 	finish:;
 	}
-	int zeroflag = 0;
-	bool zeroflag2 = false;
-	if (owner->m_state.posY> 11999) {
-		zeroflag = 100;
-	}
 	owner->m_state.graphicPosY = owner->m_state.posY;
 	owner->m_state.posX += hDotCount * (owner->m_dpiX * owner->m_state.graphicsPitchX);
 	return COMMANDFUNC_RESULT_OK;
@@ -748,7 +829,7 @@ static COMMANDFUNC_RESULT pmescp_CommandESCPrintBitImage(void* param, const PRIN
 static COMMANDFUNC_RESULT pmescp_CommandESCSetColor(void* param, const PRINTCMD_DATA& data, bool render) {
 	CPrintESCP* owner = (CPrintESCP*)param;
 	if (data.data[0] < 7) {
-		owner->m_state.color = data.data[0];
+		owner->m_state.color = ColorCodeToPR201Table[data.data[0] & 0x7];
 		SetTextColor(owner->m_hdc, ColorCodeToColorRef(owner->m_state.color));
 	}
 	return COMMANDFUNC_RESULT_OK;
@@ -783,6 +864,7 @@ static COMMANDFUNC_RESULT pmescp_PutChar(void* param, const PRINTCMD_DATA& data,
 		}
 		if (owner->m_state.isHalfKanji) {
 			scaleX = 0.5;
+			charWidth *= 0.9;
 		}
 	}
 	else {
@@ -801,9 +883,37 @@ static COMMANDFUNC_RESULT pmescp_PutChar(void* param, const PRINTCMD_DATA& data,
 		scaleX *= 0.6;
 	}
 	charWidth *= scaleX;
-	charWidth += owner->m_state.exSpc * owner->m_dpiX;
+	float charOffsetLeft = 0;
+	float charOffsetRight = 0;
+	if (owner->m_state.isKanji) {
+		float kScale = owner->m_state.isDoubleWidth ? 2 : 1;
+		if (owner->m_state.isHalfKanji) {
+			charOffsetLeft = owner->m_state.leftSpcHalfKanji * owner->m_dpiX * kScale;
+			charOffsetRight = owner->m_state.rightSpcHalfKanji * owner->m_dpiX * kScale;
+		}
+		else {
+			charOffsetLeft = owner->m_state.leftSpcKanji * owner->m_dpiX * kScale;
+			charOffsetRight = owner->m_state.rightSpcKanji * owner->m_dpiX * kScale;
+		}
+	}
+	else {
+		charOffsetLeft = 0;
+		charOffsetRight = owner->m_state.exSpc * owner->m_dpiX;
+	}
+	if (owner->m_state.isKanji) {
+		if (owner->m_state.isHalfKanji) {
+			charWidth += owner->m_state.leftSpcHalfKanji * owner->m_dpiX;
+		}
+		else {
+			charWidth += owner->m_state.leftSpcKanji * owner->m_dpiX;
+		}
+	}
+	else {
+		charWidth += charOffsetLeft + charOffsetRight;
+	}
 	if (owner->m_state.isDoubleWidth) {
 		scaleX *= 2.0;
+		charWidth *= 2;
 	}
 	if (owner->CheckOverflowLine(charWidth)) {
 		owner->m_state.posX = 0;
@@ -811,6 +921,7 @@ static COMMANDFUNC_RESULT pmescp_PutChar(void* param, const PRINTCMD_DATA& data,
 		return COMMANDFUNC_RESULT_OVERFLOWLINE;
 	}
 	// 混色はせずここで描画
+	charWidth -= charOffsetLeft;
 	if (render) {
 		int yOfsEx = owner->m_state.isRotKanji ? (owner->m_dpiY * owner->m_state.charPoint / 72) : 0;
 		if (scaleX != 1 || scaleY != 1) {
@@ -826,7 +937,7 @@ static COMMANDFUNC_RESULT pmescp_PutChar(void* param, const PRINTCMD_DATA& data,
 			ModifyWorldTransform(owner->m_hdc, nullptr, MWT_IDENTITY);
 		}
 		else {
-			TextOut(owner->m_hdc, owner->m_offsetXPixel + owner->m_state.posX, owner->m_offsetYPixel + owner->m_state.posY, buf, 1);
+			TextOut(owner->m_hdc, owner->m_offsetXPixel + owner->m_state.posX, owner->m_offsetYPixel + owner->m_state.posY + yOfsEx, buf, 1);
 		}
 	}
 	owner->m_state.posX += charWidth;
@@ -963,14 +1074,22 @@ static PRINTCMD_DEFINE s_commandTableESCP[] = {
 	PRINTCMD_DEFINE_FIXEDLEN("\x1b""i", 1, NULL),
 
 	// 拡張制御コード FS
-	PRINTCMD_DEFINE_FIXEDLEN("\x1c""S", 2, NULL),
-	PRINTCMD_DEFINE_FIXEDLEN("\x1c""T", 2, NULL),
+	PRINTCMD_DEFINE_FIXEDLEN("\x1c""S", 2, pmescp_CommandFSSetSpcKanji),
+	PRINTCMD_DEFINE_FIXEDLEN("\x1c""T", 2, pmescp_CommandFSSetSpcHalfKanji),
+	PRINTCMD_DEFINE_FIXEDLEN("\x1c""W", 1, pmescp_CommandFSSet4Kanji),
+	PRINTCMD_DEFINE_FIXEDLEN("\x1c""J", 0, pmescp_CommandFSSetTKanji),
+	PRINTCMD_DEFINE_FIXEDLEN("\x1c""K", 0, pmescp_CommandFSResetTKanji),
 	PRINTCMD_DEFINE_FIXEDLEN("\x1c""C", 2, NULL),
-	PRINTCMD_DEFINE_FIXEDLEN("\x1c""k", 1, NULL),
+	PRINTCMD_DEFINE_FIXEDLEN("\x1c""D", 4, NULL),
+	PRINTCMD_DEFINE_FIXEDLEN("\x1c""k", 1, pmescp_CommandFSSetFontKanji),
 	PRINTCMD_DEFINE_FIXEDLEN("\x1c""#", 1, NULL),
+	PRINTCMD_DEFINE_FIXEDLEN("\x1c""U", 0, NULL),
+	PRINTCMD_DEFINE_FIXEDLEN("\x1c""V", 0, NULL),
+	PRINTCMD_DEFINE_FIXEDLEN("\x1c""Y", 6, NULL),
+	PRINTCMD_DEFINE_FIXEDLEN("\x1c""r", 1, NULL),
+	PRINTCMD_DEFINE_FIXEDLEN("\x1c""-", 1, NULL),
 	PRINTCMD_DEFINE_FIXEDLEN("\x1c""&", 0, pmescp_CommandFSKanjiON),
 	PRINTCMD_DEFINE_FIXEDLEN("\x1c"".", 0, pmescp_CommandFSKanjiOFF),
-	PRINTCMD_DEFINE_FIXEDLEN("\x1c""\x14", 0, NULL),
 	PRINTCMD_DEFINE_FIXEDLEN("\x1c""\x0f", 0, pmescp_CommandFSHalfKanjiON),
 	PRINTCMD_DEFINE_FIXEDLEN("\x1c""\x12", 0, pmescp_CommandFSHalfKanjiOFF),
 	PRINTCMD_DEFINE_FIXEDLEN("\x1c""!", 1, pmescp_CommandESCKanjiMode),
@@ -1077,6 +1196,7 @@ void CPrintESCP::StartPrint(HDC hdc, int offsetXPixel, int offsetYPixel, int wid
 	m_state.SetDefault();
 	m_renderstate = m_state;
 	m_cmdIndex = 0;
+	m_lastNewLine = false;
 	m_lastNewPage = false;
 
 	const float dotPitch = m_dpiX * m_state.CalcDotPitchX();
@@ -1151,7 +1271,7 @@ void CPrintESCP::RenderGraphic()
 		int rx = (float)ceil(pitchx / 2 * m_dotscale);
 		int ry = (float)ceil(pitchy / 2 * m_dotscale);
 		if (r == 0) r = 1;
-		HBRUSH hBrush = (HBRUSH)GetStockObject(BLACK_BRUSH);// m_gdiobj.brsDot[m_state.color];
+		HBRUSH hBrush = m_gdiobj.brsDot[m_state.color];
 		HPEN hPen = (HPEN)GetStockObject(NULL_PEN);
 		HGDIOBJ oldPen = SelectObject(m_hdc, hPen);
 		HGDIOBJ oldBrush = SelectObject(m_hdc, hBrush);
@@ -1288,8 +1408,11 @@ PRINT_COMMAND_RESULT CPrintESCP::DoCommand()
 			COMMANDFUNC_RESULT cmdResult = cmdfunc(this, cmdList[m_cmdIndex], false);
 			if (cmdResult == COMMANDFUNC_RESULT_OVERFLOWLINE || cmdResult == COMMANDFUNC_RESULT_COMPLETELINE) {
 				// 改行を実行
-				if (cmdResult == COMMANDFUNC_RESULT_COMPLETELINE) {
+				if (cmdResult == COMMANDFUNC_RESULT_COMPLETELINE || m_lastNewLine) {
 					m_cmdIndex++; // 現在のコマンドは完了しているので1つ進める（そうでない場合最後のコマンドは未実行なので残す）
+				}
+				else {
+					m_lastNewLine = true; // OVERFLOW無限ループを回避
 				}
 				Render(m_cmdIndex); // データを描画する
 				cmdList.erase(cmdList.begin(), cmdList.begin() + m_cmdIndex);
@@ -1302,11 +1425,14 @@ PRINT_COMMAND_RESULT CPrintESCP::DoCommand()
 				if (cmdResult == COMMANDFUNC_RESULT_COMPLETEPAGE || m_lastNewPage) {
 					m_cmdIndex++; // 現在のコマンドは完了しているので1つ進める（そうでない場合最後のコマンドは未実行なので残す）
 				}
+				else {
+					m_lastNewPage = true; // OVERFLOW無限ループを回避
+				}
 				Render(m_cmdIndex); // データを描画する
 				RenderGraphic();
 				cmdList.erase(cmdList.begin(), cmdList.begin() + m_cmdIndex);
 				m_cmdIndex = 0;
-				m_lastNewPage = true;
+				m_lastNewLine = false;
 				return PRINT_COMMAND_RESULT_COMPLETEPAGE;
 			}
 			else if (cmdResult == COMMANDFUNC_RESULT_RENDERLINE) {
@@ -1316,9 +1442,11 @@ PRINT_COMMAND_RESULT CPrintESCP::DoCommand()
 				cmdList.erase(cmdList.begin(), cmdList.begin() + m_cmdIndex);
 				m_cmdIndex = -1; // ループ時に+1されるので-1
 				cmdListLen = cmdList.size();
+				m_lastNewLine = false;
 				m_lastNewPage = false;
 			}
 			else {
+				m_lastNewLine = false;
 				m_lastNewPage = false;
 			}
 		}
@@ -1441,3 +1569,5 @@ void CPrintESCP::UpdateFontSize()
 
 	UpdateFont();
 }
+
+#endif /* SUPPORT_PRINT_ESCP */

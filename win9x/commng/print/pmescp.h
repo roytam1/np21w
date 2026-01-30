@@ -3,6 +3,33 @@
  * @brief	ESC/P系印刷クラスの宣言およびインターフェイスの定義をします
  */
 
+ /*
+  * Copyright (c) 2026 SimK
+  * All rights reserved.
+  *
+  * Redistribution and use in source and binary forms, with or without
+  * modification, are permitted provided that the following conditions
+  * are met:
+  * 1. Redistributions of source code must retain the above copyright
+  *    notice, this list of conditions and the following disclaimer.
+  * 2. Redistributions in binary form must reproduce the above copyright
+  *    notice, this list of conditions and the following disclaimer in the
+  *    documentation and/or other materials provided with the distribution.
+  *
+  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+  * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+  * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+  * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+  * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+  * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+  * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+  */
+
+#ifdef SUPPORT_PRINT_ESCP
+
 #pragma once
 
 #include "pmbase.h"
@@ -34,6 +61,11 @@ typedef struct {
 
 	float exSpc; // 1文字あたりの追加スペース（LQ 1/180単位、Draft 1/120単位）
 
+	float leftSpcKanji; // 漢字1文字あたりの追加左スペース（1/160インチ単位）
+	float rightSpcKanji; // 漢字1文字あたりの追加右スペース（1/160インチ単位）
+	float leftSpcHalfKanji; // 半角漢字1文字あたりの追加左スペース（1/160インチ単位）
+	float rightSpcHalfKanji; // 半角漢字1文字あたりの追加右スペース（1/160インチ単位）
+
 	float graphicsPitchX; // グラフィックのピッチX
 	float graphicsPitchY; // グラフィックのピッチY
 	float graphicPosY; // グラフィックの描画位置Y pixel
@@ -60,14 +92,14 @@ typedef struct {
 		defUnit = 1.0 / 180;
 
 		charPitchX = 0.15;
-		charPitchKanjiX = 0.14;
+		charPitchKanjiX = 21 / 160.0;
 		charPoint = 10.8;
 		linespacing = 0.15;
 		pagelength = 11.69; // XXX: A4縦
 		leftMargin = 0; // 左マージン（インチ）
 		rightMargin = 0; // 右マージン（インチ）
 		topMargin = 0; // 上マージン（インチ）
-		topMargin = 0; // 下マージン（インチ）
+		bottomMargin = 0; // 下マージン（インチ）
 
 		vTabCh = 0;
 		for (int i = 0; i < HTAB_SETS; i++) {
@@ -80,6 +112,11 @@ typedef struct {
 		}
 
 		exSpc = 0;
+
+		leftSpcKanji = 0;
+		rightSpcKanji = 3 / 160.0;
+		leftSpcHalfKanji = 0;
+		rightSpcHalfKanji = 2 / 160.0;
 
 		graphicsPitchX = 1;
 		graphicsPitchY = 1;
@@ -163,9 +200,12 @@ private:
 	PrinterCommandParser* m_parser;
 
 	int m_cmdIndex; // 実行中コマンドのインデックス
+	bool m_lastNewLine; // 前回行送りしたかどうか
 	bool m_lastNewPage; // 前回ページ送りしたかどうか
 
 	PRINT_ESCP_STATE m_renderstate; // ESC/P状態 描画用
 
 	void ReleaseFont();
 };
+
+#endif /* SUPPORT_PRINT_ESCP */

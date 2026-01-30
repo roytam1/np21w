@@ -139,7 +139,7 @@ static	TCHAR		szClassName[] = _T("NP2-MainWindow");
 #if defined(SUPPORT_NAMED_PIPE)
 						 OEMTEXT("NP2-NamedPipe"), OEMTEXT("."),
 #endif
-						 OEMTEXT(""), 5000, 0, 130, 0, 0, 0, 0, 100
+						 OEMTEXT(""), 5000, 0, 130, 1, 0, 0, 0, 100
 						},
 #if defined(SUPPORT_SMPU98)
 						{5, 0, 0x3e, 19200,
@@ -147,14 +147,14 @@ static	TCHAR		szClassName[] = _T("NP2-MainWindow");
 #if defined(SUPPORT_NAMED_PIPE)
 						 OEMTEXT("NP2-NamedPipe"), OEMTEXT("."),
 #endif
-						 OEMTEXT(""), 5000, 0, 130, 0, 0, 0, 0, 100
+						 OEMTEXT(""), 5000, 0, 130, 1, 0, 0, 0, 100
 						},
 						{5, 0, 0x3e, 19200,
 						 OEMTEXT(""), OEMTEXT(""), OEMTEXT(""), OEMTEXT(""), 0, 1, OEMTEXT(""), 5000,
 #if defined(SUPPORT_NAMED_PIPE)
 						 OEMTEXT("NP2-NamedPipe"), OEMTEXT("."),
 #endif
-						 OEMTEXT(""), 5000, 0, 130, 0, 0, 0, 0, 100
+						 OEMTEXT(""), 5000, 0, 130, 1, 0, 0, 0, 100
 						},
 #endif
 						{0, 0, 0x3e, 19200,
@@ -162,28 +162,28 @@ static	TCHAR		szClassName[] = _T("NP2-MainWindow");
 #if defined(SUPPORT_NAMED_PIPE)
 						 OEMTEXT("NP2-NamedPipe"), OEMTEXT("."),
 #endif
-						 OEMTEXT(""), 5000, 0, 130, 0, 0, 0, 0, 100
+						 OEMTEXT(""), 5000, 0, 130, 1, 0, 0, 0, 100
 						},
 						{0, 0, 0x3e, 19200,
 						 OEMTEXT(""), OEMTEXT(""), OEMTEXT(""), OEMTEXT(""), 0, 1, OEMTEXT(""), 5000,
 #if defined(SUPPORT_NAMED_PIPE)
 						 OEMTEXT("NP2-NamedPipe"), OEMTEXT("."),
 #endif
-						 OEMTEXT(""), 5000, 0, 130, 0, 0, 0, 0, 100
+						 OEMTEXT(""), 5000, 0, 130, 1, 0, 0, 0, 100
 						},
 						{0, 0, 0x3e, 19200,
 						 OEMTEXT(""), OEMTEXT(""), OEMTEXT(""), OEMTEXT(""), 0, 1, OEMTEXT(""), 5000,
 #if defined(SUPPORT_NAMED_PIPE)
 						 OEMTEXT("NP2-NamedPipe"), OEMTEXT("."),
 #endif
-						 OEMTEXT(""), 5000, 0, 130, 0, 0, 0, 0, 100
+						 OEMTEXT(""), 5000, 0, 130, 1, 0, 0, 0, 100
 						},
 						{0, 0, 0x3e, 19200,
 						 OEMTEXT(""), OEMTEXT(""), OEMTEXT(""), OEMTEXT(""), 0, 1, OEMTEXT(""), 5000,
 #if defined(SUPPORT_NAMED_PIPE)
 						 OEMTEXT("NP2-NamedPipeLPT"), OEMTEXT("."),
 #endif
-						 OEMTEXT(""), 5000, 1, 130, 0, 0, 0, 0, 100
+						 OEMTEXT(""), 5000, 1, 130, 1, 0, 0, 0, 100
 						},
 						0xffffff, 0xffbf6a, 0, 0,
 						0, 1,

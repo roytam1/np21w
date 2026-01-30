@@ -3,7 +3,35 @@
  * @brief	PC-PR201系印刷クラスの動作の実装を行います
  */
 
+ /*
+  * Copyright (c) 2026 SimK
+  * All rights reserved.
+  *
+  * Redistribution and use in source and binary forms, with or without
+  * modification, are permitted provided that the following conditions
+  * are met:
+  * 1. Redistributions of source code must retain the above copyright
+  *    notice, this list of conditions and the following disclaimer.
+  * 2. Redistributions in binary form must reproduce the above copyright
+  *    notice, this list of conditions and the following disclaimer in the
+  *    documentation and/or other materials provided with the distribution.
+  *
+  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+  * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+  * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+  * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+  * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+  * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+  * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+  */
+
 #include "compiler.h"
+
+#ifdef SUPPORT_PRINT_PR201
+
 #include "pmpr201.h"
 #include "codecnv/codecnv.h"
 
@@ -867,6 +895,7 @@ void CPrintPR201::StartPrint(HDC hdc, int offsetXPixel, int offsetYPixel, int wi
 	m_state.SetDefault();
 	m_renderstate = m_state;
 	m_cmdIndex = 0;
+	m_lastNewLine = false;
 	m_lastNewPage = false;
 
 	const float dotPitch = CalcDotPitchX();
@@ -1119,8 +1148,11 @@ PRINT_COMMAND_RESULT CPrintPR201::DoCommand()
 			COMMANDFUNC_RESULT cmdResult = cmdfunc(this, cmdList[m_cmdIndex], false);
 			if (cmdResult == COMMANDFUNC_RESULT_OVERFLOWLINE || cmdResult == COMMANDFUNC_RESULT_COMPLETELINE) {
 				// 改行を実行
-				if (cmdResult == COMMANDFUNC_RESULT_COMPLETELINE) {
+				if (cmdResult == COMMANDFUNC_RESULT_COMPLETELINE || m_lastNewLine) {
 					m_cmdIndex++; // 現在のコマンドは完了しているので1つ進める（そうでない場合最後のコマンドは未実行なので残す）
+				}
+				else {
+					m_lastNewLine = true; // OVERFLOW無限ループを回避
 				}
 				Render(m_cmdIndex); // データを描画する
 				cmdList.erase(cmdList.begin(), cmdList.begin() + m_cmdIndex);
@@ -1133,10 +1165,13 @@ PRINT_COMMAND_RESULT CPrintPR201::DoCommand()
 				if (cmdResult == COMMANDFUNC_RESULT_COMPLETEPAGE || m_lastNewPage) {
 					m_cmdIndex++; // 現在のコマンドは完了しているので1つ進める（そうでない場合最後のコマンドは未実行なので残す）
 				}
+				else {
+					m_lastNewPage = true; // OVERFLOW無限ループを回避
+				}
 				Render(m_cmdIndex); // データを描画する
 				cmdList.erase(cmdList.begin(), cmdList.begin() + m_cmdIndex);
 				m_cmdIndex = 0;
-				m_lastNewPage = true;
+				m_lastNewLine = false;
 				return PRINT_COMMAND_RESULT_COMPLETEPAGE;
 			}
 			else if (cmdResult == COMMANDFUNC_RESULT_RENDERLINE) {
@@ -1146,9 +1181,11 @@ PRINT_COMMAND_RESULT CPrintPR201::DoCommand()
 				cmdList.erase(cmdList.begin(), cmdList.begin() + m_cmdIndex);
 				m_cmdIndex = -1; // ループ時に+1されるので-1
 				cmdListLen = cmdList.size();
+				m_lastNewLine = false;
 				m_lastNewPage = false;
 			}
 			else {
+				m_lastNewLine = false;
 				m_lastNewPage = false;
 			}
 		}
@@ -1208,3 +1245,5 @@ void CPrintPR201::UpdateLinePen()
 		m_gdiobj.lastlinecolor = m_state.color;
 	}
 }
+
+#endif /* SUPPORT_PRINT_PR201 */

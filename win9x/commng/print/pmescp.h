@@ -39,6 +39,20 @@
 #define VTAB_CHANNELS	8
 #define VTAB_SETS		17
 
+typedef enum {
+	ESCP_LINEPOS_UNDER		= 1,
+	ESCP_LINEPOS_STRIKET	= 2,
+	ESCP_LINEPOS_UPPER		= 3
+} ESCP_LINEPOS;
+
+typedef enum {
+	ESCP_LINEMODE_OFF = 0,
+	ESCP_LINEMODE_SINGLE = 1,
+	ESCP_LINEMODE_DOUBLE = 2,
+	ESCP_LINEMODE_SINGLEDOT = 3,
+	ESCP_LINEMODE_DOUBLEDOT = 4,
+} ESCP_LINEMODE;
+
 typedef struct {
 	float posX; // 描画位置X pixel
 	float posY; // 描画位置Y pixel
@@ -54,6 +68,10 @@ typedef struct {
 	float topMargin; // 上マージン（インチ）
 	float bottomMargin; // 下マージン（インチ）
 	int color; // 色
+	ESCP_LINEPOS linepos; // 線の位置
+	ESCP_LINEMODE linemode; // 線のタイプ
+
+	float charBaseLineOffset; // ベースラインのオフセット
 
 	float hTabPositions[HTAB_SETS]; // 水平タブ位置（文字単位）
 	float vTabPositions[VTAB_CHANNELS][VTAB_SETS]; // 垂直タブ位置（行単位）
@@ -78,11 +96,15 @@ typedef struct {
 	bool isSansSerif; // サンセリフ書体かどうか
 	bool isBold; // 太字かどうか
 	bool isItalic; // 斜体かどうか
+	bool isSup; // 上付かどうか
+	bool isSub; // 下付かどうか
 	bool isCondensed; // コンデンスモードかどうか
 	bool isDoubleWidth; // 倍角モードかどうか
 	bool isDoubleWidthSingleLine; // 単一行倍角モードかどうか
 	bool isDoubleHeight; // 縦倍角モードかどうか
 	bool hasGraphic; // グラフィック印字があるかどうか
+	bool isKumimoji; // 組文字モードかどうか（自動解除）
+	UINT8 kumimojiBuf[2]; // 組文字用バッファ
 
 	void SetDefault()
 	{
@@ -91,15 +113,20 @@ typedef struct {
 
 		defUnit = 1.0 / 180;
 
-		charPitchX = 0.15;
+		charPitchX = 1 / 10.0;// 0.15 / 2;
 		charPitchKanjiX = 21 / 160.0;
 		charPoint = 10.8;
-		linespacing = 0.15;
+		linespacing = 1 / 6.0; //0.15;
 		pagelength = 11.69; // XXX: A4縦
 		leftMargin = 0; // 左マージン（インチ）
 		rightMargin = 0; // 右マージン（インチ）
 		topMargin = 0; // 上マージン（インチ）
 		bottomMargin = 0; // 下マージン（インチ）
+		color = 0;
+		linepos = ESCP_LINEPOS_UNDER;
+		linemode = ESCP_LINEMODE_OFF;
+
+		charBaseLineOffset = 0;
 
 		vTabCh = 0;
 		for (int i = 0; i < HTAB_SETS; i++) {
@@ -130,10 +157,13 @@ typedef struct {
 		isSansSerif = false;
 		isBold = false;
 		isItalic = false;
+		isSup = false;
+		isSub = false;
 		isCondensed = false;
 		isDoubleWidth = false;
 		isDoubleWidthSingleLine = false;
 		isDoubleHeight = false;
+		isKumimoji = false;
 	}
 
 	double CalcDotPitchX() {
@@ -158,6 +188,10 @@ typedef struct {
 	HFONT fontItalicBoldbase;		/*!< Italic Bold Font Base */
 	HFONT fontItalicBoldSansSerif;	/*!< Italic Bold Font Sans-serif */
 	HBRUSH brsDot[8]; // ドット描画用ブラシ8色分
+	HPEN penLine; // 線描画用ペン
+	ESCP_LINEPOS lastlinepos; // 線の位置
+	ESCP_LINEMODE lastlinemode; // 線のタイプ
+	int lastlinecolor; // 色
 } PRINT_ESCP_GDIOBJ;
 
 /**
@@ -185,6 +219,7 @@ public:
 
 	void UpdateFont();
 	void UpdateFontSize();
+	void UpdateLinePen();
 
 	PRINT_ESCP_STATE m_state; // ESC/P状態
 
@@ -206,6 +241,7 @@ private:
 	PRINT_ESCP_STATE m_renderstate; // ESC/P状態 描画用
 
 	void ReleaseFont();
+	void ReleaseLinePen();
 };
 
 #endif /* SUPPORT_PRINT_ESCP */

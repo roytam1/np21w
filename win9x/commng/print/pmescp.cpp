@@ -70,6 +70,57 @@ static unsigned short jis_to_sjis(unsigned short jis)
 	return (UINT16)((UINT16)s1 << 8 | s2);
 }
 
+static int jis_zenkaku_alnum_to_ascii(UINT8* jisbytes)
+{
+	UINT16 jis = (jisbytes[0] << 8) | jisbytes[1];
+	// 全角数字 '０'..'９' : 0x2330..0x2339
+	if (jis >= 0x2330 && jis <= 0x2339) {
+		jis = (unsigned char)('0' + (jis - 0x2330));
+		jisbytes[0] = jis >> 8;
+		jisbytes[1] = jis & 0xff;
+		return 1;
+	}
+	// 全角英大文字 'Ａ'..'Ｚ' : 0x2341..0x235A
+	if (jis >= 0x2341 && jis <= 0x235A) {
+		jis = (unsigned char)('A' + (jis - 0x2341));
+		jisbytes[0] = jis >> 8;
+		jisbytes[1] = jis & 0xff;
+		return 1;
+	}
+	// 全角英小文字 'ａ'..'ｚ' : 0x2361..0x237A
+	if (jis >= 0x2361 && jis <= 0x237A) {
+		jis = (unsigned char)('a' + (jis - 0x2361));
+		jisbytes[0] = jis >> 8;
+		jisbytes[1] = jis & 0xff;
+		return 1;
+	}
+	// その他記号類･･･無理やり変換
+	if (0x2121 <= jis && jis <= 0x217e) {
+		const char jisasctbl[] = {
+			' ', 0  , 0  , ',', '.', 0  , ':', ';',
+			'?', '!', 0  , 0  , '\'','`', 0  , '^',
+			0  , 0  , 0  , 0  , 0  , 0  , 0  , 0  ,
+			0  , 0  , 0  , 0  , 0  , 0  , 0  , 0  ,
+			0  , 0  , '|', 0  , 0  , 0  , 0  , 0  ,
+			'"', '(', ')', 0  , 0  , '[', ']', '{',
+			'}', 0  , 0  , 0  , 0  , 0  , 0  , 0  ,
+			0  , 0  , 0  , '+', '-', 0  , 0  , 0  ,
+			'=', 0  , '<', '>', 0  , 0  , 0  , 0  ,
+			0  , 0  , 0  , '\'','″',0  , '\\','$',
+			0  , 0  , '%', '#', '&', '*', '@', 0  ,
+			0  , 0  , 0  , 0  , 0  , 0
+		};
+		char asc = jisasctbl[jis - 0x2121];
+		if (asc) {
+			jisbytes[0] = 0; jisbytes[1] = asc;
+			return 1;
+		}
+	}
+
+	// 範囲外
+	return 0;
+}
+
 //// 実際の混色
 //static COLORREF ColorCodeToColorRef(UINT8 colorCode)
 //{
@@ -134,6 +185,8 @@ typedef enum {
 
 typedef COMMANDFUNC_RESULT(*PFNPRINTCMD_COMMANDFUNC)(void* param, const PRINTCMD_DATA& data, bool render);
 
+static COMMANDFUNC_RESULT pmescp_PutChar(void* param, const PRINTCMD_DATA& data, bool render);
+
 static COMMANDFUNC_RESULT pmescp_CommandCR(void* param, const PRINTCMD_DATA& data, bool render) {
 	CPrintESCP* owner = (CPrintESCP*)param;
 	owner->m_state.posX = 0;
@@ -155,7 +208,7 @@ static COMMANDFUNC_RESULT pmescp_CommandLF(void* param, const PRINTCMD_DATA& dat
 		LineTo(owner->m_hdc, owner->m_widthPixel, owner->m_offsetYPixel + owner->m_state.posY);
 	}
 #endif
-	owner->m_state.posY += owner->m_state.linespacing * owner->m_dpiY;
+	owner->m_state.posY += owner->m_state.linespacing * owner->m_dpiY + owner->m_state.charBaseLineOffset;
 	owner->m_state.posX = 0;
 	if (owner->m_state.isDoubleWidthSingleLine)
 		owner->m_state.isDoubleWidth = false; {
@@ -317,14 +370,14 @@ static COMMANDFUNC_RESULT pmescp_CommandFSKanjiON(void* param, const PRINTCMD_DA
 static COMMANDFUNC_RESULT pmescp_CommandFSKanjiOFF(void* param, const PRINTCMD_DATA& data, bool render) {
 	CPrintESCP* owner = (CPrintESCP*)param;
 	owner->m_state.isKanji = false;
-	owner->m_state.isDoubleWidth = false;
+	//owner->m_state.isDoubleWidth = false;
 	return COMMANDFUNC_RESULT_OK;
 }
 
 static COMMANDFUNC_RESULT pmescp_CommandFSHalfKanjiON(void* param, const PRINTCMD_DATA& data, bool render) {
 	CPrintESCP* owner = (CPrintESCP*)param;
 	owner->m_state.isHalfKanji = true;
-	owner->m_state.isDoubleWidth = false;
+	//owner->m_state.isDoubleWidth = false;
 	return COMMANDFUNC_RESULT_OK;
 }
 static COMMANDFUNC_RESULT pmescp_CommandFSHalfKanjiOFF(void* param, const PRINTCMD_DATA& data, bool render) {
@@ -370,6 +423,24 @@ static COMMANDFUNC_RESULT pmescp_CommandFSResetTKanji(void* param, const PRINTCM
 	CPrintESCP* owner = (CPrintESCP*)param;
 	owner->m_state.isRotKanji = false;
 	if (render) owner->UpdateFontSize();
+	return COMMANDFUNC_RESULT_OK;
+}
+
+static COMMANDFUNC_RESULT pmescp_CommandFSKumimoji(void* param, const PRINTCMD_DATA& data, bool render) {
+	CPrintESCP* owner = (CPrintESCP*)param;
+	if (!owner->m_state.isKanji) return COMMANDFUNC_RESULT_OK; // 漢字モードでないとき組文字は不可とする
+	UINT8 thb[4] = { 0 };
+	thb[0] = data.data[0];
+	thb[1] = data.data[1];
+	thb[2] = data.data[2];
+	thb[3] = data.data[3];
+	jis_zenkaku_alnum_to_ascii(thb);
+	jis_zenkaku_alnum_to_ascii(thb + 2);
+	if (thb[0] != 0 || thb[2] != 0) return COMMANDFUNC_RESULT_OK; // 全角文字の組文字は不可とする
+	owner->m_state.kumimojiBuf[0] = thb[1];
+	owner->m_state.kumimojiBuf[1] = thb[3];
+	owner->m_state.isKumimoji = true;
+	pmescp_PutChar(param, data, render);
 	return COMMANDFUNC_RESULT_OK;
 }
 
@@ -436,6 +507,7 @@ static COMMANDFUNC_RESULT pmescp_CommandESCSetAbsHPosition(void* param, const PR
 static COMMANDFUNC_RESULT pmescp_CommandESCSetHPosition(void* param, const PRINTCMD_DATA& data, bool render) {
 	CPrintESCP* owner = (CPrintESCP*)param;
 	float defUnit = owner->m_state.isCustomDefUnit ? owner->m_state.defUnit : 1.0 / 180;
+	if(data.data[1] > 127) return COMMANDFUNC_RESULT_OK; // 無効入力
 	owner->m_state.posX += (data.data[0] + data.data[1] * 256) * defUnit * owner->m_dpiX;
 #ifdef DEBUG_LINE
 	if (render) {
@@ -680,6 +752,47 @@ static COMMANDFUNC_RESULT pmescp_CommandESCCancelItalic(void* param, const PRINT
 	return COMMANDFUNC_RESULT_OK;
 }
 
+static COMMANDFUNC_RESULT pmescp_CommandESCUnderline(void* param, const PRINTCMD_DATA& data, bool render) {
+	CPrintESCP* owner = (CPrintESCP*)param;
+	if (data.data[0] == 0 || data.data[0] == '0') {
+		owner->m_state.linemode = ESCP_LINEMODE_OFF;
+	}
+	else if (data.data[0] == 1 || data.data[0] == '1') {
+		owner->m_state.linemode = ESCP_LINEMODE_SINGLE;
+		owner->m_state.linepos = ESCP_LINEPOS_UNDER;
+	}
+	return COMMANDFUNC_RESULT_OK;
+}
+
+static COMMANDFUNC_RESULT pmescp_CommandESCLineScore(void* param, const PRINTCMD_DATA& data, bool render) {
+	CPrintESCP* owner = (CPrintESCP*)param;
+	if (data.data[0] != 3 || data.data[1] != 0 || data.data[2] != 1) return COMMANDFUNC_RESULT_OK;
+	owner->m_state.linepos = (ESCP_LINEPOS)data.data[3];
+	owner->m_state.linemode = (ESCP_LINEMODE)data.data[4];
+
+	return COMMANDFUNC_RESULT_OK;
+}
+
+static COMMANDFUNC_RESULT pmescp_CommandESCSelectSupSub(void* param, const PRINTCMD_DATA& data, bool render) {
+	CPrintESCP* owner = (CPrintESCP*)param;
+	if (data.data[0] == 1 || data.data[0] == 49) {
+		owner->m_state.isSup = false;
+		owner->m_state.isSub = true;
+	}
+	else if (data.data[0] == 0 || data.data[0] == 48) {
+		owner->m_state.isSup = true;
+		owner->m_state.isSub = false;
+	}
+	return COMMANDFUNC_RESULT_OK;
+}
+
+static COMMANDFUNC_RESULT pmescp_CommandESCCancelSupSub(void* param, const PRINTCMD_DATA& data, bool render) {
+	CPrintESCP* owner = (CPrintESCP*)param;
+	owner->m_state.isSup = false;
+	owner->m_state.isSub = false;
+	return COMMANDFUNC_RESULT_OK;
+}
+
 static COMMANDFUNC_RESULT pmescp_CommandESCDoubleWidth(void* param, const PRINTCMD_DATA& data, bool render) {
 	CPrintESCP* owner = (CPrintESCP*)param;
 	if (data.data[0] == 1 || data.data[0] == 49) {
@@ -873,36 +986,51 @@ static COMMANDFUNC_RESULT pmescp_CommandESCInitParams(void* param, const PRINTCM
 }
 
 
-
-
 static COMMANDFUNC_RESULT pmescp_PutChar(void* param, const PRINTCMD_DATA& data, bool render) {
 	CPrintESCP* owner = (CPrintESCP*)param;
-	float charWidth = owner->m_state.CalcCharPitchX() * owner->m_dpiX / 2;
+	float charWidth = owner->m_state.CalcCharPitchX() * owner->m_dpiX;
 	float scaleX = 1;
 	float scaleY = 1;
 	TCHAR buf[3] = { 0 };
 	UINT8 th[3] = { 0 };
-	if (owner->m_state.isKanji) {
-		if (data.data[0] == 0) {
-			// 実質1バイト文字
-			th[0] = data.data[1];
-		}
-		else {
-			UINT16 sjis = jis_to_sjis(data.data[0] << 8 | data.data[1]);
-			th[0] = sjis >> 8;
-			th[1] = sjis & 0xff;
-			charWidth *= 2;
-		}
-		if (owner->m_state.isHalfKanji) {
-			scaleX = 0.5;
-			charWidth *= 0.9;
-		}
+	bool drawKumimoji = false;
+	if (owner->m_state.isKumimoji) {
+		th[0] = owner->m_state.kumimojiBuf[0];
+		th[1] = owner->m_state.kumimojiBuf[1];
+		owner->m_state.isKumimoji = false;
+		drawKumimoji = true;
 	}
 	else {
-		th[0] = data.data[0];
+		if (owner->m_state.isKanji) {
+			UINT8 thb[3] = { 0 };
+			thb[0] = data.data[0];
+			thb[1] = data.data[1];
+			if (owner->m_state.isHalfKanji) {
+				if (jis_zenkaku_alnum_to_ascii(thb)) {
+					// ASCIIへ変換できたら文字幅は半角と同じ
+					charWidth *= 0.5;
+				}
+				else {
+					// ASCIIへ変換できない場合は0.5倍で代用
+					scaleX = 0.5;
+				}
+			}
+			if (thb[0] == 0) {
+				// 実質1バイト文字
+				th[0] = thb[1];
+			}
+			else {
+				UINT16 sjis = jis_to_sjis(thb[0] << 8 | thb[1]);
+				th[0] = sjis >> 8;
+				th[1] = sjis & 0xff;
+			}
+		}
+		else {
+			th[0] = data.data[0];
+		}
 	}
-	UINT16 thw[2];
-	codecnv_sjistoucs2(thw, 1, (const char*)th, 2);
+	UINT16 thw[3] = { 0 };
+	codecnv_sjistoucs2(thw, drawKumimoji ? 2 : 1, (const char*)th, 2);
 	buf[0] = (TCHAR)thw[0];
 	buf[1] = (TCHAR)thw[1];
 
@@ -917,35 +1045,40 @@ static COMMANDFUNC_RESULT pmescp_PutChar(void* param, const PRINTCMD_DATA& data,
 	float charOffsetLeft = 0;
 	float charOffsetRight = 0;
 	if (owner->m_state.isKanji) {
-		float kScale = owner->m_state.isDoubleWidth ? 2 : 1;
+		float kScale = 1;// owner->m_state.isDoubleWidth ? 2 : 1;
 		if (owner->m_state.isHalfKanji) {
 			charOffsetLeft = owner->m_state.leftSpcHalfKanji * owner->m_dpiX * kScale;
 			charOffsetRight = owner->m_state.rightSpcHalfKanji * owner->m_dpiX * kScale;
+			charWidth -= owner->m_state.CalcDotPitchX() * owner->m_dpiX * kScale * 1.275; // 謎
 		}
 		else {
 			charOffsetLeft = owner->m_state.leftSpcKanji * owner->m_dpiX * kScale;
 			charOffsetRight = owner->m_state.rightSpcKanji * owner->m_dpiX * kScale;
+			charWidth -= owner->m_state.CalcDotPitchX() * owner->m_dpiX * kScale * 0.555; // 謎
 		}
 	}
 	else {
 		charOffsetLeft = 0;
 		charOffsetRight = owner->m_state.exSpc * owner->m_dpiX;
 	}
-	if (owner->m_state.isKanji) {
-		if (owner->m_state.isHalfKanji) {
-			charWidth += owner->m_state.leftSpcHalfKanji * owner->m_dpiX;
-		}
-		else {
-			charWidth += owner->m_state.leftSpcKanji * owner->m_dpiX;
-		}
-	}
-	else {
+	//if (owner->m_state.isKanji) {
+	//	if (owner->m_state.isHalfKanji) {
+	//		charWidth += owner->m_state.leftSpcHalfKanji * owner->m_dpiX;
+	//	}
+	//	else {
+	//		charWidth += owner->m_state.leftSpcKanji * owner->m_dpiX;
+	//	}
+	//}
+	//else {
 		charWidth += charOffsetLeft + charOffsetRight;
-	}
+	//}
 	if (owner->m_state.isDoubleWidth) {
 		scaleX *= 2.0;
 		charWidth *= 2;
 	}
+	int charHeightScale = owner->m_state.isDoubleHeight ? 2 : 1;
+	scaleY *= charHeightScale;
+	owner->m_state.charBaseLineOffset = max(owner->m_state.charBaseLineOffset, owner->m_state.CalcDotPitchY() * 24 * owner->m_dpiX * (charHeightScale - 1));
 	if (owner->CheckOverflowLine(charWidth)) {
 		owner->m_state.posX = 0;
 		owner->m_state.posY += owner->m_state.linespacing * owner->m_dpiY;
@@ -954,8 +1087,17 @@ static COMMANDFUNC_RESULT pmescp_PutChar(void* param, const PRINTCMD_DATA& data,
 	// 混色はせずここで描画
 	charWidth -= charOffsetLeft;
 	owner->m_state.posX += charOffsetLeft;
+	float offsetY = 0;
+	if (owner->m_state.isSup) {
+		scaleY *= 2.0f / 3;
+	}
+	else if (owner->m_state.isSub) {
+		scaleY *= 2.0f / 3;
+		offsetY = (owner->m_state.charBaseLineOffset + owner->m_state.CalcDotPitchY() * 24 * owner->m_dpiX) * 1 / 3;
+	}
+
 	if (render) {
-		int x = (owner->m_offsetXPixel + owner->m_state.posX);
+		int x = (owner->m_state.leftMargin * owner->m_dpiX + owner->m_offsetXPixel + owner->m_state.posX);
 		//if (owner->m_state.isRotKanji) {
 		//	GLYPHMETRICS gm = {0};
 		//	MAT2 mat = { {0,1},{0,0},{0,0},{0,1} }; // identity
@@ -966,20 +1108,106 @@ static COMMANDFUNC_RESULT pmescp_PutChar(void* param, const PRINTCMD_DATA& data,
 		//		x += -gm.gmptGlyphOrigin.x;
 		//	}
 		//}
-		if (scaleX != 1 || scaleY != 1) {
+		float posY = owner->m_state.topMargin * owner->m_dpiY + owner->m_state.posY + owner->m_state.charBaseLineOffset - owner->m_state.CalcDotPitchY() * 24 * owner->m_dpiX * (charHeightScale - 1) + offsetY;
+		if (scaleX != 1 || scaleY != 1 || drawKumimoji) {
 			XFORM xf = { 0 };
-			xf.eM11 = scaleX;  // X倍率
-			xf.eM22 = scaleY;  // Y倍率
-			xf.eM12 = xf.eM21 = 0.0f;
-			xf.eDx = 0.0f;
-			xf.eDy = 0.0f;
+			if (drawKumimoji) {
+				int cx = charWidth / 2;
+				int cy = (owner->m_state.CalcDotPitchY() * 24 * owner->m_dpiX * charHeightScale) / 2;
 
-			SetWorldTransform(owner->m_hdc, &xf);
-			TextOut(owner->m_hdc, x / xf.eM11, (owner->m_offsetYPixel + owner->m_state.posY) / xf.eM22, buf, 1);
-			ModifyWorldTransform(owner->m_hdc, nullptr, MWT_IDENTITY);
+				// スケール
+				xf.eM11 = scaleX;  // X倍率
+				xf.eM22 = scaleY;  // Y倍率
+				xf.eM12 = xf.eM21 = 0.0f;
+				xf.eDx = 0.0f;
+				xf.eDy = 0.0f;
+
+				// 原点へ移動
+				XFORM t1 = { 0 };
+				t1.eM11 = 1.0f; t1.eM22 = 1.0f;
+				t1.eDx = -cx;  t1.eDy = -cy;
+
+				// 回転
+				XFORM r = { 0 };
+				r.eM11 = 0;   r.eM12 = -1;
+				r.eM21 = 1;   r.eM22 = 0;
+				r.eDx = 0.0f; r.eDy = 0.0f;
+
+				// 描画位置へ移動
+				XFORM t2 = { 0 };
+				t2.eM11 = 1.0f; t2.eM22 = 1.0f;
+				t2.eDx = cx + x;  t2.eDy = cy + (owner->m_offsetYPixel + posY);
+
+				SetWorldTransform(owner->m_hdc, &xf);
+				if (!ModifyWorldTransform(owner->m_hdc, &t1, MWT_RIGHTMULTIPLY)) return COMMANDFUNC_RESULT_OK;
+				if (!ModifyWorldTransform(owner->m_hdc, &r, MWT_RIGHTMULTIPLY)) return COMMANDFUNC_RESULT_OK;
+				if (!ModifyWorldTransform(owner->m_hdc, &t2, MWT_RIGHTMULTIPLY)) return COMMANDFUNC_RESULT_OK;
+				TextOut(owner->m_hdc, 0, 0, buf, 2);
+				ModifyWorldTransform(owner->m_hdc, nullptr, MWT_IDENTITY);
+			}
+			else {
+				xf.eM11 = scaleX;  // X倍率
+				xf.eM22 = scaleY;  // Y倍率
+				xf.eM12 = xf.eM21 = 0.0f;
+				xf.eDx = 0.0f;
+				xf.eDy = 0.0f;
+
+				SetWorldTransform(owner->m_hdc, &xf);
+				TextOut(owner->m_hdc, x / xf.eM11, (owner->m_offsetYPixel + posY) / xf.eM22, buf, 1);
+				ModifyWorldTransform(owner->m_hdc, nullptr, MWT_IDENTITY);
+			}
 		}
 		else {
-			TextOut(owner->m_hdc, x, owner->m_offsetYPixel + owner->m_state.posY, buf, 1);
+			TextOut(owner->m_hdc, x, owner->m_offsetYPixel + posY, buf, 1);
+		}
+		if (owner->m_state.linemode != ESCP_LINEMODE_OFF) {
+			owner->UpdateLinePen();
+			float lineBeginX = x - charOffsetLeft;
+			float lineEndX = x + charWidth;
+			const float dotPitch = 1.0f / 160;
+			int lineWidth = (int)ceil(owner->m_state.CalcDotPitchY() * owner->m_dpiY);
+			float charHeight = owner->m_state.CalcDotPitchY() * 24 * owner->m_dpiX * charHeightScale;
+			HPEN hOldPen = (HPEN)SelectObject(owner->m_hdc, owner->m_gdiobj.penLine);
+			int lineposY = posY - lineWidth / 2;
+			if (owner->m_state.linepos == ESCP_LINEPOS_UNDER) {
+				// 下線
+				lineposY += owner->m_offsetYPixel + owner->m_state.topMargin * owner->m_dpiY + charHeight - lineWidth;
+				MoveToEx(owner->m_hdc, lineBeginX, lineposY, NULL);
+				LineTo(owner->m_hdc, lineEndX, lineposY);
+				if (owner->m_state.linemode == ESCP_LINEMODE_DOUBLE || owner->m_state.linemode == ESCP_LINEMODE_DOUBLEDOT) {
+					lineposY -= 2 * lineWidth;
+					MoveToEx(owner->m_hdc, lineBeginX, lineposY, NULL);
+					LineTo(owner->m_hdc, lineEndX, lineposY);
+				}
+			}
+			else if (owner->m_state.linepos == ESCP_LINEPOS_STRIKET) {
+				// 取り消し線
+				if (owner->m_state.linemode == ESCP_LINEMODE_DOUBLE || owner->m_state.linemode == ESCP_LINEMODE_DOUBLEDOT) {
+					lineposY += owner->m_offsetYPixel + owner->m_state.topMargin * owner->m_dpiY + charHeight / 2 - lineWidth / 2 - lineWidth;
+					MoveToEx(owner->m_hdc, lineBeginX, lineposY, NULL);
+					LineTo(owner->m_hdc, lineEndX, lineposY);
+					lineposY += 2 * lineWidth;
+					MoveToEx(owner->m_hdc, lineBeginX, lineposY, NULL);
+					LineTo(owner->m_hdc, lineEndX, lineposY);
+				}
+				else {
+					lineposY += owner->m_offsetYPixel + owner->m_state.topMargin * owner->m_dpiY + charHeight / 2 - lineWidth / 2;
+					MoveToEx(owner->m_hdc, lineBeginX, lineposY, NULL);
+					LineTo(owner->m_hdc, lineEndX, lineposY);
+				}
+			}
+			else if (owner->m_state.linepos == ESCP_LINEPOS_UPPER) {
+				// 上線
+				lineposY += owner->m_offsetYPixel + owner->m_state.topMargin * owner->m_dpiY;
+				MoveToEx(owner->m_hdc, lineBeginX, lineposY, NULL);
+				LineTo(owner->m_hdc, lineEndX, lineposY);
+				if (owner->m_state.linemode == ESCP_LINEMODE_DOUBLE || owner->m_state.linemode == ESCP_LINEMODE_DOUBLEDOT) {
+					lineposY += 2 * lineWidth;
+					MoveToEx(owner->m_hdc, lineBeginX, lineposY, NULL);
+					LineTo(owner->m_hdc, lineEndX, lineposY);
+				}
+			}
+			SelectObject(owner->m_hdc, hOldPen);
 		}
 	}
 	owner->m_state.posX += charWidth;
@@ -1076,10 +1304,10 @@ static PRINTCMD_DEFINE s_commandTableESCP[] = {
 	PRINTCMD_DEFINE_FIXEDLEN("\x1b""!", 1, NULL),
 	PRINTCMD_DEFINE_FIXEDLEN("\x1b""G", 0, NULL),
 	PRINTCMD_DEFINE_FIXEDLEN("\x1b""H", 0, NULL),
-	PRINTCMD_DEFINE_FIXEDLEN("\x1b""-", 1, NULL),
-	PRINTCMD_DEFINE_FIXEDLEN("\x1b""(-", 5, NULL),
-	PRINTCMD_DEFINE_FIXEDLEN("\x1b""S", 1, NULL),
-	PRINTCMD_DEFINE_FIXEDLEN("\x1b""T", 0, NULL),
+	PRINTCMD_DEFINE_FIXEDLEN("\x1b""-", 1, pmescp_CommandESCUnderline),
+	PRINTCMD_DEFINE_FIXEDLEN("\x1b""(-", 5, pmescp_CommandESCLineScore),
+	PRINTCMD_DEFINE_FIXEDLEN("\x1b""S", 1, pmescp_CommandESCSelectSupSub),
+	PRINTCMD_DEFINE_FIXEDLEN("\x1b""T", 0, pmescp_CommandESCCancelSupSub),
 	PRINTCMD_DEFINE_FIXEDLEN("\x1b""q", 1, NULL),
 	PRINTCMD_DEFINE_FIXEDLEN("\x1b""\x0e", 0, pmescp_CommandSO),
 	PRINTCMD_DEFINE_FIXEDLEN("\x1b""\x0f", 0, pmescp_CommandSI),
@@ -1123,7 +1351,7 @@ static PRINTCMD_DEFINE s_commandTableESCP[] = {
 	PRINTCMD_DEFINE_FIXEDLEN("\x1c""J", 0, pmescp_CommandFSSetTKanji),
 	PRINTCMD_DEFINE_FIXEDLEN("\x1c""K", 0, pmescp_CommandFSResetTKanji),
 	PRINTCMD_DEFINE_FIXEDLEN("\x1c""C", 2, NULL),
-	PRINTCMD_DEFINE_FIXEDLEN("\x1c""D", 4, NULL),
+	PRINTCMD_DEFINE_FIXEDLEN("\x1c""D", 4, pmescp_CommandFSKumimoji),
 	PRINTCMD_DEFINE_FIXEDLEN("\x1c""k", 1, pmescp_CommandFSSetFontKanji),
 	PRINTCMD_DEFINE_FIXEDLEN("\x1c""#", 1, NULL),
 	PRINTCMD_DEFINE_FIXEDLEN("\x1c""U", 0, NULL),
@@ -1297,6 +1525,7 @@ void CPrintESCP::EndPrint()
 	}
 
 	ReleaseFont();
+	ReleaseLinePen();
 }
 
 bool CPrintESCP::Write(UINT8 data)
@@ -1383,6 +1612,10 @@ void CPrintESCP::Render(int count)
 {
 	float lastPosX = m_state.posX;
 	float lastPosY = m_state.posY;
+	bool completeLine = false;
+
+	// m_stateからm_renderstateへ事前計算データを代入
+	m_renderstate.charBaseLineOffset = m_state.charBaseLineOffset;
 
 	// 前回のレンダリング完了時の状態に戻す
 	m_state = m_renderstate;
@@ -1401,10 +1634,16 @@ void CPrintESCP::Render(int count)
 			COMMANDFUNC_RESULT cmdResult = cmdfunc(this, cmdList[i], true);
 			if (cmdResult == COMMANDFUNC_RESULT_OVERFLOWLINE || cmdResult == COMMANDFUNC_RESULT_COMPLETELINE ||
 				cmdResult == COMMANDFUNC_RESULT_OVERFLOWPAGE || cmdResult == COMMANDFUNC_RESULT_COMPLETEPAGE) {
+				completeLine = true;
 				// グラフィック印字があれば描画
 				RenderGraphic();
 			}
 		}
+	}
+
+	// 行描画終わりならベースラインオフセットをクリア
+	if (completeLine) {
+		m_state.charBaseLineOffset = 0;
 	}
 
 	// 座標だけは元の値の方を信用する
@@ -1625,6 +1864,31 @@ void CPrintESCP::UpdateFontSize()
 	if (m_gdiobj.fontbase) m_gdiobj.oldfont = (HFONT)SelectObject(m_hdc, m_gdiobj.fontbase);
 
 	UpdateFont();
+}
+
+void CPrintESCP::ReleaseLinePen()
+{
+	if (m_gdiobj.penLine) DeleteObject(m_gdiobj.penLine);
+	m_gdiobj.penLine = NULL;
+}
+
+void CPrintESCP::UpdateLinePen()
+{
+	if (m_state.linemode == m_gdiobj.lastlinemode &&
+		m_state.color == m_gdiobj.lastlinecolor) return;
+
+	ReleaseLinePen();
+
+	if (m_state.linemode != ESCP_LINEMODE_OFF) {
+		m_gdiobj.penLine = CreatePen(
+			(m_state.linemode == ESCP_LINEMODE_SINGLEDOT || m_state.linemode == ESCP_LINEMODE_DOUBLEDOT) ? PS_DASH : PS_SOLID,
+			(int)ceil(m_state.CalcDotPitchY() * m_dpiY),
+			ColorCodeToColorRef(m_state.color)
+		);
+	}
+
+	m_gdiobj.lastlinemode = m_state.linemode;
+	m_gdiobj.lastlinecolor = m_state.color;
 }
 
 #endif /* SUPPORT_PRINT_ESCP */

@@ -81,6 +81,10 @@ typedef struct {
 	float topMargin; // 上マージン幅 インチ単位
 
 	bool isKanji; // 漢字(2byte)モードかどうか
+	bool isRotHalf; // 半角縦描画モードかどうか
+	bool isKumimoji; // 組文字モードかどうか（自動解除）
+	UINT8 kumimojiBuf[2]; // 組文字用バッファ
+	int kumimojiBufIdx; // 組文字用バッファ位置
 
 	PRINT_PR201_CODEMODE codemode; // 8bit/7bitコードモード（PRINT_PR201_CHARMODEの解釈が変わる）
 
@@ -92,6 +96,7 @@ typedef struct {
 	bool downloadCharMode; // ダウンロード文字印字モード
 	int charScaleX; // 文字スケールX
 	int charScaleY; // 文字スケールY
+	float charBaseLineOffset; // 文字ベースラインオフセット 縦倍角印刷でずれる
 	float lpi; // lines per inch
 	bool bold; // 太字
 	int lineselect; // 下線・上線選択
@@ -124,6 +129,9 @@ typedef struct {
 		topMargin = 0; // 上マージン幅 インチ単位
 
 		isKanji = false;
+		isRotHalf = false;
+		isKumimoji = false;
+		kumimojiBufIdx = 0;
 
 		codemode = PRINT_PR201_CODEMODE_8BIT;
 
@@ -135,6 +143,7 @@ typedef struct {
 		downloadCharMode = false;
 		charScaleX = 1;
 		charScaleY = 1;
+		charBaseLineOffset = 0;
 		lpi = 6;
 		bold = false;
 		lineselect = 1;
@@ -225,10 +234,10 @@ public:
 			}
 		}
 		if (m_state.mode == PRINT_PR201_PRINTMODE_Q) { // コンデンス
-			charWidth *= 0.6;
+			charWidth *= 10.0 / 17;
 		}
 		else if (m_state.mode == PRINT_PR201_PRINTMODE_E) { // エリート
-			charWidth *= 0.8;
+			charWidth *= 10.0 / 12;
 		}
 		else if (m_state.mode == PRINT_PR201_PRINTMODE_P) { // プロポーショナル XXX; 本当は字の幅が可変
 			charWidth *= 0.9;

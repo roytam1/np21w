@@ -37,6 +37,8 @@ static void trace_fmt_exw(const WCHAR* fmt, ...)
 
 	static REG8 lastData = 0xff;
 	static REG8 i44Data = 0x00;
+	static int selectBusyFlag = 0;
+	static int selectCounter = 0;
 
 // ---- I/O
 
@@ -51,6 +53,18 @@ static void IOOUTCALL prt_o40(UINT port, REG8 dat) {
 	}
 	prt->write(prt, (UINT8)dat);
 	lastData = dat;
+	if (lastData == 0x11) { // DC1 Select
+		// WORKAROUND: 制御文字でDC1 Selectを連続で送ってきているときはBUSYを一時的に立てる。本当はプリンタコマンドのSELECTに応答すべき？
+		if (selectCounter > 5) {
+			selectBusyFlag = 1;
+		}
+		else {
+			selectCounter++;
+		}
+	}
+	else {
+		selectCounter = 0;
+	}
 	TRACEOUT(("prt %.3x - %.2x", port, dat));
 	(void)port;
 }
@@ -92,8 +106,13 @@ static REG8 IOINPCALL prt_i42(UINT port) {
 			ret |= 0x02;
 		}
 	}
+	if (selectBusyFlag) {
+		// Selectすると一瞬だけBusyが立つ（負論理なのでビットは0になる）らしい
+		ret &= ~0x04;
+		selectBusyFlag = 0;
+	}
 	(void)port;
-	return(ret);
+	return(ret); // 0x04 Low PWR ON
 }
 static REG8 IOINPCALL prt_i44(UINT port) {
 
@@ -291,6 +310,7 @@ void printif_reset(const NP2CFG *pConfig) {
 	cm_prt = NULL;
 
 	// 適当な初期値
+	selectBusyFlag = 0;
 	prtIEEE_data = 0xff;
 	prtIEEE_status = 0x00;
 	prtIEEE_control = 0x00;

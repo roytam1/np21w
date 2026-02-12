@@ -11,6 +11,7 @@
 #include	<process.h>
 
 #include	"pccore.h"
+#include	"ini.h"
 #include	"iocore.h"
 #include	"cpucore.h"
 #if defined(SUPPORT_IA32_HAXM)
@@ -193,6 +194,7 @@ void hostdrvNT_invokeMonitorChangeFS()
 /// </summary>
 void hostdrvNT_updateHDrvRoot(void)
 {
+	TCHAR cfghdrvroot[MAX_PATH + 1] = { 0 };
 	int slen;
 
 	// パス長さが制限オーバーならエラー
@@ -203,13 +205,38 @@ void hostdrvNT_updateHDrvRoot(void)
 		return;
 	}
 
+	// 相対パスなら絶対パスへ変換
+	if (PathIsRelative(np2cfg.hdrvroot)) {
+		TCHAR pathbuf[MAX_PATH + 1] = { 0 };
+		TCHAR* pathtmp;
+		initgetfile(pathbuf, _countof(pathbuf));
+		pathtmp = _tcsrchr(pathbuf, '\\');
+		if (pathtmp) {
+			*(pathtmp + 1) = 0;
+		}
+		else {
+			pathbuf[0] = 0;
+		}
+		_tcscat(pathbuf, np2cfg.hdrvroot);
+		slen = GetFullPathName(pathbuf, MAX_PATH, cfghdrvroot, NULL);
+		if (slen <= 0 || slen > MAX_PATH) {
+			// 無効
+			s_hdrvRoot[0] = '\0';
+			s_hdrvAcc = 0;
+			return;
+		}
+	}
+	else {
+		file_cpyname(cfghdrvroot, np2cfg.hdrvroot, NELEMENTS(cfghdrvroot));
+	}
+
 	// パス長さが制限オーバーならエラー
 #ifdef UNICODE
 	// 変換不要
-	wcscpy(s_hdrvRoot, np2cfg.hdrvroot);
+	wcscpy(s_hdrvRoot, cfghdrvroot);
 #else
 	// Unicodeへ変換
-	int lengthUnicode = MultiByteToWideChar(CP_ACP, 0, np2cfg.hdrvroot, strlen(np2cfg.hdrvroot) + 1, NULL, 0);
+	int lengthUnicode = MultiByteToWideChar(CP_ACP, 0, cfghdrvroot, strlen(cfghdrvroot) + 1, NULL, 0);
 	if (lengthUnicode < 0 || lengthUnicode > MAX_PATH)
 	{
 		s_hdrvRoot[0] = '\0';
@@ -217,7 +244,7 @@ void hostdrvNT_updateHDrvRoot(void)
 		return;
 	}
 	ZeroMemory(s_hdrvRoot, sizeof(s_hdrvRoot));
-	MultiByteToWideChar(CP_UTF8, 0, np2cfg.hdrvroot, strlen(np2cfg.hdrvroot) + 1, s_hdrvRoot, lengthUnicode);
+	MultiByteToWideChar(CP_UTF8, 0, cfghdrvroot, strlen(cfghdrvroot) + 1, s_hdrvRoot, lengthUnicode);
 #endif
 
 	// 最後の文字が\なら除去

@@ -160,6 +160,12 @@ typedef struct {
 	UINT8	scrscfix; // 画面拡大転送時の補正（0=自動, 1=通常転送, 2=NVDIA向け）
 	UINT8	dirfdlst; // 同じディレクトリにあるFDイメージファイルのリストを表示する
 	UINT8	allports; // 設定でシリアル・パラレルに関係なく任意のポートを選べるようにする
+	TCHAR	prnfontM[MAX_PATH]; // 印刷フォント名（明朝体）
+	TCHAR	prnfontG[MAX_PATH]; // 印刷フォント名（ゴシック体）
+	UINT8	prncfgpp; // 印刷の度に用紙設定を表示する
+
+	UINT16	cpumullst[8]; // CPUクロック倍率リスト
+	UINT16	cpuspdlst[9]; // CPUスピードリスト
 } NP2OSCFG;
 
 

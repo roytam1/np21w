@@ -17,3 +17,4 @@ void sysmenu_update(HMENU hMenu);
 
 void xmenu_initialize(HMENU hMenu);
 void xmenu_update(HMENU hMenu);
+void xmenu_iniupdate(HMENU hMenu);

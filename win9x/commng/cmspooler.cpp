@@ -224,6 +224,8 @@ CComSpooler::CComSpooler()
 	, m_lastData(0)
 	, m_dataCounter(0)
 	, m_jobId(0)
+	, m_lastHasError(false)
+	, m_devmodebuf()
 	, m_hdc(NULL)
 	, m_print(NULL)
 	, m_additionalOfsX(0)
@@ -319,6 +321,52 @@ void CComSpooler::CCStartDocPrinter()
 		di.pOutputFile = nullptr;
 		di.pDatatype = _T("RAW");
 
+		if (np2oscfg.prncfgpp) {
+			TCHAR printerName[MAX_PATH];
+			if (!GetActualPrinterName(m_printerName, printerName)) {
+				goto finalize;
+			}
+			LONG dmsize = DocumentProperties(
+				NULL,
+				m_hPrinter,
+				printerName,
+				NULL,
+				NULL,
+				0
+			);
+			bool devmodebufResized = false;
+			if (m_devmodebuf.size() != dmsize) {
+				// プリンタデータサイズが変わっているならクリア
+				m_devmodebuf.resize(dmsize);
+				devmodebufResized = true;
+			}
+			DEVMODE* pDevMode = (DEVMODE*)(&m_devmodebuf[0]);
+			if (devmodebufResized) {
+				// 現在の設定取得
+				DocumentProperties(
+					NULL,
+					m_hPrinter,
+					printerName,
+					pDevMode,
+					NULL,
+					DM_OUT_BUFFER
+				);
+			}
+			if (!AdvancedDocumentProperties(g_hWndMain, m_hPrinter, printerName, pDevMode, pDevMode)) {
+				goto finalize;
+			}
+
+			DWORD dwNeeded;
+			GetPrinter(m_hPrinter, 2, NULL, 0, &dwNeeded);
+			PRINTER_INFO_2 *pi = (PRINTER_INFO_2*)malloc(dwNeeded);
+			if (pi) {
+				GetPrinter(m_hPrinter, 2, (LPBYTE)pi, dwNeeded, &dwNeeded);
+				pi->pDevMode = pDevMode;
+				SetPrinter(m_hPrinter, 2, (LPBYTE)pi, 0);
+				free(pi);
+			}
+		}
+
 		m_jobId = ::StartDocPrinter(m_hPrinter, 1, (LPBYTE)&di);
 		if (m_jobId == 0) {
 			goto finalize;
@@ -349,15 +397,30 @@ void CComSpooler::CCStartDocPrinter()
 			NULL,
 			0
 		);
-		DEVMODE* pDevMode = (DEVMODE*)malloc(dmsize);
-		DocumentProperties(
-			NULL,
-			hPrinter,
-			printerName,
-			pDevMode,
-			NULL,
-			DM_OUT_BUFFER
-		);
+		bool devmodebufResized = false;
+		if (m_devmodebuf.size() != dmsize) {
+			// プリンタデータサイズが変わっているならクリア
+			m_devmodebuf.resize(dmsize);
+			devmodebufResized = true;
+		}
+		DEVMODE* pDevMode = (DEVMODE*)(&m_devmodebuf[0]);
+		if (devmodebufResized) {
+			// 現在の設定取得
+			DocumentProperties(
+				NULL,
+				hPrinter,
+				printerName,
+				pDevMode,
+				NULL,
+				DM_OUT_BUFFER
+			);
+		}
+		if (np2oscfg.prncfgpp) {
+			if (!AdvancedDocumentProperties(g_hWndMain, hPrinter, printerName, pDevMode, pDevMode)) {
+				ClosePrinter(hPrinter);
+				goto finalize;
+			}
+		}
 		ClosePrinter(hPrinter);
 		//pDevMode->dmFields |= DM_PAPERSIZE | DM_ORIENTATION;
 		//pDevMode->dmPaperSize = DMPAPER_A4;
@@ -366,7 +429,6 @@ void CComSpooler::CCStartDocPrinter()
 		//pDevMode->dmPaperWidth = 1000;
 		//pDevMode->dmPaperLength = 1480;
 		m_hdc = CreateDCW(L"WINSPOOL", printerName, nullptr, pDevMode);
-		free(pDevMode);
 		if (!m_hdc) {
 			goto finalize;
 		}
@@ -635,7 +697,11 @@ INTPTR CComSpooler::Message(UINT nMessage, INTPTR nParam)
 			}
 
 			if (nParam) {
-				SetConfigurations((COMCFG*)nParam);
+				COMCFG* newParam = (COMCFG*)nParam;
+				if (_tcscmp(newParam->spoolPrinterName, m_printerName) != 0) {
+					m_devmodebuf.clear();
+				}
+				SetConfigurations(newParam);
 			}
 
 			LeaveCriticalSection(&m_csPrint);
@@ -675,7 +741,7 @@ void CComSpooler::CCStartPrint()
 		dpiX *= m_scale;
 		dpiY *= m_scale;
 	}
-
+	
 	m_print->StartPrint(m_hdc, pageoffsetx + pagescaleoffsetx, pageoffsety + pagescaleoffsety, physWidth, physHeight, dpiX, dpiY, m_dotscale, m_rectdot);
 
 	m_requestNewPage = false;

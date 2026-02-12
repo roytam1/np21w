@@ -81,6 +81,7 @@ struct tagProfileItem
 };
 typedef struct tagProfileItem	PFTBL;		/*!< defines handle */
 
+#define PFLST(k, f, a)		{OEMTEXT(k), f, a, NELEMENTS(a)}			/*!< macro:list */
 #define PFSTR(k, f, a)		{OEMTEXT(k), f, a, NELEMENTS(a)}			/*!< macro:string */
 #define PFVAL(k, f, a)		{OEMTEXT(k), f, a, 0}						/*!< macro:value */
 #define PFMAX(k, f, a, v)	{OEMTEXT(k), f | PFFLAG_MAX, a, v}			/*!< macro:max */

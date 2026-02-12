@@ -79,6 +79,8 @@ private:
 	DWORD m_jobId;					/*!< プリンタジョブID */
 	bool m_lastHasError;			/*!< プリンタオープン等に失敗 */
 
+	std::vector<UINT8> m_devmodebuf; /*!< プリンタ設定保持用バッファ */
+
 	// プリンタエミュレーション用
 	CPrintBase *m_print;			/*!< プリンタエミュレーション */
 

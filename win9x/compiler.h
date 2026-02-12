@@ -233,6 +233,8 @@ typedef long	FILELEN;
 #define	MEMORY_MAXSIZE		230
 #endif
 
+#define CPU_MULTIPLE_MAX	2048
+
 
 #if (_MSC_VER >= 1400)
 #if defined _M_IX86

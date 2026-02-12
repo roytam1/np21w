@@ -73,6 +73,7 @@ private:
 	CWndProc m_nudfiletimeout;		//!< File dump timeout
 	CComboData m_cmbspname;			//!< Printer name
 	CWndProc m_nudsptimeout;		//!< Spooler timeout
+	CWndProc m_chkspcfg;			//!< Spooler show config
 	CComboData m_cmbspemumode;		//!< Spooler emulation mode
 	CWndProc m_nudspemu_dotsize;	//!< Spooler emulation dot size
 	CWndProc m_chkspemu_rectdot;	//!< Spooler emulation rectangle dot mode
@@ -304,6 +305,8 @@ BOOL SerialOptComPage::OnInitDialog()
 	m_cmbspname.SetWindowText(m_cfg.spoolPrinterName);
 	m_nudsptimeout.SubclassDlgItem(IDC_COM1SPOOLERTIMEOUT, this);
 	_stprintf(numbuf, _T("%d"), m_cfg.spoolTimeout);
+	m_chkspcfg.SubclassDlgItem(IDC_COM1SPOOLERCFG, this);
+	CheckDlgButton(IDC_COM1SPOOLERCFG, (np2oscfg.prncfgpp) ? BST_CHECKED : BST_UNCHECKED);
 	m_nudsptimeout.SetWindowTextW(numbuf);
 	m_cmbspemumode.SetWindowText(m_cfg.spoolPrinterName);
 	m_cmbspemumode.SubclassDlgItem(IDC_COM1SPOOLEREMUMODE, this);
@@ -484,6 +487,12 @@ void SerialOptComPage::OnOK()
 	if (m_cfg.fileTimeout != fileTimeout)
 	{
 		m_cfg.fileTimeout = fileTimeout;
+		nUpdated |= SYS_UPDATEOSCFG;
+	}
+	const UINT8 spoolShowConfig = (IsDlgButtonChecked(IDC_COM1SPOOLERCFG) != BST_UNCHECKED) ? 1 : 0;
+	if (np2oscfg.prncfgpp != spoolShowConfig)
+	{
+		np2oscfg.prncfgpp = spoolShowConfig;
 		nUpdated |= SYS_UPDATEOSCFG;
 	}
 
@@ -725,7 +734,7 @@ void SerialOptComPage::UpdateControls()
 	// Spooler
 	static const UINT spooler[] =
 	{
-		IDC_COM1SPOOLERNAME, IDC_COM1SPOOLERTIMEOUT, IDC_COM1SPOOLERTIMEOUTSPIN, IDC_COM1SPOOLEREMUMODE, 
+		IDC_COM1SPOOLERNAME, IDC_COM1SPOOLERTIMEOUT, IDC_COM1SPOOLERTIMEOUTSPIN, IDC_COM1SPOOLERCFG, IDC_COM1SPOOLEREMUMODE,
 		IDC_COM1SPOOLEREMU_DOTSIZE, IDC_COM1SPOOLEREMU_RECTDOT,
 		IDC_COM1SPOOLEREMU_OFFSETX, IDC_COM1SPOOLEREMU_OFFSETY, IDC_COM1SPOOLEREMU_SCALE,
 		IDC_COM1SPOOLERSTR00, IDC_COM1SPOOLERSTR01, IDC_COM1SPOOLERSTR02, IDC_COM1SPOOLERSTR03, IDC_COM1SPOOLERSTR04,

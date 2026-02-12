@@ -320,13 +320,18 @@ void xmenu_update(HMENU hMenu)
 	
 	// Emulate
 	CheckMenuItem(hMenu, IDM_PAUSE, MF_BYCOMMAND | MFCHECK(np2userpause));
-	CheckMenuItem(hMenu, IDM_EMULSPEED_50, MF_BYCOMMAND | MFCHECK(np2cfg.emuspeed == 50));
-	CheckMenuItem(hMenu, IDM_EMULSPEED_75, MF_BYCOMMAND | MFCHECK(np2cfg.emuspeed == 75));
-	CheckMenuItem(hMenu, IDM_EMULSPEED_100, MF_BYCOMMAND | MFCHECK(np2cfg.emuspeed == 100));
-	CheckMenuItem(hMenu, IDM_EMULSPEED_150, MF_BYCOMMAND | MFCHECK(np2cfg.emuspeed == 150));
-	CheckMenuItem(hMenu, IDM_EMULSPEED_200, MF_BYCOMMAND | MFCHECK(np2cfg.emuspeed == 200));
-	CheckMenuItem(hMenu, IDM_EMULSPEED_400, MF_BYCOMMAND | MFCHECK(np2cfg.emuspeed == 400));
-	CheckMenuItem(hMenu, IDM_EMULSPEED_800, MF_BYCOMMAND | MFCHECK(np2cfg.emuspeed == 800));
+	for (int i = IDM_CHANGECLK_BEGIN; i <= IDM_CHANGECLK_END; i++) {
+		// CPU MULTIPLE
+		UINT16 mul = np2oscfg.cpumullst[i - IDM_CHANGECLK_BEGIN];
+		if (mul < 1 || CPU_MULTIPLE_MAX < mul) break;
+		CheckMenuItem(hMenu, i, MF_BYCOMMAND | MFCHECK(pccore.maxmultiple == mul));
+	}
+	for (int i = IDM_EMULSPEED_BEGIN; i <= IDM_EMULSPEED_END; i++) {
+		// CPU SPEED
+		UINT16 speed = np2oscfg.cpuspdlst[i - IDM_EMULSPEED_BEGIN];
+		if (!speed) break;
+		CheckMenuItem(hMenu, i, MF_BYCOMMAND | MFCHECK(np2cfg.emuspeed == speed));
+	}
 	
 	// Screen
 	const bool bFullScreen = ((g_scrnmode & SCRNMODE_FULLSCREEN) != 0);
@@ -540,4 +545,61 @@ void xmenu_update(HMENU hMenu)
 	EnableMenuItem(hMenu, IDM_HOSTDRVOPT, MF_GRAYED);
 #endif
 	
+}
+
+/**
+ * メニュー状態を更新する（INI変更時）
+ * @param[in] hMenu メニュー ハンドル
+ */
+void xmenu_iniupdate(HMENU hMenu)
+{
+	// CPU MULTIPLE
+	if (np2oscfg.cpumullst[0]) {
+		HMENU hMenuTgt;
+		int hMenuTgtPos;
+		if (!menu_searchmenu(hMenu, IDM_CHANGECLK_RESTORE, &hMenuTgt, &hMenuTgtPos)) return;
+
+		for (int i = IDM_CHANGECLK_BEGIN; i <= IDM_CHANGECLK_END; i++) {
+			DeleteMenu(hMenuTgt, i, MF_BYCOMMAND);
+		}
+		OEMCHAR menuText[128];
+		for (int i = IDM_CHANGECLK_BEGIN; i <= IDM_CHANGECLK_END; i++) {
+			UINT16 mul = np2oscfg.cpumullst[i - IDM_CHANGECLK_BEGIN];
+			if (mul < 1 || CPU_MULTIPLE_MAX < mul) break;
+			_stprintf(menuText, OEMTEXT("x%d"), mul);
+			InsertMenu(hMenuTgt, i - IDM_CHANGECLK_BEGIN, MF_BYPOSITION, i, menuText);
+			if (pccore.maxmultiple == mul) {
+				CheckMenuItem(hMenu, i, MF_BYCOMMAND | MF_CHECKED);
+			}
+		}
+	}
+	// CPU SPEED
+	if (np2oscfg.cpuspdlst[0]) {
+		HMENU hMenuTgt;
+		int hMenuTgtPos;
+		if (!menu_searchmenu(hMenu, IDM_EMULSPEED_BEGIN, &hMenuTgt, &hMenuTgtPos)) return;
+
+		for (int i = IDM_EMULSPEED_BEGIN; i <= IDM_EMULSPEED_END; i++) {
+			DeleteMenu(hMenuTgt, i, MF_BYCOMMAND);
+		}
+		OEMCHAR menuText[128];
+		for (int i = IDM_EMULSPEED_BEGIN; i <= IDM_EMULSPEED_END; i++) {
+			UINT16 speed = np2oscfg.cpuspdlst[i - IDM_EMULSPEED_BEGIN];
+			if (!speed) break;
+			_stprintf(menuText, OEMTEXT("x%.2f"), speed / 100.0f);
+			int idx = _tcslen(menuText) - 1;
+			while (menuText[idx] == '0') {
+				menuText[idx] = '\0';
+				idx--;
+			}
+			if (menuText[idx] == '.') menuText[idx] = '\0';
+			if (speed == 100) {
+				_tcscat(menuText, OEMTEXT(" (Normal)"));
+			}
+			InsertMenu(hMenuTgt, -1, MF_BYPOSITION, i, menuText);
+			if (np2cfg.emuspeed == speed) {
+				CheckMenuItem(hMenu, i, MF_BYCOMMAND | MF_CHECKED);
+			}
+		}
+	}
 }

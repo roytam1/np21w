@@ -195,6 +195,7 @@
 #define IDC_COM1SPOOLEREMUMODE_RAW      14155
 #define IDC_COM1SPOOLEREMUMODE_PR201    14156
 #define IDC_COM1SPOOLEREMUMODE_ESCP     14157
+#define IDC_COM1SPOOLERCFG              14158
 #define IDC_PC9861E                     14201
 #define IDC_CH1SPEED                    14202
 #define IDC_CH1INT                      14203
@@ -635,6 +636,7 @@
 #define IDM_NEWDISKFD                   40108
 #define IDM_NEWDISKHD                   40109
 #define IDM_PAUSE                       40110
+#define IDM_CHANGECLK_BEGIN             40111
 #define IDM_CHANGECLK_X2                40111
 #define IDM_CHANGECLK_X8                40112
 #define IDM_CHANGECLK_X16               40113
@@ -642,7 +644,10 @@
 #define IDM_CHANGECLK_X42               40115
 #define IDM_CHANGECLK_X52               40116
 #define IDM_CHANGECLK_X62               40117
+#define IDM_CHANGECLK_USER1             40118
+#define IDM_CHANGECLK_END               40118
 #define IDM_CHANGECLK_RESTORE           40119
+#define IDM_EMULSPEED_BEGIN             40121
 #define IDM_EMULSPEED_50                40121
 #define IDM_EMULSPEED_75                40122
 #define IDM_EMULSPEED_100               40123
@@ -650,6 +655,9 @@
 #define IDM_EMULSPEED_200               40125
 #define IDM_EMULSPEED_400               40126
 #define IDM_EMULSPEED_800               40127
+#define IDM_EMULSPEED_USER1             40128
+#define IDM_EMULSPEED_USER2             40129
+#define IDM_EMULSPEED_END				40129
 #define IDM_FLAGSAVE                    40201
 #define IDM_FLAGSAVE0                   40201
 #define IDM_FLAGSAVE1                   40202

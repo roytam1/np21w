@@ -276,9 +276,9 @@ static void pccore_set(const NP2CFG *pConfig)
 	{
 		multiple = 1;
 	}
-	else if (multiple > 2048)
+	else if (multiple > CPU_MULTIPLE_MAX)
 	{
-		multiple = 2048;
+		multiple = CPU_MULTIPLE_MAX;
 	}
 	pccore.multiple = multiple;
 	pccore.maxmultiple = pccore.multiple;

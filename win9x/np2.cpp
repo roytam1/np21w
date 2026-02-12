@@ -216,7 +216,10 @@ static	TCHAR		szClassName[] = _T("NP2-MainWindow");
 						1,
 #endif	// defined(SUPPORT_MULTITHREAD)
 						0, 200,
-						1, 0, 1, 0
+						1, 0, 1, 0,
+						OEMTEXT(""), OEMTEXT(""), 1,
+						{2, 8, 16, 30, 42, 52, 62},
+						{50, 75, 100, 150, 200, 400, 800}
 					};
 
 		OEMCHAR		fddfolder[MAX_PATH];
@@ -1031,61 +1034,74 @@ static void OnCommand(HWND hWnd, WPARAM wParam)
 			break;
 
 		case IDM_EMULSPEED_50:
-			np2cfg.emuspeed = 50;
+			np2cfg.emuspeed = np2oscfg.cpuspdlst[0];// 50;
 			timing_setspeed(np2cfg.emuspeed * 128 / 100);
 			update |= SYS_UPDATECFG;
 			break;
 		case IDM_EMULSPEED_75:
-			np2cfg.emuspeed = 75;
+			np2cfg.emuspeed = np2oscfg.cpuspdlst[1];// 75;
 			timing_setspeed(np2cfg.emuspeed * 128 / 100);
 			update |= SYS_UPDATECFG;
 			break;
 		case IDM_EMULSPEED_100:
-			np2cfg.emuspeed = 100;
+			np2cfg.emuspeed = np2oscfg.cpuspdlst[2];// 100;
 			timing_setspeed(np2cfg.emuspeed * 128 / 100);
 			update |= SYS_UPDATECFG;
 			break;
 		case IDM_EMULSPEED_150:
-			np2cfg.emuspeed = 150;
+			np2cfg.emuspeed = np2oscfg.cpuspdlst[3];// 150;
 			timing_setspeed(np2cfg.emuspeed * 128 / 100);
 			update |= SYS_UPDATECFG;
 			break;
 		case IDM_EMULSPEED_200:
-			np2cfg.emuspeed = 200;
+			np2cfg.emuspeed = np2oscfg.cpuspdlst[4];// 200;
 			timing_setspeed(np2cfg.emuspeed * 128 / 100);
 			update |= SYS_UPDATECFG;
 			break;
 		case IDM_EMULSPEED_400:
-			np2cfg.emuspeed = 400;
+			np2cfg.emuspeed = np2oscfg.cpuspdlst[5];// 400;
 			timing_setspeed(np2cfg.emuspeed * 128 / 100);
 			update |= SYS_UPDATECFG;
 			break;
 		case IDM_EMULSPEED_800:
-			np2cfg.emuspeed = 800;
+			np2cfg.emuspeed = np2oscfg.cpuspdlst[6];// 800;
+			timing_setspeed(np2cfg.emuspeed * 128 / 100);
+			update |= SYS_UPDATECFG;
+			break;
+		case IDM_EMULSPEED_USER1:
+			np2cfg.emuspeed = np2oscfg.cpuspdlst[7];
+			timing_setspeed(np2cfg.emuspeed * 128 / 100);
+			update |= SYS_UPDATECFG;
+			break;
+		case IDM_EMULSPEED_USER2:
+			np2cfg.emuspeed = np2oscfg.cpuspdlst[8];
 			timing_setspeed(np2cfg.emuspeed * 128 / 100);
 			update |= SYS_UPDATECFG;
 			break;
 
 		case IDM_CHANGECLK_X2:
-			np2_DynamicChangeClockMul(2);
+			np2_DynamicChangeClockMul(np2oscfg.cpumullst[0]);
 			break;
 		case IDM_CHANGECLK_X8:
-			np2_DynamicChangeClockMul(8);
+			np2_DynamicChangeClockMul(np2oscfg.cpumullst[1]);
 			break;
 		case IDM_CHANGECLK_X16:
-			np2_DynamicChangeClockMul(16);
+			np2_DynamicChangeClockMul(np2oscfg.cpumullst[2]);
 			break;
 		case IDM_CHANGECLK_X30:
-			np2_DynamicChangeClockMul(30);
+			np2_DynamicChangeClockMul(np2oscfg.cpumullst[3]);
 			break;
 		case IDM_CHANGECLK_X42:
-			np2_DynamicChangeClockMul(42);
+			np2_DynamicChangeClockMul(np2oscfg.cpumullst[4]);
 			break;
 		case IDM_CHANGECLK_X52:
-			np2_DynamicChangeClockMul(52);
+			np2_DynamicChangeClockMul(np2oscfg.cpumullst[5]);
 			break;
 		case IDM_CHANGECLK_X62:
-			np2_DynamicChangeClockMul(62);
+			np2_DynamicChangeClockMul(np2oscfg.cpumullst[6]);
+			break;
+		case IDM_CHANGECLK_USER1:
+			np2_DynamicChangeClockMul(np2oscfg.cpumullst[7]);
 			break;
 		case IDM_CHANGECLK_RESTORE:
 			np2_DynamicChangeClockMul(np2cfg.multiple);
@@ -3978,6 +3994,7 @@ void loadNP2INI(const OEMCHAR *fname){
 	
 	HMENU hMenu = np2class_gethmenu(hWnd);
 	//xmenu_initialize(hMenu); // ‘Î‰ž–Ê“|‚­‚³‚¢
+	xmenu_iniupdate(hMenu);
 	xmenu_update(hMenu);
 	if (file_attr_c(np2help) == -1)								// ver0.30
 	{
@@ -4432,6 +4449,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInst,
 
 	HMENU hMenu = np2class_gethmenu(hWnd);
 	xmenu_initialize(hMenu);
+	xmenu_iniupdate(hMenu);
 	xmenu_update(hMenu);
 	if (file_attr_c(np2help) == -1)								// ver0.30
 	{

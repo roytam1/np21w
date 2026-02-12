@@ -32,6 +32,8 @@
 
 #ifdef SUPPORT_PRINT_PR201
 
+#include "np2.h"
+
 #include "pmpr201.h"
 #include "codecnv/codecnv.h"
 
@@ -702,16 +704,16 @@ static COMMANDFUNC_RESULT pmpr201_PutChar(void* param, const PRINTCMD_DATA& data
 		// ¬F‚Í‚¹‚¸‚±‚±‚Å•`‰æ
 		if (render) {
 			int x = owner->m_offsetXPixel + owner->m_state.leftMargin * owner->m_dpiX + owner->m_state.posX;
-			if (owner->m_state.mode == PRINT_PR201_PRINTMODE_t) {
-				GLYPHMETRICS gm = {0};
-				MAT2 mat = { {0,1},{0,0},{0,0},{0,1} }; // identity
-				DWORD r = GetGlyphOutline(owner->m_hdc, *buf, GGO_METRICS, &gm, 0, nullptr, &mat);
-				if (r != GDI_ERROR)
-				{
-					// BlackBox•â³
-					x += -gm.gmptGlyphOrigin.x;
-				}
-			}
+			//if (owner->m_state.mode == PRINT_PR201_PRINTMODE_t) {
+			//	GLYPHMETRICS gm = {0};
+			//	MAT2 mat = { {0,1},{0,0},{0,0},{0,1} }; // identity
+			//	DWORD r = GetGlyphOutline(owner->m_hdc, *buf, GGO_METRICS, &gm, 0, nullptr, &mat);
+			//	if (r != GDI_ERROR)
+			//	{
+			//		// BlackBox•â³
+			//		x += -gm.gmptGlyphOrigin.x;
+			//	}
+			//}
 			if (scaleX != 1 || scaleY != 1) {
 				XFORM xf = { 0 };
 				xf.eM11 = scaleX;  // X”{—¦
@@ -1019,17 +1021,28 @@ void CPrintPR201::StartPrint(HDC hdc, int offsetXPixel, int offsetYPixel, int wi
 	lf.lfWeight = FW_NORMAL;
 	lf.lfCharSet = DEFAULT_CHARSET;
 	lf.lfPitchAndFamily = FIXED_PITCH | FF_MODERN;
-	lstrcpyW(lf.lfFaceName, _T("MS Mincho"));
+	if (np2oscfg.prnfontM && _tcslen(np2oscfg.prnfontM) > 0) {
+		lstrcpy(lf.lfFaceName, np2oscfg.prnfontM);
+	}
+	else {
+		lstrcpy(lf.lfFaceName, _T("MS Mincho"));
+	}
 	m_gdiobj.fontbase = CreateFontIndirect(&lf);
 
-	lstrcpyW(lf.lfFaceName, _T("@MS Mincho"));
-	m_gdiobj.fontrot90 = CreateFontIndirect(&lf);
-
-	lstrcpyW(lf.lfFaceName, _T("MS Mincho"));
 	lf.lfWeight = FW_BOLD;
 	m_gdiobj.fontbold = CreateFontIndirect(&lf);
 
-	lstrcpyW(lf.lfFaceName, _T("@MS Mincho"));
+	lstrcpy(lf.lfFaceName, _T("@"));
+	if (np2oscfg.prnfontM && _tcslen(np2oscfg.prnfontM) > 0) {
+		lstrcat(lf.lfFaceName, np2oscfg.prnfontM);
+	}
+	else {
+		lstrcat(lf.lfFaceName, _T("MS Mincho"));
+	}
+	lf.lfWeight = FW_NORMAL;
+	m_gdiobj.fontrot90 = CreateFontIndirect(&lf);
+
+	lf.lfWeight = FW_BOLD;
 	m_gdiobj.fontboldrot90 = CreateFontIndirect(&lf);
 
 	m_gdiobj.oldfont = nullptr;

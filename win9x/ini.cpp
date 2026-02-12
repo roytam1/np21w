@@ -912,6 +912,12 @@ static const PFTBL s_IniItems[] =
 	PFVAL("dirfdlst", PFRO_BOOL,		&np2oscfg.dirfdlst), // 同じディレクトリにあるFDイメージファイルのリストを表示する
 	PFVAL("allports", PFRO_BOOL,		&np2oscfg.allports), // 設定でシリアル・パラレルに関係なく任意のポートを選べるようにする
 
+	PFSTR("prnfontM", PFRO_STR,			np2oscfg.prnfontM), // 印刷フォント名（明朝体）
+	PFSTR("prnfontG", PFRO_STR,			np2oscfg.prnfontG), // 印刷フォント名（ゴシック体）
+	PFVAL("prncfgpp", PFTYPE_BOOL,		&np2oscfg.prncfgpp), // 印刷の度に用紙設定を表示する
+
+	PFLST("CPUMMENU", PFTYPE_ARGS16,	np2oscfg.cpumullst), // CPUクロック倍率リスト
+	PFLST("CPUSMENU", PFTYPE_ARGS16,	np2oscfg.cpuspdlst), // CPUスピードリスト
 };
 
 //! .ini 拡張子

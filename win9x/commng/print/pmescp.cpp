@@ -32,6 +32,8 @@
 
 #ifdef SUPPORT_PRINT_ESCP
 
+#include "np2.h"
+
 #include "pmescp.h"
 #include "codecnv/codecnv.h"
 
@@ -519,6 +521,7 @@ static COMMANDFUNC_RESULT pmescp_CommandESCHVSkip(void* param, const PRINTCMD_DA
 		}
 		return COMMANDFUNC_RESULT_COMPLETELINE;
 	}
+	return COMMANDFUNC_RESULT_OK;
 }
 
 static COMMANDFUNC_RESULT pmescp_CommandESCSetLineSpacing1_8(void* param, const PRINTCMD_DATA& data, bool render) {
@@ -953,16 +956,16 @@ static COMMANDFUNC_RESULT pmescp_PutChar(void* param, const PRINTCMD_DATA& data,
 	owner->m_state.posX += charOffsetLeft;
 	if (render) {
 		int x = (owner->m_offsetXPixel + owner->m_state.posX);
-		if (owner->m_state.isRotKanji) {
-			GLYPHMETRICS gm = {0};
-			MAT2 mat = { {0,1},{0,0},{0,0},{0,1} }; // identity
-			DWORD r = GetGlyphOutline(owner->m_hdc, *buf, GGO_METRICS, &gm, 0, nullptr, &mat);
-			if (r != GDI_ERROR)
-			{
-				// BlackBox•â³
-				x += -gm.gmptGlyphOrigin.x;
-			}
-		}
+		//if (owner->m_state.isRotKanji) {
+		//	GLYPHMETRICS gm = {0};
+		//	MAT2 mat = { {0,1},{0,0},{0,0},{0,1} }; // identity
+		//	DWORD r = GetGlyphOutline(owner->m_hdc, *buf, GGO_METRICS, &gm, 0, nullptr, &mat);
+		//	if (r != GDI_ERROR)
+		//	{
+		//		// BlackBox•â³
+		//		x += -gm.gmptGlyphOrigin.x;
+		//	}
+		//}
 		if (scaleX != 1 || scaleY != 1) {
 			XFORM xf = { 0 };
 			xf.eM11 = scaleX;  // X”{—¦
@@ -1576,11 +1579,15 @@ void CPrintESCP::UpdateFontSize()
 	ReleaseFont();
 
 	LOGFONT lf = { 0 };
+	lf.lfFaceName[0] = '\0';
 	if (m_state.isRotKanji) {
-		lstrcpyW(lf.lfFaceName, _T("@MS Mincho"));
+		lstrcpy(lf.lfFaceName, _T("@"));
+	}
+	if (np2oscfg.prnfontM && _tcslen(np2oscfg.prnfontM) > 0) {
+		lstrcat(lf.lfFaceName, np2oscfg.prnfontM);
 	}
 	else {
-		lstrcpyW(lf.lfFaceName, _T("MS Mincho"));
+		lstrcat(lf.lfFaceName, _T("MS Mincho"));
 	}
 	lf.lfHeight = -MulDiv(m_state.charPoint, m_dpiY, 72);
 	lf.lfWeight = FW_NORMAL;
@@ -1596,11 +1603,15 @@ void CPrintESCP::UpdateFontSize()
 
 	lf.lfItalic = FALSE;
 	lf.lfWeight = FW_NORMAL;
+	lf.lfFaceName[0] = '\0';
 	if (m_state.isRotKanji) {
-		lstrcpyW(lf.lfFaceName, _T("@MS Gothic"));
+		lstrcpy(lf.lfFaceName, _T("@"));
+	}
+	if (np2oscfg.prnfontG && _tcslen(np2oscfg.prnfontG) > 0) {
+		lstrcat(lf.lfFaceName, np2oscfg.prnfontG);
 	}
 	else {
-		lstrcpyW(lf.lfFaceName, _T("MS Gothic"));
+		lstrcat(lf.lfFaceName, _T("MS Gothic"));
 	}
 	m_gdiobj.fontSansSerif = CreateFontIndirect(&lf);
 	lf.lfWeight = FW_BOLD;

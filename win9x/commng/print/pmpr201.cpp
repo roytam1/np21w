@@ -102,6 +102,8 @@ typedef enum {
 
 typedef COMMANDFUNC_RESULT (*PFNPRINTCMD_COMMANDFUNC)(void* param, const PRINTCMD_DATA& data, bool render);
 
+static COMMANDFUNC_RESULT pmpr201_PutChar(void* param, const PRINTCMD_DATA& data, bool render);
+
 static COMMANDFUNC_RESULT pmpr201_CommandVFU(void* param, const PRINTCMD_DATA& data, bool render) {
 	CPrintPR201* owner = (CPrintPR201*)param;
 
@@ -168,6 +170,7 @@ static COMMANDFUNC_RESULT pmpr201_CommandLF(void* param, const PRINTCMD_DATA& da
 #endif
 	owner->m_state.posY += owner->m_state.actualLineHeight;
 	owner->m_state.actualLineHeight = 0;
+	owner->m_state.maxCharScaleY = 1;
 	if (owner->CheckOverflowPage(0)) {
 		owner->m_state.posY -= owner->m_heightPixel;
 		return COMMANDFUNC_RESULT_COMPLETEPAGE;
@@ -333,10 +336,28 @@ static COMMANDFUNC_RESULT pmpr201_CommandESCe(void* param, const PRINTCMD_DATA& 
 
 static COMMANDFUNC_RESULT pmpr201_CommandESCR(void* param, const PRINTCMD_DATA& data, bool render) {
 	CPrintPR201* owner = (CPrintPR201*)param;
-	int scaleX = data.data[0] - '0';
-	int scaleY = data.data[1] - '0';
-	if (1 <= scaleX && scaleX <= 9) owner->m_state.charScaleX = scaleX;
-	if (1 <= scaleY && scaleY <= 9) owner->m_state.charScaleY = scaleY;
+
+	COMMANDFUNC_RESULT r;
+
+	int repcount = (data.data[0] - '0') * 100 + (data.data[1] - '0') * 10 + (data.data[2] - '0');
+
+	PRINTCMD_DATA repdata;
+	repdata.cmd = nullptr;
+	repdata.data.push_back(data.data[3]);
+	if (owner->m_state.isKanji) {
+		repdata.data.push_back(data.data[4]);
+	}
+	for (int i = 0; i < repcount; i++) {
+		r = pmpr201_PutChar(param, repdata, render);
+		if (r != COMMANDFUNC_RESULT_OK) {
+			if (r == COMMANDFUNC_RESULT_OVERFLOWLINE || r == COMMANDFUNC_RESULT_COMPLETELINE) {
+				return COMMANDFUNC_RESULT_COMPLETELINE;
+			}
+			if (r == COMMANDFUNC_RESULT_OVERFLOWPAGE || r == COMMANDFUNC_RESULT_COMPLETEPAGE) {
+				return COMMANDFUNC_RESULT_COMPLETEPAGE;
+			}
+		}
+	}
 	return COMMANDFUNC_RESULT_OK;
 }
 
@@ -380,7 +401,7 @@ static COMMANDFUNC_RESULT pmpr201_CommandESCDotSpace(void* param, const PRINTCMD
 #ifdef DEBUG_LINE
 	if (render) {
 		MoveToEx(owner->m_hdc, owner->m_state.posX, owner->m_offsetYPixel + owner->m_state.posY, NULL);
-		LineTo(owner->m_hdc, owner->m_state.posX, owner->m_offsetYPixel + owner->m_state.posY + owner->m_state.actualLineHeight * owner->m_dpiY);
+		LineTo(owner->m_hdc, owner->m_state.posX, owner->m_offsetYPixel + owner->m_state.posY + owner->m_state.actualLineHeight);
 	}
 #endif
 	if (owner->CheckOverflowLine(0)) {
@@ -497,6 +518,9 @@ static COMMANDFUNC_RESULT pmpr201_CommandESCGraph(void* param, const PRINTCMD_DA
 	owner->m_state.hasGraphic = true;
 	owner->m_state.graphicPosY = owner->m_state.posY; // グラフィック描画Y座標を記憶
 
+	// ページに何か印刷されているフラグを立てる
+	owner->m_state.hasPrintDataInPage = true;
+
 	return COMMANDFUNC_RESULT_OK;
 }
 
@@ -556,6 +580,22 @@ static COMMANDFUNC_RESULT pmpr201_CommandESCT(void* param, const PRINTCMD_DATA& 
 	const int value = (data.data[0] - '0') * 10 + (data.data[1] - '0');
 	owner->m_state.lpi = 120.0f / value;
 	return COMMANDFUNC_RESULT_OK;
+}
+
+static COMMANDFUNC_RESULT pmpr201_CommandESCa(void* param, const PRINTCMD_DATA& data, bool render) {
+	CPrintPR201* owner = (CPrintPR201*)param;
+	if (!owner->m_state.hasPrintDataInPage) {
+		return COMMANDFUNC_RESULT_OK; // 何も印刷されていなければ無視
+	}
+	return pmpr201_CommandFF(param, data, render);
+}
+
+static COMMANDFUNC_RESULT pmpr201_CommandESCb(void* param, const PRINTCMD_DATA& data, bool render) {
+	CPrintPR201* owner = (CPrintPR201*)param;
+	if (!owner->m_state.hasPrintDataInPage) {
+		return COMMANDFUNC_RESULT_OK; // 何も印刷されていなければ無視
+	}
+	return pmpr201_CommandFF(param, data, render);
 }
 
 static COMMANDFUNC_RESULT pmpr201_CommandESCC(void* param, const PRINTCMD_DATA& data, bool render) {
@@ -633,9 +673,9 @@ static COMMANDFUNC_RESULT pmpr201_PutChar(void* param, const PRINTCMD_DATA& data
 	owner->m_state.posX += owner->m_state.dotsp_left * pitchX;
 
 	float lineHeight = owner->CalcActualLineHeight();
-	if (owner->CheckOverflowPage(lineHeight)) {
+	if (owner->CheckOverflowPage(pitchY * 24)) {
 		owner->m_state.posY = 0;
-		return owner->CheckOverflowPage(lineHeight) ? COMMANDFUNC_RESULT_COMPLETEPAGE : COMMANDFUNC_RESULT_OVERFLOWPAGE;
+		return owner->CheckOverflowPage(pitchY * 24) ? COMMANDFUNC_RESULT_COMPLETEPAGE : COMMANDFUNC_RESULT_OVERFLOWPAGE;
 	}
 	float scaleX = owner->m_state.charScaleX;
 	float scaleY = owner->m_state.charScaleY;
@@ -651,6 +691,11 @@ static COMMANDFUNC_RESULT pmpr201_PutChar(void* param, const PRINTCMD_DATA& data
 	charWidth *= scaleX;
 	if (owner->CheckOverflowLine(charWidth)) {
 		owner->m_state.posX = 0;
+		pmpr201_CommandLF(param, data, render);
+		if (owner->CheckOverflowPage(0)) {
+			owner->m_state.posY = 0;
+			return owner->CheckOverflowPage(0) ? COMMANDFUNC_RESULT_COMPLETEPAGE : COMMANDFUNC_RESULT_OVERFLOWPAGE;
+		}
 		return COMMANDFUNC_RESULT_OVERFLOWLINE;
 	}
 	if (owner->m_state.isSelect) {
@@ -689,14 +734,14 @@ static COMMANDFUNC_RESULT pmpr201_PutChar(void* param, const PRINTCMD_DATA& data
 				int dotsize = (float)pitchX;
 				dotsize *= owner->m_state.linep3 / 2;
 				HPEN hOldPen = (HPEN)SelectObject(owner->m_hdc, owner->m_gdiobj.penline);
-				int ypos = 0;
+				int ypos = owner->m_state.posY;
 				if (owner->m_state.lineselect == 1) {
 					// 下線
-					ypos = owner->m_offsetYPixel + owner->m_state.topMargin * owner->m_dpiY + owner->m_dpiY / owner->m_state.lpi - dotsize / 2;
+					ypos += owner->m_offsetYPixel + owner->m_state.topMargin * owner->m_dpiY + owner->m_dpiY / owner->m_state.lpi - dotsize / 2;
 				}
 				else if (owner->m_state.lineselect == 2) {
 					// 上線
-					ypos = owner->m_offsetYPixel + owner->m_state.topMargin * owner->m_dpiY + dotsize / 2;
+					ypos += owner->m_offsetYPixel + owner->m_state.topMargin * owner->m_dpiY + dotsize / 2;
 				}
 				MoveToEx(owner->m_hdc, owner->m_offsetXPixel + owner->m_state.leftMargin * owner->m_dpiX + lineBeginX, ypos, NULL);
 				LineTo(owner->m_hdc, owner->m_offsetXPixel + owner->m_state.leftMargin * owner->m_dpiX + lineEndX, ypos);
@@ -705,9 +750,16 @@ static COMMANDFUNC_RESULT pmpr201_PutChar(void* param, const PRINTCMD_DATA& data
 		}
 
 		owner->m_state.actualLineHeight = lineHeight;
+		if (owner->m_state.maxCharScaleY < owner->m_state.charScaleY) {
+			owner->m_state.maxCharScaleY = owner->m_state.charScaleY;
+		}
 	}
 	owner->m_state.posX += charWidth;
 	owner->m_state.posX += owner->m_state.dotsp_right * pitchX;
+
+	// ページに何か印刷されているフラグを立てる
+	owner->m_state.hasPrintDataInPage = true;
+
 	return COMMANDFUNC_RESULT_OK;
 }
 
@@ -763,7 +815,7 @@ static PRINTCMD_DEFINE s_commandTablePR201[] = {
 	PRINTCMD_DEFINE_FIXEDLEN("\x1b""s", 1, pmpr201_CommandESCScriptMode), // スクリプト文字モード設定
 
 	PRINTCMD_DEFINE_FIXEDLEN("\x1b""+", 3 + 72, NULL), // 外字24x24登録
-	PRINTCMD_DEFINE_FIXEDLEN("\x1b""+", 3 + 32, NULL), // 外字16x16登録
+	PRINTCMD_DEFINE_FIXEDLEN("\x1b""*", 3 + 32, NULL), // 外字16x16登録
 	PRINTCMD_DEFINE_FIXEDLEN_V("\x1b""l", 6, NULL), // ダウンロード文字の登録　複雑なのでVariableLengthCallback使用
 	PRINTCMD_DEFINE_FIXEDLEN("\x1b""l+", 0, pmpr201_CommandESCDownloadCharMode), // ダウンロード文字印字
 	PRINTCMD_DEFINE_FIXEDLEN("\x1b""l-", 0, pmpr201_CommandESCDownloadCharMode), // プリンタ内蔵文字印字
@@ -819,10 +871,6 @@ static PRINTCMD_DEFINE s_commandTablePR201[] = {
 
 	PRINTCMD_DEFINE_FIXEDLEN("\x1b""h", 1, NULL), // 半角文字縦印字
 	PRINTCMD_DEFINE_FIXEDLEN("\x1b""q", 0, NULL), // 半角文字組文字縦印字
-	PRINTCMD_DEFINE_FIXEDLEN("\x1b""h1", 0, NULL), // 半角文字縦印字
-	PRINTCMD_DEFINE_FIXEDLEN("\x1b""h1", 0, NULL), // 半角文字縦印字
-	PRINTCMD_DEFINE_FIXEDLEN("\x1b""h1", 0, NULL), // 半角文字縦印字
-	PRINTCMD_DEFINE_FIXEDLEN("\x1b""h1", 0, NULL), // 半角文字縦印字
 
 	PRINTCMD_DEFINE_FIXEDLEN("\x1b""A", 0, pmpr201_CommandESCA), // 1/6インチ改行モード
 	PRINTCMD_DEFINE_FIXEDLEN("\x1b""B", 0, pmpr201_CommandESCB), // 1/8インチ改行モード
@@ -831,8 +879,8 @@ static PRINTCMD_DEFINE s_commandTablePR201[] = {
 	PRINTCMD_DEFINE_FIXEDLEN("\x1b""f", 0, NULL), // 順方向改行モード
 	PRINTCMD_DEFINE_FIXEDLEN("\x1b""r", 0, NULL), // 逆方向改行モード
 
-	PRINTCMD_DEFINE_FIXEDLEN("\x1b""a", 0, NULL), // 全排出後全吸入
-	PRINTCMD_DEFINE_FIXEDLEN("\x1b""b", 0, NULL), // 全排出
+	PRINTCMD_DEFINE_FIXEDLEN("\x1b""a", 0, pmpr201_CommandESCa), // 全排出後全吸入
+	PRINTCMD_DEFINE_FIXEDLEN("\x1b""b", 0, pmpr201_CommandESCb), // 全排出
 
 	PRINTCMD_DEFINE_FIXEDLEN("\x1b""f", 4, NULL), // ホッパ切り替え
 		
@@ -1158,7 +1206,7 @@ void CPrintPR201::Render(int count)
 	}
 
 	// 行高さをクリア
-	m_state.actualLineHeight = 0; 
+	m_state.actualLineHeight = 0;
 
 	// 座標だけは元の値の方を信用する
 	// そうしないと何かの拍子にm_stateとm_renderstateが食い違ったときに無限ループしたりするので危険
@@ -1228,6 +1276,7 @@ PRINT_COMMAND_RESULT CPrintPR201::DoCommand()
 				cmdList.erase(cmdList.begin(), cmdList.begin() + m_cmdIndex);
 				m_cmdIndex = 0;
 				m_lastNewLine = false;
+				m_state.hasPrintDataInPage = false;
 				return PRINT_COMMAND_RESULT_COMPLETEPAGE;
 			}
 			else if (cmdResult == COMMANDFUNC_RESULT_RENDERLINE) {

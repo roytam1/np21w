@@ -108,8 +108,10 @@ typedef struct {
 	float fontsize; // フォントサイズポイント単位　実質横が縮小するだけで、縦は10.8ptのまま
 	float kanjiwidth; // 漢字幅 インチ単位
 
+	bool hasPrintDataInPage; // ページに何らかの印字があるかどうか
 	bool hasGraphic; // グラフィック印字があるかどうか
 	float graphicPosY; // グラフィックの描画位置Y pixel
+	int maxCharScaleY; // 文字スケールY 行内最大値
 
 	void SetDefault()
 	{
@@ -133,7 +135,7 @@ typedef struct {
 		downloadCharMode = false;
 		charScaleX = 1;
 		charScaleY = 1;
-		lpi = 1.0 / 6;
+		lpi = 6;
 		bold = false;
 		lineselect = 1;
 		linep1 = 'S';
@@ -149,8 +151,10 @@ typedef struct {
 		fontsize = 10.8;
 		kanjiwidth = 3.0 / 20;
 
+		hasPrintDataInPage = false;
 		hasGraphic = false;
 		graphicPosY = 0;
+		maxCharScaleY = 1;
 	}
 } PRINT_PR201_STATE;
 
@@ -204,7 +208,7 @@ public:
 		return m_dpiY / 6; // 1/6 inch で1行
 	}
 	double CalcLineHeight() {
-		return m_dpiY / m_state.lpi; // 設定されている行の高さ
+		return m_dpiY / m_state.lpi * m_state.maxCharScaleY; // 設定されている行の高さ
 	}
 	double CalcActualLineHeight() {
 		return max(m_state.actualLineHeight, CalcLineHeight()); // 設定されている行の高さ

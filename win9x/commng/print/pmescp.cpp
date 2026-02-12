@@ -267,12 +267,15 @@ static COMMANDFUNC_RESULT pmescp_CommandESCSetPageFormat(void* param, const PRIN
 
 static COMMANDFUNC_RESULT pmescp_CommandESCSetPageLengthLines(void* param, const PRINTCMD_DATA& data, bool render) {
 	CPrintESCP* owner = (CPrintESCP*)param;
-	if (data.data[0] != 0) {
-		owner->m_state.pagelength = data.data[0] * owner->m_state.linespacing;
-	}
-	else {
-		owner->m_state.pagelength = data.data[1];
-	}
+	owner->m_state.pagelength = data.data[0] * owner->m_state.linespacing;
+	owner->m_state.topMargin = 0;
+	owner->m_state.bottomMargin = 0;
+	return COMMANDFUNC_RESULT_OK;
+}
+
+static COMMANDFUNC_RESULT pmescp_CommandESCSetPageLengthInch(void* param, const PRINTCMD_DATA& data, bool render) {
+	CPrintESCP* owner = (CPrintESCP*)param;
+	owner->m_state.pagelength = data.data[0];
 	owner->m_state.topMargin = 0;
 	owner->m_state.bottomMargin = 0;
 	return COMMANDFUNC_RESULT_OK;
@@ -1017,7 +1020,8 @@ static PRINTCMD_DEFINE s_commandTableESCP[] = {
 	// ägí£êßå‰ÉRÅ[Éh ESC
 	PRINTCMD_DEFINE_FIXEDLEN("\x1b""(C", 4, pmescp_CommandESCSetPageLengthDefinedUnit),
 	PRINTCMD_DEFINE_FIXEDLEN("\x1b""(c", 6, pmescp_CommandESCSetPageFormat),
-	PRINTCMD_DEFINE_FIXEDLEN_NEX("\x1b""C", 1, pmescp_CommandESCSetPageLengthLines),
+	PRINTCMD_DEFINE_FIXEDLEN("\x1b""C", 1, pmescp_CommandESCSetPageLengthLines),
+	PRINTCMD_DEFINE_FIXEDLEN("\x1b""C\0", 1, pmescp_CommandESCSetPageLengthInch),
 	PRINTCMD_DEFINE_FIXEDLEN("\x1b""N", 1, pmescp_CommandESCSetBottomMargin),
 	PRINTCMD_DEFINE_FIXEDLEN("\x1b""O", 0, pmescp_CommandESCCancelBottomMargin),
 	PRINTCMD_DEFINE_FIXEDLEN("\x1b""Q", 1, pmescp_CommandESCSetRightMargin),

@@ -70,10 +70,6 @@ bool PrinterCommandParser::PushByte(UINT8 data)
 		m_dataRemain--;
 		if (m_dataRemain <= 0) {
 			if (!m_addLengthChecked){
-				// コマンドの次がnullなら拡張
-				if (m_cmddef->nullextend && m_buffer[m_cmddef->cmdlen] == '\0') {
-					m_dataRemain++;
-				}
 				// 可変長コールバックは読めるだけ読んでから送る
 				if (m_cmddef->varlength && m_variableLengthCallback) {
 					m_dataRemain += (*m_variableLengthCallback)(m_callbackParam, *m_cmddef, m_buffer); // 加算
@@ -103,13 +99,44 @@ bool PrinterCommandParser::PushByte(UINT8 data)
 	const int bufLen = m_buffer.size();
 	int bufPos = 0;
 	UINT8 cmd = m_buffer[0];
+	int partialMatchCount = 0;
+	int matchMaxLen = 0;
+	for (std::vector<PRINTCMD_DEFINE>::iterator it = m_commandTable.begin(); it != m_commandTable.end(); ++it) {
+		bufPos = 0;
+
+		// コマンド一致を確認
+		bool match = true;
+		UINT8* lpCmds = it->cmd;
+		int cmdlen = it->cmdlen;
+		for (int i = 0; i < cmdlen; i++) {
+			if (bufPos == bufLen) {
+				// 一致しているが途中で終わっている
+				partialMatchCount++;
+			}
+			if (it->cmd[bufPos] != m_buffer[bufPos]) {
+				match = false;
+				break;
+			}
+			bufPos++;
+		}
+		if (match) {
+			if (matchMaxLen < cmdlen) {
+				matchMaxLen = cmdlen;
+			}
+		}
+	}
+	if (partialMatchCount > 0) {
+		// 部分一致の候補があるなら様子見
+		return false;
+	}
 	for (std::vector<PRINTCMD_DEFINE>::iterator it = m_commandTable.begin(); it != m_commandTable.end(); ++it) {
 		bufPos = 0;
 
 		// コマンド一致を確認
 		bool match = true;
 		UINT8 *lpCmds = it->cmd;
-		int cmdlen = it->cmdlen;
+		int cmdlen = it->cmdlen; 
+		if (cmdlen < matchMaxLen) continue; // 一致長さ最大のものだけ採用
 		for (int i = 0; i < cmdlen; i++) {
 			if (bufPos == bufLen) return false; // 一致しているが途中で終わっている場合は次ヘ回す
 			if (it->cmd[bufPos] != m_buffer[bufPos]) {

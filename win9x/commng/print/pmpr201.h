@@ -105,6 +105,9 @@ typedef struct {
 	bool copymode; // コピーモード
 	int color; // 色
 
+	float fontsize; // フォントサイズポイント単位　実質横が縮小するだけで、縦は10.8ptのまま
+	float kanjiwidth; // 漢字幅 インチ単位
+
 	bool hasGraphic; // グラフィック印字があるかどうか
 	float graphicPosY; // グラフィックの描画位置Y pixel
 
@@ -142,6 +145,9 @@ typedef struct {
 		dotsp_right = 0;
 		copymode = false;
 		color = 0;
+
+		fontsize = 10.8;
+		kanjiwidth = 3.0 / 20;
 
 		hasGraphic = false;
 		graphicPosY = 0;
@@ -204,10 +210,16 @@ public:
 		return max(m_state.actualLineHeight, CalcLineHeight()); // 設定されている行の高さ
 	}
 	double CalcCPI() {
-		return 14;
+		return 1 / (10.8 / 72 / 2);
 	}
-	double CalcCurrentLetterWidth() {
+	double CalcCurrentLetterWidth(bool isKanji = false) {
 		float charWidth = (float)m_dpiX / CalcCPI();
+		if (isKanji) {
+			charWidth *= m_state.fontsize / 10.8;
+			if (charWidth < m_dpiX * m_state.kanjiwidth / 2) {
+				charWidth = m_dpiX * m_state.kanjiwidth / 2 * 0.98;
+			}
+		}
 		if (m_state.mode == PRINT_PR201_PRINTMODE_Q) { // コンデンス
 			charWidth *= 0.6;
 		}

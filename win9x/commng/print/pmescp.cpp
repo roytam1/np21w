@@ -68,6 +68,31 @@ static unsigned short jis_to_sjis(unsigned short jis)
 	return (UINT16)((UINT16)s1 << 8 | s2);
 }
 
+//// 実際の混色
+//static COLORREF ColorCodeToColorRef(UINT8 colorCode)
+//{
+//	switch (colorCode) {
+//	case 0:
+//		return RGB(0, 0, 0);
+//	case 1:
+//		return RGB(40, 60, 120);
+//	case 2:
+//		return RGB(150, 60, 40);
+//	case 3:
+//		return RGB(200, 70, 140);
+//	case 4:
+//		return RGB(50, 110, 60);
+//	case 5:
+//		return RGB(0, 160, 175);
+//	case 6:
+//		return RGB(245, 235, 50);
+//	case 7:
+//		return RGB(255, 255, 255);
+//	}
+//	return RGB(0, 0, 0);
+//}
+
+// 理想的な色
 static COLORREF ColorCodeToColorRef(UINT8 colorCode)
 {
 	switch (colorCode) {
@@ -922,8 +947,19 @@ static COMMANDFUNC_RESULT pmescp_PutChar(void* param, const PRINTCMD_DATA& data,
 	}
 	// 混色はせずここで描画
 	charWidth -= charOffsetLeft;
+	owner->m_state.posX += charOffsetLeft;
 	if (render) {
-		int yOfsEx = owner->m_state.isRotKanji ? (owner->m_dpiY * owner->m_state.charPoint / 72) : 0;
+		int x = (owner->m_offsetXPixel + owner->m_state.posX);
+		if (owner->m_state.isRotKanji) {
+			GLYPHMETRICS gm = {0};
+			MAT2 mat = { {0,1},{0,0},{0,0},{0,1} }; // identity
+			DWORD r = GetGlyphOutline(owner->m_hdc, *buf, GGO_METRICS, &gm, 0, nullptr, &mat);
+			if (r != GDI_ERROR)
+			{
+				// BlackBox補正
+				x += -gm.gmptGlyphOrigin.x;
+			}
+		}
 		if (scaleX != 1 || scaleY != 1) {
 			XFORM xf = { 0 };
 			xf.eM11 = scaleX;  // X倍率
@@ -933,11 +969,11 @@ static COMMANDFUNC_RESULT pmescp_PutChar(void* param, const PRINTCMD_DATA& data,
 			xf.eDy = 0.0f;
 
 			SetWorldTransform(owner->m_hdc, &xf);
-			TextOut(owner->m_hdc, (owner->m_offsetXPixel + owner->m_state.posX) / xf.eM11, (owner->m_offsetYPixel + owner->m_state.posY + yOfsEx) / xf.eM22, buf, 1);
+			TextOut(owner->m_hdc, x / xf.eM11, (owner->m_offsetYPixel + owner->m_state.posY) / xf.eM22, buf, 1);
 			ModifyWorldTransform(owner->m_hdc, nullptr, MWT_IDENTITY);
 		}
 		else {
-			TextOut(owner->m_hdc, owner->m_offsetXPixel + owner->m_state.posX, owner->m_offsetYPixel + owner->m_state.posY + yOfsEx, buf, 1);
+			TextOut(owner->m_hdc, x, owner->m_offsetYPixel + owner->m_state.posY, buf, 1);
 		}
 	}
 	owner->m_state.posX += charWidth;
@@ -1199,7 +1235,7 @@ void CPrintESCP::StartPrint(HDC hdc, int offsetXPixel, int offsetYPixel, int wid
 	m_lastNewLine = false;
 	m_lastNewPage = false;
 
-	const float dotPitch = m_dpiX * m_state.CalcDotPitchX();
+	const float dotPitch = m_dpiX * 1.0 / 360; // バッファは有り得る最小のピッチで用意
 	m_colorbuf_w = (int)ceil(widthPixel / dotPitch);
 	m_colorbuf_h = 24;
 	m_colorbuf = new UINT8[m_colorbuf_w * m_colorbuf_h];
@@ -1537,14 +1573,15 @@ void CPrintESCP::UpdateFontSize()
 
 	LOGFONT lf = { 0 };
 	if (m_state.isRotKanji) {
-		lf.lfEscapement = 900;
-		lf.lfOrientation = 900;
+		lstrcpyW(lf.lfFaceName, _T("@MS Mincho"));
+	}
+	else {
+		lstrcpyW(lf.lfFaceName, _T("MS Mincho"));
 	}
 	lf.lfHeight = -MulDiv(m_state.charPoint, m_dpiY, 72);
 	lf.lfWeight = FW_NORMAL;
 	lf.lfCharSet = DEFAULT_CHARSET;
 	lf.lfPitchAndFamily = FIXED_PITCH | FF_MODERN;
-	lstrcpyW(lf.lfFaceName, _T("MS Mincho"));
 	m_gdiobj.fontbase = CreateFontIndirect(&lf);
 	lf.lfWeight = FW_BOLD;
 	m_gdiobj.fontBoldbase = CreateFontIndirect(&lf);
@@ -1555,7 +1592,12 @@ void CPrintESCP::UpdateFontSize()
 
 	lf.lfItalic = FALSE;
 	lf.lfWeight = FW_NORMAL;
-	lstrcpyW(lf.lfFaceName, _T("MS Gothic"));
+	if (m_state.isRotKanji) {
+		lstrcpyW(lf.lfFaceName, _T("@MS Gothic"));
+	}
+	else {
+		lstrcpyW(lf.lfFaceName, _T("MS Gothic"));
+	}
 	m_gdiobj.fontSansSerif = CreateFontIndirect(&lf);
 	lf.lfWeight = FW_BOLD;
 	m_gdiobj.fontBoldSansSerif = CreateFontIndirect(&lf);

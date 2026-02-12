@@ -35,6 +35,8 @@
 #include "pmpr201.h"
 #include "codecnv/codecnv.h"
 
+//#define DEBUG_LINE
+
 static unsigned short jis_to_sjis(unsigned short jis)
 {
 	UINT8 j1 = (UINT8)(jis >> 8);
@@ -155,6 +157,15 @@ static COMMANDFUNC_RESULT pmpr201_CommandLF(void* param, const PRINTCMD_DATA& da
 	if (owner->m_state.actualLineHeight == 0) {
 		owner->m_state.actualLineHeight = owner->CalcLineHeight(); // 行に何もない場合は現在設定の行高さとする
 	}
+#ifdef DEBUG_LINE
+	if (render) {
+		TCHAR txt[32];
+		_stprintf(txt, _T("h%.2f G%d"), owner->m_state.actualLineHeight, owner->m_state.hasGraphic);
+		TextOut(owner->m_hdc, 0, owner->m_offsetYPixel + owner->m_state.posY, txt, _tcslen(txt));
+		MoveToEx(owner->m_hdc, 0, owner->m_offsetYPixel + owner->m_state.posY, NULL);
+		LineTo(owner->m_hdc, owner->m_widthPixel, owner->m_offsetYPixel + owner->m_state.posY);
+	}
+#endif
 	owner->m_state.posY += owner->m_state.actualLineHeight;
 	owner->m_state.actualLineHeight = 0;
 	if (owner->CheckOverflowPage(0)) {
@@ -183,6 +194,18 @@ static COMMANDFUNC_RESULT pmpr201_CommandVT(void* param, const PRINTCMD_DATA& da
 
 static COMMANDFUNC_RESULT pmpr201_CommandFF(void* param, const PRINTCMD_DATA& data, bool render) {
 	CPrintPR201* owner = (CPrintPR201*)param;
+	if (owner->m_state.actualLineHeight == 0) {
+		owner->m_state.actualLineHeight = owner->CalcLineHeight(); // 行に何もない場合は現在設定の行高さとする
+	}
+#ifdef DEBUG_LINE
+	if (render) {
+		TCHAR txt[32];
+		_stprintf(txt, _T("h%.2f G%d"), owner->m_state.actualLineHeight, owner->m_state.hasGraphic);
+		TextOut(owner->m_hdc, 0, owner->m_offsetYPixel + owner->m_state.posY, txt, _tcslen(txt));
+		MoveToEx(owner->m_hdc, 0, owner->m_offsetYPixel + owner->m_state.posY, NULL);
+		LineTo(owner->m_hdc, owner->m_widthPixel, owner->m_offsetYPixel + owner->m_state.posY);
+	}
+#endif
 	owner->m_state.posY = 0;
 	return COMMANDFUNC_RESULT_COMPLETEPAGE;
 }
@@ -354,6 +377,12 @@ static COMMANDFUNC_RESULT pmpr201_CommandESCLineEnable(void* param, const PRINTC
 static COMMANDFUNC_RESULT pmpr201_CommandESCDotSpace(void* param, const PRINTCMD_DATA& data, bool render) {
 	CPrintPR201* owner = (CPrintPR201*)param;
 	owner->m_state.posX += owner->CalcDotPitchX() * data.cmd->cmd[1]; // * owner->m_state.charScaleX;
+#ifdef DEBUG_LINE
+	if (render) {
+		MoveToEx(owner->m_hdc, owner->m_state.posX, owner->m_offsetYPixel + owner->m_state.posY, NULL);
+		LineTo(owner->m_hdc, owner->m_state.posX, owner->m_offsetYPixel + owner->m_state.posY + owner->m_state.actualLineHeight * owner->m_dpiY);
+	}
+#endif
 	if (owner->CheckOverflowLine(0)) {
 		pmpr201_CommandLF(param, data, render);
 		if (owner->CheckOverflowPage(0)) {
@@ -384,6 +413,13 @@ static COMMANDFUNC_RESULT pmpr201_CommandESCGraph(void* param, const PRINTCMD_DA
 		owner->m_state.posX = 0;
 		return COMMANDFUNC_RESULT_OVERFLOWLINE;
 	}
+
+#ifdef DEBUG_LINE
+	if (render) {
+		MoveToEx(owner->m_hdc, owner->m_state.posX, owner->m_offsetYPixel + owner->m_state.posY, NULL);
+		LineTo(owner->m_hdc, owner->m_state.posX, owner->m_offsetYPixel + owner->m_state.posY + owner->CalcLineHeight());
+	}
+#endif
 
 	// 混色が必要なのでバッファにためておき行が終わったときに描画
 	if (render) {
@@ -549,6 +585,16 @@ static COMMANDFUNC_RESULT pmpr201_CommandFSw(void* param, const PRINTCMD_DATA& d
 	return COMMANDFUNC_RESULT_OK;
 }
 
+static COMMANDFUNC_RESULT pmpr201_CommandFSFontSize(void* param, const PRINTCMD_DATA& data, bool render) {
+	CPrintPR201* owner = (CPrintPR201*)param;
+	UINT32 val = (data.data[0] - '0') * 100 + (data.data[1] - '0') * 10 + (data.data[2] - '0');
+	if (val == 120) owner->m_state.fontsize = 12.0;
+	if (val == 108 || val == 105) owner->m_state.fontsize = 10.8;
+	if (val == 96 || val == 95) owner->m_state.fontsize = 9.6;
+	if (val == 72 || val == 70) owner->m_state.fontsize = 7.2;
+	return COMMANDFUNC_RESULT_OK;
+}
+
 static COMMANDFUNC_RESULT pmpr201_CommandESCc1(void* param, const PRINTCMD_DATA& data, bool render) {
 	CPrintPR201* owner = (CPrintPR201*)param;
 	owner->m_state.SetDefault();
@@ -557,23 +603,25 @@ static COMMANDFUNC_RESULT pmpr201_CommandESCc1(void* param, const PRINTCMD_DATA&
 
 static COMMANDFUNC_RESULT pmpr201_PutChar(void* param, const PRINTCMD_DATA& data, bool render) {
 	CPrintPR201* owner = (CPrintPR201*)param;
-	float charWidth = owner->CalcCurrentLetterWidth();
+	float charWidth;
 	TCHAR buf[3] = { 0 };
 	UINT8 th[3] = { 0 };
 	if (owner->m_state.isKanji) {
 		if (data.data[0] == 0) {
 			// 実質1バイト文字
 			th[0] = data.data[1];
+			charWidth = owner->CalcCurrentLetterWidth();
 		}
 		else {
 			UINT16 sjis = jis_to_sjis(data.data[0] << 8 | data.data[1]);
 			th[0] = sjis >> 8;
 			th[1] = sjis & 0xff;
-			charWidth *= 2;
+			charWidth = owner->CalcCurrentLetterWidth(true) * 2;
 		}
 	}
 	else {
 		th[0] = data.data[0];
+		charWidth = owner->CalcCurrentLetterWidth();
 	}
 	UINT16 thw[2];
 	codecnv_sjistoucs2(thw, 1, (const char*)th, 2);
@@ -608,7 +656,17 @@ static COMMANDFUNC_RESULT pmpr201_PutChar(void* param, const PRINTCMD_DATA& data
 	if (owner->m_state.isSelect) {
 		// 混色はせずここで描画
 		if (render) {
-			int yOfsEx = owner->m_state.mode == PRINT_PR201_PRINTMODE_t ? (owner->m_dpiY / owner->m_state.lpi) : 0;
+			int x = owner->m_offsetXPixel + owner->m_state.leftMargin * owner->m_dpiX + owner->m_state.posX;
+			if (owner->m_state.mode == PRINT_PR201_PRINTMODE_t) {
+				GLYPHMETRICS gm = {0};
+				MAT2 mat = { {0,1},{0,0},{0,0},{0,1} }; // identity
+				DWORD r = GetGlyphOutline(owner->m_hdc, *buf, GGO_METRICS, &gm, 0, nullptr, &mat);
+				if (r != GDI_ERROR)
+				{
+					// BlackBox補正
+					x += -gm.gmptGlyphOrigin.x;
+				}
+			}
 			if (scaleX != 1 || scaleY != 1) {
 				XFORM xf = { 0 };
 				xf.eM11 = scaleX;  // X倍率
@@ -618,11 +676,11 @@ static COMMANDFUNC_RESULT pmpr201_PutChar(void* param, const PRINTCMD_DATA& data
 				xf.eDy = 0.0f;
 
 				SetWorldTransform(owner->m_hdc, &xf);
-				TextOut(owner->m_hdc, (owner->m_offsetXPixel + owner->m_state.leftMargin * owner->m_dpiX + owner->m_state.posX) / xf.eM11, (owner->m_offsetYPixel + owner->m_state.topMargin * owner->m_dpiY + owner->m_state.posY + yOfsEx) / xf.eM22, buf, 1);
+				TextOut(owner->m_hdc, x / xf.eM11, (owner->m_offsetYPixel + owner->m_state.topMargin * owner->m_dpiY + owner->m_state.posY) / xf.eM22, buf, 1);
 				ModifyWorldTransform(owner->m_hdc, nullptr, MWT_IDENTITY);
 			}
 			else {
-				TextOut(owner->m_hdc, owner->m_offsetXPixel + owner->m_state.leftMargin * owner->m_dpiX + owner->m_state.posX, owner->m_offsetYPixel + owner->m_state.topMargin * owner->m_dpiY + owner->m_state.posY + yOfsEx, buf, 1);
+				TextOut(owner->m_hdc, x, owner->m_offsetYPixel + owner->m_state.topMargin * owner->m_dpiY + owner->m_state.posY, buf, 1);
 			}
 			if (owner->m_state.lineenable) {
 				float lineBeginX = owner->m_state.posX - owner->m_state.dotsp_left * pitchX;
@@ -798,7 +856,7 @@ static PRINTCMD_DEFINE s_commandTablePR201[] = {
 	PRINTCMD_DEFINE_FIXEDLEN("\x1c""F", 0, NULL), // 文字サイズ7pt　漢字1/10
 	PRINTCMD_DEFINE_FIXEDLEN("\x1c""G", 0, NULL), // 文字サイズ12pt　漢字1/6
 	PRINTCMD_DEFINE_TERMINATOR("\x1c""p", '.', NULL), // 漢字文字幅
-	PRINTCMD_DEFINE_FIXEDLEN("\x1c""04S", 3, NULL), // 漢字文字サイズ
+	PRINTCMD_DEFINE_FIXEDLEN("\x1c""04S", 3, pmpr201_CommandFSFontSize), // 漢字文字サイズ
 	PRINTCMD_DEFINE_FIXEDLEN("\x1c""06F", 5, NULL), // 文字フォント選択
 	PRINTCMD_DEFINE_TERMINATOR("\x1c""c", '.', NULL), // 文字修飾
 
@@ -907,7 +965,7 @@ void CPrintPR201::StartPrint(HDC hdc, int offsetXPixel, int offsetYPixel, int wi
 	// GDIオブジェクト用意
 	memset(&m_gdiobj, 0, sizeof(m_gdiobj));
 
-	const int fontPx = MulDiv(12, m_dpiY, 72); // 12pt
+	const int fontPx = MulDiv(10.8, m_dpiY, 72); // 10.8pt
 	LOGFONT lf = { 0 };
 	lf.lfHeight = -fontPx;
 	lf.lfWeight = FW_NORMAL;
@@ -916,16 +974,14 @@ void CPrintPR201::StartPrint(HDC hdc, int offsetXPixel, int offsetYPixel, int wi
 	lstrcpyW(lf.lfFaceName, _T("MS Mincho"));
 	m_gdiobj.fontbase = CreateFontIndirect(&lf);
 
-	lf.lfEscapement = 900;
-	lf.lfOrientation = 900;
+	lstrcpyW(lf.lfFaceName, _T("@MS Mincho"));
 	m_gdiobj.fontrot90 = CreateFontIndirect(&lf);
 
-	lf.lfEscapement = 0;
-	lf.lfOrientation = 0;
+	lstrcpyW(lf.lfFaceName, _T("MS Mincho"));
 	lf.lfWeight = FW_BOLD;
 	m_gdiobj.fontbold = CreateFontIndirect(&lf);
-	lf.lfEscapement = 900;
-	lf.lfOrientation = 900;
+
+	lstrcpyW(lf.lfFaceName, _T("@MS Mincho"));
 	m_gdiobj.fontboldrot90 = CreateFontIndirect(&lf);
 
 	m_gdiobj.oldfont = nullptr;

@@ -109,6 +109,7 @@ typedef struct {
 	int dotsp_right; // 右ドットスペース
 	bool copymode; // コピーモード
 	int color; // 色
+	bool isReverseLF; // 逆改行
 
 	float fontsize; // フォントサイズポイント単位　実質横が縮小するだけで、縦は10.8ptのまま
 	float kanjiwidth; // 漢字幅 インチ単位
@@ -156,6 +157,7 @@ typedef struct {
 		dotsp_right = 0;
 		copymode = false;
 		color = 0;
+		isReverseLF = false;
 
 		fontsize = 10.8;
 		kanjiwidth = 3.0 / 20;

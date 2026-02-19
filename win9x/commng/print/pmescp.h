@@ -105,6 +105,7 @@ typedef struct {
 	bool hasGraphic; // グラフィック印字があるかどうか
 	bool isKumimoji; // 組文字モードかどうか（自動解除）
 	UINT8 kumimojiBuf[2]; // 組文字用バッファ
+	bool isReverseLF; // 逆改行
 
 	void SetDefault()
 	{
@@ -164,6 +165,7 @@ typedef struct {
 		isDoubleWidthSingleLine = false;
 		isDoubleHeight = false;
 		isKumimoji = false;
+		isReverseLF = false;
 	}
 
 	double CalcDotPitchX() {

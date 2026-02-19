@@ -208,7 +208,7 @@ static COMMANDFUNC_RESULT pmescp_CommandLF(void* param, const PRINTCMD_DATA& dat
 		LineTo(owner->m_hdc, owner->m_widthPixel, owner->m_offsetYPixel + owner->m_state.posY);
 	}
 #endif
-	owner->m_state.posY += owner->m_state.linespacing * owner->m_dpiY + owner->m_state.charBaseLineOffset;
+	owner->m_state.posY += (owner->m_state.linespacing * owner->m_dpiY + owner->m_state.charBaseLineOffset) * (owner->m_state.isReverseLF ? -1 : +1);
 	owner->m_state.posX = 0;
 	if (owner->m_state.isDoubleWidthSingleLine)
 		owner->m_state.isDoubleWidth = false; {
@@ -816,6 +816,14 @@ static COMMANDFUNC_RESULT pmescp_CommandESCDoubleHeight(void* param, const PRINT
 	return COMMANDFUNC_RESULT_OK;
 }
 
+static COMMANDFUNC_RESULT pmescp_CommandESCPaperLoadEject(void* param, const PRINTCMD_DATA& data, bool render) {
+	CPrintESCP* owner = (CPrintESCP*)param;
+	if (data.data[0] == 'R') {
+		return pmescp_CommandFF(param, data, render);
+	}
+	return COMMANDFUNC_RESULT_OK;
+}
+
 static COMMANDFUNC_RESULT pmescp_CommandESCSelectGraphicMode(void* param, const PRINTCMD_DATA& data, bool render) {
 	CPrintESCP* owner = (CPrintESCP*)param;
 	if (data.data[0] == 1 && data.data[1] == 0 && (data.data[2] == 1 || data.data[2] == 49)) {
@@ -1318,7 +1326,7 @@ static PRINTCMD_DEFINE s_commandTableESCP[] = {
 	PRINTCMD_DEFINE_FIXEDLEN("\x1b""7", 0, NULL),
 	PRINTCMD_DEFINE_FIXEDLEN("\x1b""I", 1, NULL),
 	PRINTCMD_DEFINE_FIXEDLEN("\x1b""m", 1, NULL),
-	PRINTCMD_DEFINE_FIXEDLEN("\x1b""\x19", 1, NULL),
+	PRINTCMD_DEFINE_FIXEDLEN("\x1b""\x19", 1, pmescp_CommandESCPaperLoadEject),
 
 	PRINTCMD_DEFINE_FIXEDLEN("\x1b""U", 1, NULL),
 	PRINTCMD_DEFINE_FIXEDLEN("\x1b""<", 0, NULL),

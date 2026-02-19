@@ -205,7 +205,7 @@ static COMMANDFUNC_RESULT pmpr201_CommandLF(void* param, const PRINTCMD_DATA& da
 		LineTo(owner->m_hdc, owner->m_widthPixel, owner->m_offsetYPixel + owner->m_state.posY);
 	}
 #endif
-	owner->m_state.posY += owner->m_state.actualLineHeight;
+	owner->m_state.posY += owner->m_state.actualLineHeight * (owner->m_state.isReverseLF ? -1 : +1);
 	owner->m_state.actualLineHeight = 0;
 	owner->m_state.maxCharScaleY = 1;
 	if (owner->CheckOverflowPage(0)) {
@@ -224,7 +224,7 @@ static COMMANDFUNC_RESULT pmpr201_CommandHT(void* param, const PRINTCMD_DATA& da
 static COMMANDFUNC_RESULT pmpr201_CommandVT(void* param, const PRINTCMD_DATA& data, bool render) {
 	CPrintPR201* owner = (CPrintPR201*)param;
 	float vtHeight = owner->CalcVFULineHeight() * 6; // TODO: 正式実装が必要 仮で6行毎にタブ
-	owner->m_state.posY = floor((owner->m_state.posY + vtHeight) / vtHeight) * vtHeight;
+	owner->m_state.posY = floor((owner->m_state.posY + vtHeight) / vtHeight) * vtHeight * (owner->m_state.isReverseLF ? -1 : +1);
 	if (owner->CheckOverflowPage(0)) {
 		owner->m_state.posY = 0;
 		return COMMANDFUNC_RESULT_COMPLETEPAGE;
@@ -641,6 +641,18 @@ static COMMANDFUNC_RESULT pmpr201_CommandESCT(void* param, const PRINTCMD_DATA& 
 	return COMMANDFUNC_RESULT_OK;
 }
 
+static COMMANDFUNC_RESULT pmpr201_CommandESCf(void* param, const PRINTCMD_DATA& data, bool render) {
+	CPrintPR201* owner = (CPrintPR201*)param;
+	owner->m_state.isReverseLF = false;
+	return COMMANDFUNC_RESULT_OK;
+}
+
+static COMMANDFUNC_RESULT pmpr201_CommandESCr(void* param, const PRINTCMD_DATA& data, bool render) {
+	CPrintPR201* owner = (CPrintPR201*)param;
+	owner->m_state.isReverseLF = true;
+	return COMMANDFUNC_RESULT_OK;
+}
+
 static COMMANDFUNC_RESULT pmpr201_CommandESCa(void* param, const PRINTCMD_DATA& data, bool render) {
 	CPrintPR201* owner = (CPrintPR201*)param;
 	if (!owner->m_state.hasPrintDataInPage) {
@@ -1019,8 +1031,8 @@ static PRINTCMD_DEFINE s_commandTablePR201[] = {
 	PRINTCMD_DEFINE_FIXEDLEN("\x1b""B", 0, pmpr201_CommandESCB), // 1/8インチ改行モード
 	PRINTCMD_DEFINE_FIXEDLEN("\x1b""T", 2, pmpr201_CommandESCT), // n/120インチ改行モード
 
-	PRINTCMD_DEFINE_FIXEDLEN("\x1b""f", 0, NULL), // 順方向改行モード
-	PRINTCMD_DEFINE_FIXEDLEN("\x1b""r", 0, NULL), // 逆方向改行モード
+	PRINTCMD_DEFINE_FIXEDLEN("\x1b""f", 0, pmpr201_CommandESCf), // 順方向改行モード
+	PRINTCMD_DEFINE_FIXEDLEN("\x1b""r", 0, pmpr201_CommandESCr), // 逆方向改行モード
 
 	PRINTCMD_DEFINE_FIXEDLEN("\x1b""a", 0, pmpr201_CommandESCa), // 全排出後全吸入
 	PRINTCMD_DEFINE_FIXEDLEN("\x1b""b", 0, pmpr201_CommandESCb), // 全排出

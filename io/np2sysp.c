@@ -43,6 +43,8 @@
 
 #include <shlwapi.h>
 
+extern int mouseif_absflag;
+
 // 性能上最適化で優先しない方がいいコードなのでわざと別セグメントに置く
 #pragma code_seg(".MISCCODE")
 
@@ -651,7 +653,7 @@ static void np2sysp_getmpos(const void* arg1, long arg2)
 {
 	OEMCHAR	str[16] = { 0 };
 	int mouseX, mouseY;
-	UINT8 mode = (np2sysp.outval >> 24) & 0xff; // 今は未使用
+	UINT8 mode = (np2sysp.outval >> 24) & 0xff;
 
 	if (mode == 0 || mode == 1 || mode == 2 || mode == 3)
 	{
@@ -677,6 +679,7 @@ static void np2sysp_getmpos(const void* arg1, long arg2)
 				CPU_CX = mouseY; // Y座標
 				CPU_FLAG |= C_FLAG; // 成功ならC_FLAGを立てる
 				OEMSPRINTF(str, OEMTEXT("OK"));
+				mouseif_absflag = 5; // 5回取得分はマウス移動量を微小化
 			}
 			else if (mode == 3)
 			{
@@ -688,6 +691,7 @@ static void np2sysp_getmpos(const void* arg1, long arg2)
 				CPU_DI = btn; // ボタンの状態
 				CPU_FLAG |= C_FLAG; // 成功ならC_FLAGを立てる
 				OEMSPRINTF(str, OEMTEXT("OK"));
+				mouseif_absflag = 5; // 5回取得分はマウス移動量を微小化
 			}
 			else
 			{
@@ -702,6 +706,7 @@ static void np2sysp_getmpos(const void* arg1, long arg2)
 				// 一般向け 強制レジスタ書き換えモード
 				CPU_FLAG &= ~C_FLAG; // 失敗ならC_FLAGを消す
 			}
+			mouseif_absflag = 0; // 相対座標取得なのでabsflag即解除
 			setoutstr(str); // 空文字列（エラー）
 		}
 	}
@@ -714,6 +719,7 @@ static void np2sysp_getmpos(const void* arg1, long arg2)
 		CPU_CX = y; // Y座標
 		CPU_DI = btn; // ボタンの状態
 		CPU_FLAG |= C_FLAG; // 成功ならC_FLAGを立てる
+		mouseif_absflag = 0; // 相対座標取得なのでabsflag即解除
 		OEMSPRINTF(str, OEMTEXT("OK"));
 	}
 	else

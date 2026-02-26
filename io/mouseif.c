@@ -13,6 +13,9 @@
 static int mouseif_limitcounter = 0;
 static int mouseif_test = 0;
 
+// 絶対座標モードと相対座標移動量の食い違い問題を抑制するために、このフラグが0より大きいときはマウス移動量を0にする
+int mouseif_absflag = 0; 
+
 void mouseif_sync(void) {
 
 	// 前回の分を補正
@@ -23,6 +26,23 @@ void mouseif_sync(void) {
 	mouseif.b = mousemng_getstat(&mouseif.sx, &mouseif.sy, 1);
 	if (np2cfg.KEY_MODE == 3) {
 		mouseif.b &= keystat_getmouse(&mouseif.sx, &mouseif.sy);
+	}
+	if (mouseif_absflag > 0) {
+		// マウスカーソルブレ回避のために移動量を0にする
+		if ((mouseif.sx || mouseif.sy)) {
+			// 全く動かないと反応しないことがあるので、1pxぶれさせる
+			int absx = mouseif.sx >= 0 ? mouseif.sx : -mouseif.sx;
+			int absy = mouseif.sy >= 0 ? mouseif.sy : -mouseif.sy;
+			int delta = max(absx, absy);
+			if (delta > 0) {
+				mouseif.sx /= delta;
+				mouseif.sy /= delta;
+			}
+		}
+		else {
+			mouseif.sx = 0;
+			mouseif.sy = 0;
+		}
 	}
 	mouseif.rx = mouseif.sx;
 	mouseif.ry = mouseif.sy;
@@ -207,6 +227,9 @@ static REG8 IOINPCALL mouseif_i7fd9(UINT port) {
 		else {
 			x = mouseif.x;
 			y = mouseif.y;
+		}
+		if (mouseif_absflag > 0) {
+			mouseif_absflag--;
 		}
 		if (portc & 0x40) {
 			x = y;

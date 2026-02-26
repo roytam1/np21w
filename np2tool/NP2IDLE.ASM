@@ -3,7 +3,7 @@
 	USE16
 	CPU		8086
 	
-%define	VERSION_ID		"20251103"
+%define	VERSION_ID		"20260223"
 
 START:			jmp		short setup
 hlthandler:		out		64h, al ; 少なくともVSYNC割り込みが来るようにする
@@ -14,7 +14,7 @@ hlthandler:		out		64h, al ; 少なくともVSYNC割り込みが来るようにする
 				
 org_int28		dd		0
 
-setup:			cld 		; カウンタインクリメント指示
+setup:			cld ; カウンタインクリメント指示
 				push	cs ; CSをスタックに
 				pop		ds ; スタックからDSにセット(CS -> DS)
 				mov		ah, 9 ; $ 終端文字列表示
@@ -35,6 +35,16 @@ setup:			cld 		; カウンタインクリメント指示
 				mov		ax, 2528h
 				mov		dx, hlthandler
 				int		21h
+
+				; ENVは使わないので先に捨ててOK
+				mov		ax, [002ch] ; ENV セグメント取得
+				or		ax, ax
+				jz		.skip_env ; ENVがなかったらスキップ
+				mov		es, ax
+				mov		ax, 4900h
+				int		21h ; ENV 解放
+				mov		word [002ch], 0 ; 一応0にしておく
+.skip_env:
 
 				; 常駐しておしまい
 				mov		ax, 3100h

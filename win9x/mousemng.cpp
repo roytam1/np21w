@@ -58,6 +58,7 @@ static DWORD mousemng_UIthreadID = 0;
 static bool mousemng_requestCreateInput = false;
 static bool mousemng_requestAcquire = false;
 static CRITICAL_SECTION mousemng_multithread_deviceinit_cs = { 0 };
+static CRITICAL_SECTION mousemng_multithread_mousepos_cs = { 0 };
 
 extern UINT8	np2userpause;
 
@@ -148,19 +149,19 @@ UINT8 mousemng_getabspos(int* x, int* y)
 		mousemng.y = 0;
 	}
 #endif
-	np2_multithread_EnterCriticalSection();
+	EnterCriticalSection(&mousemng_multithread_mousepos_cs);
 	*x = mouseposX;
 	*y = mouseposY;
 	mouseDiv = np2oscfg.mousediv != 0 ? np2oscfg.mousediv : 1;
-	np2_multithread_LeaveCriticalSection();
+	LeaveCriticalSection(&mousemng_multithread_mousepos_cs);
 	return 1;
 }
 void mousemng_setabspos(int x, int y)
 {
-	np2_multithread_EnterCriticalSection();
+	EnterCriticalSection(&mousemng_multithread_mousepos_cs);
 	mouseposX = x;
 	mouseposY = y;
-	np2_multithread_LeaveCriticalSection();
+	LeaveCriticalSection(&mousemng_multithread_mousepos_cs);
 }
 
 // ----
@@ -348,6 +349,7 @@ static void mousecapture(BOOL capture) {
 void mousemng_initialize(void) {
 
 	InitializeCriticalSection(&mousemng_multithread_deviceinit_cs);
+	InitializeCriticalSection(&mousemng_multithread_mousepos_cs);
 
 	mousemng_UIthreadID = GetCurrentThreadId();
 
@@ -371,6 +373,7 @@ void mousemng_destroy(void) {
 	destroyDirectInput();
 
 	DeleteCriticalSection(&mousemng_multithread_deviceinit_cs);
+	DeleteCriticalSection(&mousemng_multithread_mousepos_cs);
 }
 
 void mousemng_UIThreadSync()

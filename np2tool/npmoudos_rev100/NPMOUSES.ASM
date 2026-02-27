@@ -5,10 +5,9 @@
 
 %include	'np2tool.inc'
 
-%define	VERSION_ID		"20260226"
+%define	VERSION_ID		"20260225"
 
 START:			jmp		setup
-NP2_MOUSESIG	db 		"*** This is Copyright 2026 NekoDevT. ***"
 int33_handler:
 				cmp		ax, 0000h
 				je		resetdriver
@@ -22,12 +21,6 @@ int33_handler:
 				cmp		ax, 0003h
 				je		getpos
                 
-                push	ax
-                sub		al, [cs:setrange_ofs]
-				cmp		al, 2
-				jb		set_range
-                pop		ax
-				
 				cmp		ax, 000ch
 				je		set_int_handler
                 
@@ -63,30 +56,6 @@ getpos:
 				call	ReadAndAdjustXY
 				
 				iret
-
-; ----- AX=0007h, 0008h DEFINE HORIZONTAL/VERTICAL CURSOR RANGE -----
-; ----- AX=0010h, 0011h DEFINE HORIZONTAL/VERTICAL CURSOR RANGE (NEC) -----
-; ここに飛んできたとき、ALからオフセットが引かれて AL=0:横、AL=1:縦の状態になっている。
-set_range:
-				; 大小が逆の場合は入れ替え
-				cmp		dx, cx
-				jae		.x_ok
-				xchg	dx, cx
-.x_ok:
-				push	di
-				
-				mov		di, x_min
-				and		al, al ; AX=0007h,0010h(NEC) DEFINE HORIZONTAL CURSOR RANGE
-				jz		.is_x
-				add		di, 4  ; AX=0008h,0011h(NEC) DEFINE VERTICAL CURSOR RANGE
-.is_x:
-				mov		[cs:di], cx ; min
-				mov		[cs:di + 2], dx ; max
-				
-				pop		di
-.tochain:
-                pop		ax ; chainの前にオフセットを戻す
-				jmp		int33_chain
 
 ; ----- AX=000ch DEFINE INTERRUPT SUBROUTINE PARAMETERS -----
 ; コールバック方式で座標を取得するプログラム用
@@ -133,27 +102,22 @@ ReadAndAdjustXY:
 				push	cx
 
 				; DIは座標変更があったかの判定用
-				xor		di, di
+				xor		ax, ax
+				mov		di, ax
 
 				; 絶対座標を読み出し
-				call	ReadAbsXY ; CF=1 なら BX=X絶対座標, CX=Y絶対座標 が入る　座標値はピクセルのまま
+				call	ReadAbsXY ; CF=1 なら AX=X絶対座標, DX=Y絶対座標 が入る　座標値は画面全体幅・高さを0～65535でマップ
 				jnc		.use_original ; CF=0 なら元の座標値を保持
-				
-				; ここからシームレスマウス状態処理
 
-				mov		si, cx ; CX(Y絶対座標)を一旦SIへ退避
+				mov		si, dx ; DX(Y絶対座標)を一旦SIへ退避
 				
-				; X座標の処理
-				mov		ax, bx ; マウスX座標を入れる
-				; 値の範囲を最小～最大の範囲に調整
-				cmp		ax, [cs:x_min]
-				jae		.xmin_ok
-				mov		ax, [cs:x_min]
-.xmin_ok:
-				cmp		ax, [cs:x_max]
-				jbe		.xmax_ok
-				mov		ax, [cs:x_max]
-.xmax_ok:
+				; DOSマウス座標系への変換 X = (X絶対座標 * DOSマウス画面幅) / 65535
+				mov		bx, ax ; BX = X絶対座標
+				mov		ax, 639 ; AX = DOSマウス画面幅 = 639固定
+				xor		dx, dx
+				mul		bx ; DX:AX = DOSマウス画面幅 * X絶対座標
+				mov		bx, 65535
+				div		bx ; AX = (DOSマウス画面幅 * X絶対座標) / 65535
 				pop		cx
 				cmp		cx, ax
 				je		.skipx
@@ -161,17 +125,30 @@ ReadAndAdjustXY:
 				inc		di ; 変更があればDIをインクリメント
 .skipx:
 
-				; Y座標の処理
-				mov		ax, si ; マウスY座標を入れる
-				; 値の範囲を最小～最大の範囲に調整
-				cmp		ax, [cs:y_min]
-				jae		.ymin_ok
-				mov		ax, [cs:y_min]
-.ymin_ok:
-				cmp		ax, [cs:y_max]
-				jbe		.ymax_ok
-				mov		ax, [cs:y_max]
-.ymax_ok:
+				; DOSマウス座標系への変換 Y = (Y絶対座標 * DOSマウス画面高さ) / 65535
+				; 画面の縦の長さを取得 -> AXへ
+				push	ds
+				xor		ax, ax
+				mov		ds, ax
+				mov		al, [0597h]
+				pop		ds
+				and		al, 3
+				cmp		al, 2
+				jb		.h199
+				je		.h399
+				mov		ax, 479 ; AX = DOSマウス画面高さ = 479
+				jmp		.store
+.h399: 
+				mov		ax, 399 ; AX = DOSマウス画面高さ = 399
+				jmp		.store
+.h199: 
+				mov		ax, 199 ; AX = DOSマウス画面高さ = 199
+.store:
+				mov		bx, si ; BX = Y絶対座標（SIに退避していた値を戻す）
+				xor		dx, dx
+				mul		bx ; DX:AX = DOSマウス画面高さ * Y絶対座標
+				mov		bx, 65535
+				div		bx ; AX = (DOSマウス画面幅 * X絶対座標) / 65535
 				pop		dx
 				cmp		dx, ax
 				je		.skipy
@@ -199,28 +176,51 @@ ReadAndAdjustXY:
 
 ; ---------------------------------------------------------------
 ; ねこーマウス座標取得コマンド発行 
-; returns on success: CF=1, BX=絶対座標X, CX=絶対座標Y
-; returns on failure: CF=0, BX/CX undefined
-; 絶対座標は画面全体幅・高さのピクセルそのまま
-; AX, DX, SIの内容は維持されない
+; success: CF=1, BX=X, CX=Y
+; returns on success: CF=1, AX=絶対座標X, DX=絶対座標Y
+; returns on failure: CF=0, AX/DX undefined
+; 絶対座標は画面全体幅・高さを0～65535にマップした値
 ; ---------------------------------------------------------------
 ReadAbsXY:
-				push	ds
+				push	bx
+				push	cx
 
 				; 絶対座標を取得する
+				push	ds
 				push	cs
 				pop		ds ; DS <- CS
-				
-				mov		dx, 07EDh
-				mov		al, 06h ; ねこマウス mode=6 レジスタへ格納、成否はCFで
+				mov		dx,07EDh
+				mov		al,02h ; ねこマウス mode=2 レジスタへ格納、成否はCFで
+				out		dx,al
+				mov		dx,07EFh
 				mov		si, NP2_CMD_GETMPOS
-				call	SendNPMCmd
-				jnc		.fin ; CF=0はコマンド実行失敗
+.getmpos_loop:
+			    lodsb
+			    cmp		al, '$'
+			    je		.getmpos_done
+				clc
+			    out		dx, al
+				jc		.ok ; CF=1ならコマンド実行成功
+			    jmp		.getmpos_loop
+.getmpos_done:
+				; CF=0なのでコマンド実行失敗
+    			pop		ds  ; DS を元に戻す
+				pop		cx
+				pop		bx
+				clc
+				ret
 
+.ok:
 				; コマンド実行成功
-				; BX=絶対座標X  CX=絶対座標Y
-.fin:
-    			pop		ds
+    			pop		ds  ; DS を元に戻す
+
+				; BX/CX を AX/DX へ送る
+				mov		ax, bx                  ; AX = 絶対座標X
+				mov		dx, cx                  ; DX = 絶対座標Y
+
+				pop		cx
+				pop		bx
+				stc
 				ret
 				
 ; ---------------------------------------------------------------
@@ -238,12 +238,20 @@ SendShowHideCursor:
 				
 				; 動的設定変更 マウス非表示コマンドを送る
 				; AL=1: 非表示, AL=0: 表示
-				mov		dx, 07EDh
-				and		al, 01h ; 1つ目のパラメータ ALのbit0だけ取り出し
-				out		dx, al
-				mov		al, 09h ; 2つ目のパラメータ
+				mov		dx,07EDh
+				and		al,01h ; ALのbit0だけ取り出し
+				out		dx,al
+				mov		al,09h
+				out		dx,al
+				mov		dx,07EFh
 				mov		si, NP2_CMD_CHANGECONFIG
-				call	SendNPMCmd
+.changeconfig_loop:
+				lodsb            ; AL ← [SI], SI++
+				cmp		al, '$'
+				je		.changeconfig_done
+				out		dx, al
+				jmp		.changeconfig_loop
+.changeconfig_done:
 
 				pop		ds
 				pop		si
@@ -251,33 +259,8 @@ SendShowHideCursor:
 				pop		ax
 				ret
 
-; ねこーコマンド発行 
-; 最初のDXは07EDhになっている前提、ALをパラメータとして07EDhへ送信し、
-; SIの指しているデータを07EFhに送る。AL, DX, SIは復元されない
-SendNPMCmd:
-				out		dx, al
-				or		dl, 02h ; 07EDh -> 07EFh
-.sendnpmcmd_loop:
-			    lodsb
-			    cmp		al, '$'
-			    je		.sendnpmcmd_done
-				clc
-			    out		dx, al
-				jc		.sendnpmcmd_done ; CF=1ならコマンド実行成功
-			    jmp		.sendnpmcmd_loop
-.sendnpmcmd_done:
-				ret
-
 org_int33		dd		0
 org_int_handler	dd		0
-
-x_min			dw		0
-x_max			dw		639
-
-y_min			dw		0
-y_max			dw		399
-
-setrange_ofs	db		7
 
 NP2_CMD_CHANGECONFIG    db 'changeconfig$', 0
 NP2_CMD_GETMPOS	db 'getmpos$', 0
@@ -309,14 +292,8 @@ setup:
 				call PrintMsg
 				mov ax, 4C00h
 				int 21h
-.ok_feature:
-
-				; コマンドライン解析
-				call	ParseCmdTail ; AL=0(no) / 1(/r)
-				jnc		ArgError ; 引数無効なら抜ける
 				
-				cmp 	al, 1
-				je		DoRemove ; /r 常駐解除
+.ok_feature:
 
 				; マウスドライバ存在チェック
 				call CheckMouseDriver
@@ -329,18 +306,18 @@ setup:
 				int 21h
 				
 .ok_mouse:
+				; コマンドライン解析
+				call	ParseCmdTail ; AL=0(no) / 1(/r) / 2(/h)
+				jnc		ArgError ; 引数無効なら抜ける
+				
+				cmp 	al, 1
+				je		DoRemove ; /r 常駐解除
 
 DoInstall:
 				; 未常駐なら常駐、常駐済みなら終了
 				call	IsInstalled ; 常駐していたらCF=1, ES=常駐セグメント
 				jc		AlreadyInstalled ; 常駐済みなら抜ける
 				
-				; NECドライバ準拠モードなら N mode と表示
-				cmp		byte [setrange_ofs], 10h
-				jne		.notnecmode
-				mov		dx, msg_necmode
-				call	PrintMsg
-.notnecmode:
 				; Installed.表示
 				mov		dx, msg_installed
 				call	PrintMsg
@@ -383,49 +360,24 @@ ArgError:
 				int		21h
 
 
-; ------------------------------------------------------
+; -----------------------------
 ; CheckMouseDriver:
 ;   returns CF=1 if installed
-;   ついでにNEC系かをチェックしてsetrange_ofsをセット
-; ------------------------------------------------------
+; -----------------------------
 CheckMouseDriver:
 				push	ax
 				push	bx
-				push	cx
-				push	dx
 
-				; 初期化が通るか確認
 				xor		ax, ax ; AX=0000h Reset/Initialize
 				int		33h
 
 				cmp		ax, 0FFFFh
-				jne		.no ; 初期化が通らなければマウスドライバ不在
-				
-				; NEC系か調査
-				mov		ax, 07h ; MSならDEFINE HORIZONTAL CURSOR RANGE、NECなら右ボタン情報
-				mov		cx, 128 ; 適当な値にする
-				mov		dx, 639
-				int		33h
-				cmp		cx, 128
-				jne		.isnec ; ここでcxレジスタが変更されていたらNEC確定
-				mov		ax, 07h ; 再度07hをセット
-				xor		cx, cx ; 0にしてみる
-				mov		dx, 639
-				int		33h
-				and		cx, cx
-				jz		.yes ; やはりcxレジスタが変更されていないならMS確定
-.isnec:
-				mov		byte [setrange_ofs], 10h ; NECマウスドライバ準拠モードのオフセットは10h
-.yes:
-				xor		ax, ax ; AX=0000h Reset/Initialize
-				int		33h ; 色々いじくったので一応初期化しておく
+				jne		.no
 				stc ; installed
 				jmp		.ret
 .no:
 				clc ; not installed
 .ret:
-				pop		dx
-				pop		cx
 				pop		bx
 				pop		ax
 				ret
@@ -445,14 +397,21 @@ CheckFeatureSupport:
 
 				mov		si, cmd_np2
 				call	sendnp2port ; NULL文字まで送る（文字列NP2が送られる）
-				mov		dx, 07EDh
-				mov		al, 06h ; ねこマウス mode=6 レジスタへ格納、ピクセル座標、成否はCFで
+				mov		dx,07EDh
+				mov		al,02h ; ねこマウス mode=2 レジスタへ格納、成否はCFで
+				out		dx,al
 				mov		si, NP2_CMD_GETMPOS ; 文字列getmposを送る
-				call	SendNPMCmd
-				mov		dx, 07EFh
-				in		al, dx
-				cmp		al, 'O'
-				jne		short .no ; "OK" または "OFF" でないので未サポート
+				mov		dx,07EFh
+.getmpos_loop:
+			    lodsb
+			    cmp		al, '$'
+			    je		.getmpos_done
+			    out		dx, al
+			    jmp		.getmpos_loop
+.getmpos_done:
+				mov		si, cmd_np2
+				call	checknp2port ; NULL文字まで比較（文字列NP2と比較）
+				je		short .no ; getmposが無視されてNP2の結果が返ってきていたら未サポート
 
 				stc ; feature supported
 				jmp		.ret
@@ -493,22 +452,6 @@ InstallTSR:
 				mov		[org_int33 + 0], bx
 				mov		[org_int33 + 2], es
 
-				; ハンドラ手前にあるシグネチャをコピー ここを確認に使っているソフトがある
-				push	ds
-				push	es
-				mov		ax, es
-				mov		ds, ax ; DS = 元ハンドラのセグメント（コピー元）
-				push	cs
-				pop		es ; ES = 自分のセグメント（コピー先）
-				mov		di, NP2_MOUSESIG ; コピー先DI = 自分のバッファ
-				sub		bx, 40 ; 元ハンドラの40バイト手前からスタート
-				mov		si, bx ; コピー元 ES:SI = 指定アドレス
-				mov		cx, 40 ; 40バイトコピー
-				cld
-				rep		movsb
-				pop		es
-				pop		ds
-				
 				; INT 33h ハンドラ登録 (DS:DX)
 				mov		ax, 2533h
 				mov		dx, int33_handler
@@ -669,20 +612,19 @@ PrintMsg:
 
 %include	'np2tool.x86'
 
-macerr_msg		db	"Illegal hardware - $"
-title_msg		db	"seamless mouse driver for np2+dos ("
+macerr_msg		db	"not np2.$"
+title_msg		db	"seamless mouse for np2+dos ("
 				db	VERSION_ID
 				db	 ")"
 				db	13, 10, "$"
 
-msg_nomouse		db	"mouse driver not installed.",13,10,"$"
-msg_nofeature	db	"feature not supported.",13,10,"$"
-msg_already		db	"already installed.",13,10,"$"
+msg_nomouse		db	"no mouse driver.",13,10,"$"
+msg_nofeature	db	"not supported.",13,10,"$"
+msg_already		db	"alive.",13,10,"$"
 msg_notinst		db	"not installed.",13,10,"$"
 msg_removed		db	"removed.",13,10,"$"
-msg_necmode		db	"N mode $"
 msg_installed	db	"installed.",13,10,"$"
-msg_invalidarg	db	"invalid argument.",13,10,"$"
+msg_invalidarg	db	"invalid arg.",13,10,"$"
 
 ; サポートしているかのテスト用
 cmd_np2			db	3,'NP2',0

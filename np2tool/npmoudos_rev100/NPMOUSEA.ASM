@@ -6,7 +6,7 @@
 
 %include	'np2tool.inc'
 
-%define	VERSION_ID		"20260226"
+%define	VERSION_ID		"20260225"
 %define	NP2_MAGIC		4e50h
 
 %define	NPMFLAG_NONE		00h
@@ -185,15 +185,19 @@ ReadAndAdjustXY:
 				xor		di, di
 
 				; 絶対座標を読み出し
-				call	ReadAbsXY ; CF=1 なら BX=X絶対座標, CX=Y絶対座標 が入る　座標値はピクセルのまま
+				call	ReadAbsXY ; CF=1 なら BX=X絶対座標, CX=Y絶対座標 が入る　座標値は画面全体幅・高さを0～65535でマップ
 				jnc		.use_original ; CF=0 なら元の座標値を保持
 				
 				; ここからシームレスマウス状態処理
 
 				mov		si, cx ; CX(Y絶対座標)を一旦SIへ退避
 				
-				; X座標の処理
-				mov		ax, bx ; マウスX座標を入れる
+				; DOSマウス座標系への変換 X = (X絶対座標 * DOSマウス画面幅) / 65535
+				mov		ax, 639 ; AX = DOSマウス画面幅 = 639固定
+				xor		dx, dx
+				mul		bx ; DX:AX = DOSマウス画面幅 * X絶対座標
+				mov		bx, 65535
+				div		bx ; AX = (DOSマウス画面幅 * X絶対座標) / 65535
 				; 値の範囲を最小～最大の範囲に調整
 				cmp		ax, [cs:x_min]
 				jae		.xmin_ok
@@ -210,8 +214,30 @@ ReadAndAdjustXY:
 				inc		di ; 変更があればDIをインクリメント
 .skipx:
 
-				; Y座標の処理
-				mov		ax, si ; マウスY座標を入れる
+				; DOSマウス座標系への変換 Y = (Y絶対座標 * DOSマウス画面高さ) / 65535
+				; 画面の縦の長さを取得 -> AXへ
+				push	ds
+				xor		ax, ax
+				mov		ds, ax
+				mov		al, [0597h]
+				pop		ds
+				and		al, 3
+				cmp		al, 2
+				jb		.h199
+				je		.h399
+				mov		ax, 479 ; AX = DOSマウス画面高さ = 479
+				jmp		.store
+.h399: 
+				mov		ax, 399 ; AX = DOSマウス画面高さ = 399
+				jmp		.store
+.h199: 
+				mov		ax, 199 ; AX = DOSマウス画面高さ = 199
+.store:
+				mov		bx, si ; BX = Y絶対座標（SIに退避していた値を戻す）
+				xor		dx, dx
+				mul		bx ; DX:AX = DOSマウス画面高さ * Y絶対座標
+				mov		bx, 65535
+				div		bx ; AX = (DOSマウス画面幅 * X絶対座標) / 65535
 				; 値の範囲を最小～最大の範囲に調整
 				cmp		ax, [cs:y_min]
 				jae		.ymin_ok
@@ -273,7 +299,7 @@ ReadAndAdjustXY:
 ; ねこーマウス座標取得コマンド発行 
 ; returns on success: CF=1, BX=絶対座標X, CX=絶対座標Y
 ; returns on failure: CF=0, BX/CX undefined
-; 絶対座標は画面全体幅・高さのピクセルそのまま
+; 絶対座標は画面全体幅・高さを0～65535にマップした値
 ; AX, DX, SIの内容は維持されない
 ; ---------------------------------------------------------------
 ReadAbsXY:
@@ -284,7 +310,7 @@ ReadAbsXY:
 				pop		ds ; DS <- CS
 				
 				mov		dx, 07EDh
-				mov		al, 06h ; ねこマウス mode=6 レジスタへ格納、成否はCFで
+				mov		al, 02h ; ねこマウス mode=2 レジスタへ格納、成否はCFで
 				mov		si, NP2_CMD_GETMPOS
 				call	SendNPMCmd
 				jnc		.fin ; CF=0はコマンド実行失敗
@@ -675,13 +701,12 @@ CheckFeatureSupport:
 				mov		si, cmd_np2
 				call	sendnp2port ; NULL文字まで送る（文字列NP2が送られる）
 				mov		dx, 07EDh
-				mov		al, 06h ; ねこマウス mode=6 レジスタへ格納、ピクセル座標、成否はCFで
+				mov		al, 02h ; ねこマウス mode=2 レジスタへ格納、成否はCFで
 				mov		si, NP2_CMD_GETMPOS ; 文字列getmposを送る
 				call	SendNPMCmd
-				mov		dx, 07EFh
-				in		al, dx
-				cmp		al, 'O'
-				jne		short .no ; "OK" または "OFF" でないので未サポート
+				mov		si, cmd_np2
+				call	checknp2port ; NULL文字まで比較（文字列NP2と比較）
+				je		short .no ; getmposが無視されてNP2の結果が返ってきていたら未サポート
 
 				stc ; feature supported
 				jmp		.ret

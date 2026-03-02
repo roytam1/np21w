@@ -173,10 +173,10 @@ static void stop_daplay(IDEDRV drv)
 	if (ideio.daplaying & (1 << (drv->sxsidrv & 3))) {
 		/* stop playing audio */
 		ideio.daplaying &= ~(1 << (drv->sxsidrv & 3));
-		drv->daflag = 0x13;
-		drv->dacurpos = 0;
-		drv->dalength = 0;
 	}
+	drv->daflag = 0x13;
+	drv->dacurpos = 0;
+	drv->dalength = 0;
 }
 
 // ----- ATAPI packet command
@@ -267,6 +267,11 @@ void atapicmd_a0(IDEDRV drv) {
 //					//}
 //				}
 			}
+			/* stop playing audio */
+			ideio.daplaying &= ~(1 << (drv->sxsidrv & 3));
+			drv->daflag = 0x13;
+			drv->dacurpos = 0;
+			drv->dalength = 0;
 			senderror(drv);
 			break;
 		}

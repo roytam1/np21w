@@ -326,6 +326,7 @@ struct tagNP2Config
 	OEMCHAR	fontface[256];
 
 	UINT8	slowmous; // 4ビット切り捨ての低速マウスを使う
+	UINT8	gdcwovrg; // 98標準グラフィックで画面幅80桁超えを認める
 };
 typedef struct tagNP2Config  NP2CFG;		/*!< The define of config */
 

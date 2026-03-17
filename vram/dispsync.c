@@ -4,6 +4,7 @@
 #include	"iocore.h"
 #include	"scrndraw.h"
 #include	"dispsync.h"
+#include	"maketext.h"
 
 
 	DSYNC	dsync;
@@ -18,6 +19,8 @@ void dispsync_initialize(void) {
 	dsync.scrnxmax = 640;
 	dsync.scrnxextend = 0;
 	dsync.scrnymax = 400;
+
+	dsync.gdcwovrg = np2cfg.gdcwovrg; // 98標準グラフィックで画面幅80桁超えを認める
 
 //	scrnmng_setwidth(0, 640);
 //	scrnmng_setextend(0);
@@ -58,9 +61,19 @@ BOOL dispsync_renewalhorizontal(void) {
 		scrnxpos = hbp - 7;
 	}
 	scrnxmax = cr + 2;
-	if ((scrnxpos + scrnxmax) > 80) {
-		scrnxmax = min(scrnxmax, 80);
-		scrnxpos = 80 - scrnxmax;
+	if (dsync.gdcwovrg) {
+		// 80桁以上を許可
+		if ((scrnxpos + scrnxmax) > TEXTXMAX) {
+			scrnxmax = min(scrnxmax, TEXTXMAX);
+			scrnxpos = 80 - scrnxmax;
+		}
+	}
+	else {
+		// 標準では80桁までしか認めない
+		if ((scrnxpos + scrnxmax) > 80) {
+			scrnxmax = min(scrnxmax, 80);
+			scrnxpos = 80 - scrnxmax;
+		}
 	}
 	scrnxpos <<= 3;
 	scrnxmax <<= 3;
@@ -130,22 +143,28 @@ BOOL dispsync_renewalvertical(void) {
 		scrnmng_setheight(0, scrnymax);
 	}
 
-	dsync.textvad = text_vbp * 640;
-	dsync.grphvad = grph_vbp * 640;
+	dsync.textvad = text_vbp * SURFACE_WIDTH;
+	dsync.grphvad = grph_vbp * SURFACE_WIDTH;
 	if (text_vbp) {
-		ZeroMemory(np2_tram, text_vbp * 640);
+		ZeroMemory(np2_tram, text_vbp * SURFACE_WIDTH);
 	}
 	if (scrnymax - textymax) {
-		ZeroMemory(np2_tram + textymax * 640, (scrnymax - textymax) * 640);
+		ZeroMemory(np2_tram + textymax * SURFACE_WIDTH, (scrnymax - textymax) * SURFACE_WIDTH);
 	}
 	if (grph_vbp) {
-		ZeroMemory(np2_vram[0], grph_vbp * 640);
-		ZeroMemory(np2_vram[1], grph_vbp * 640);
+		ZeroMemory(np2_vram[0], grph_vbp * SURFACE_WIDTH);
+		ZeroMemory(np2_vram[1], grph_vbp * SURFACE_WIDTH);
 	}
 	if (scrnymax - grphymax) {
-		ZeroMemory(np2_vram[0] + grphymax * 640, (scrnymax - grphymax) * 640);
-		ZeroMemory(np2_vram[1] + grphymax * 640, (scrnymax - grphymax) * 640);
+		ZeroMemory(np2_vram[0] + grphymax * SURFACE_WIDTH, (scrnymax - grphymax) * SURFACE_WIDTH);
+		ZeroMemory(np2_vram[1] + grphymax * SURFACE_WIDTH, (scrnymax - grphymax) * SURFACE_WIDTH);
 	}
 	return(TRUE);
+}
+
+void dispsync_updateoverrange(void) {
+
+	dsync.gdcwovrg = np2cfg.gdcwovrg; // 98標準グラフィックで画面幅80桁超えを認める
+	dispsync_renewalhorizontal();
 }
 

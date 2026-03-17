@@ -1003,15 +1003,33 @@ BRESULT scrnmngD3D_create(UINT8 scrnmode) {
 				wabheight = 480;
 				bufwidth = 640 + 1;
 				bufheight = 480;
+				if (scrnstat.height > bufheight) {
+					bufheight = scrnstat.height; // 特例 30行BIOS等で使う
+				}
+				if (scrnstat.width + 1 > bufwidth) {
+					bufwidth = scrnstat.width + 1; // 特例 90桁BIOS等で使う
+				}
 			}
 			else {
 				wabwidth = 480;
 				wabheight = 640;
 				bufwidth = 480;
 				bufheight = 640 + 1;
+				if (scrnstat.height > bufwidth) {
+					bufwidth = scrnstat.height; // 特例 30行BIOS等で使う
+				}
+				if (scrnstat.width + 1 > bufheight) {
+					bufheight = scrnstat.width + 1; // 特例 90桁BIOS等で使う
+				}
 			}
 			width = 640;
 			height = 480;
+			if (scrnstat.height > height) {
+				height = scrnstat.height; // 特例 30行BIOS等で使う
+			}
+			if (scrnstat.width > width) {
+				width = scrnstat.width; // 特例 90桁BIOS等で使う
+			}
 		}
 #else
 		if (!(scrnmode & SCRNMODE_ROTATE)) {

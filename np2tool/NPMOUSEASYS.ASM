@@ -14,7 +14,7 @@ reqheader		dd		0 ; リクエストヘッダ
 
 %include	'np2tool.inc'
 
-%define	VERSION_ID		"20260226"
+%define	VERSION_ID		"20260303"
 %define	NP2_MAGIC		4e50h
 
 %define	NPMFLAG_NONE		00h
@@ -585,7 +585,7 @@ setup:
 				jmp		.toinstall
 .toinstall:
 				call	PrintMsg
-				call	InstallTSR ; 常駐処理へ飛ぶ（行きっぱなし）
+				call	InstallTSR ; 常駐処理へ飛ぶ（終われば戻る）
 				jmp		endsetup
 
 AlreadyInstalled:

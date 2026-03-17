@@ -1,6 +1,6 @@
 
 enum {
-	TEXTXMAX		= 80,
+	TEXTXMAX		= 128,
 	TEXTYMAX		= 400,
 
 	TXTATR_ST		= 0x01,		// ~シークレット

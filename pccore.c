@@ -37,8 +37,9 @@
 #include	"sound.h"
 #include	"fmboard.h"
 #ifdef SUPPORT_SOUND_SB16
-#include	"ct1741io.h"
+#include	"ct1741.h"
 #endif
+#include	"cs4231.h"
 #include	"beep.h"
 #include	"s98.h"
 #include	"tms3631.h"
@@ -196,7 +197,7 @@ const OEMCHAR np2version[] = OEMTEXT(NP2VER_CORE);
 #endif
 				100,
 				TEXT(""),
-				0
+				0, 1
 	};
 
 	PCCORE	pccore = {	PCBASECLOCK25, PCBASEMULTIPLE,

@@ -41,7 +41,7 @@ typedef struct {
 	UINT	pals;
 	UINT	type;
 	BMPPAL	pal[NP2PAL_MAX];
-	PALNUM	dat[SURFACE_WIDTH * SURFACE_HEIGHT];
+	PALNUM	dat[SURFACE_WIDTH * SURFACE_HEIGHT * 2];
 } SCRNDATA;
 
 
@@ -220,7 +220,7 @@ SCRNSAVE scrnsave_create(void)
 
 	dat = sd->dat;
 	scrnsize = SURFACE_WIDTH * SURFACE_HEIGHT;
-	datanull = ((UINT8 *)dat) + (scrnsize * (sizeof(PALNUM) - 1));
+	datanull = ((UINT8 *)dat) + scrnsize * sizeof(PALNUM);
 	datatext = datanull;
 	datagrph = datanull;
 	if (gdcs.textdisp & 0x80) {

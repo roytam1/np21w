@@ -705,7 +705,7 @@ BRESULT scrnmngDD_create(UINT8 scrnmode) {
 		}
 		if (!((fscrnmod & FSCRNMOD_SAMERES) || np2_multithread_Enabled()))
 		{
-			// 解像度変えるモードなら帰る
+			// 解像度変えるモードなら変える
 			if (ddraw2->SetDisplayMode(width, height, bitcolor, 0, 0) != DD_OK)
 			{
 				width = 640;
@@ -860,13 +860,31 @@ BRESULT scrnmngDD_create(UINT8 scrnmode) {
 			if (!(scrnmode & SCRNMODE_ROTATE)) {
 				ddsd.dwWidth = 640 + 1;
 				ddsd.dwHeight = 480;
+				if (scrnstat.height > ddsd.dwHeight) {
+					ddsd.dwHeight = scrnstat.height; // 特例 30行BIOS等で使う
+				}
+				if (scrnstat.width + 1 > ddsd.dwWidth) {
+					ddsd.dwWidth = scrnstat.width + 1; // 特例 90桁BIOS等で使う
+				}
 			}
 			else {
 				ddsd.dwWidth = 480;
 				ddsd.dwHeight = 640 + 1;
+				if (scrnstat.height > ddsd.dwWidth) {
+					ddsd.dwWidth = scrnstat.height; // 特例 30行BIOS等で使う
+				}
+				if (scrnstat.width + 1 > ddsd.dwHeight) {
+					ddsd.dwHeight = scrnstat.width + 1; // 特例 90桁BIOS等で使う
+				}
 			}
 			width = 640;
 			height = 480;
+			if (scrnstat.height > height) {
+				height = scrnstat.height; // 特例 30行BIOS等で使う
+			}
+			if (scrnstat.width > width) {
+				width = scrnstat.width; // 特例 90桁BIOS等で使う
+			}
 		}
 #else
 		if (!(scrnmode & SCRNMODE_ROTATE)) {
@@ -997,6 +1015,45 @@ void scrnmngDD_destroy(void) {
 	dd_leave_criticalsection();
 }
 
+static void scrnmngDD_recreate(int width, int height) {
+	DDBLTFX	ddbf = { 0 };
+	ddbf.dwSize = sizeof(ddbf);
+	ddbf.dwFillColor = 0;
+
+	dd_enter_criticalsection();
+	if ((g_scrnmode & SCRNMODE_FULLSCREEN) != 0) {
+		g_scrnmode = g_scrnmode & ~SCRNMODE_FULLSCREEN;
+		scrnmngDD_destroy();
+		if (scrnmngDD_create(g_scrnmode | SCRNMODE_FULLSCREEN) == SUCCESS) {
+			g_scrnmode = g_scrnmode | SCRNMODE_FULLSCREEN;
+		}
+		else {
+			if (scrnmngDD_create(g_scrnmode) != SUCCESS) {
+				scrnmng_create_pending = true;
+				//PostQuitMessage(0);
+				dd_leave_criticalsection();
+				return;
+			}
+		}
+	}
+	else if (ddraw.width < width || ddraw.height < height) {
+		scrnmngDD_destroy();
+		if (scrnmngDD_create(g_scrnmode) != SUCCESS) {
+			if (scrnmngDD_create(g_scrnmode | SCRNMODE_FULLSCREEN) != SUCCESS) { // フルスクリーンでリトライ
+				scrnmng_create_pending = true;
+				//PostQuitMessage(0);
+				dd_leave_criticalsection();
+				return;
+			}
+			g_scrnmode = g_scrnmode | SCRNMODE_FULLSCREEN;
+		}
+	}
+	clearoutscreen();
+	ddraw.wabsurf->Blt(NULL, NULL, NULL, DDBLT_WAIT | DDBLT_COLORFILL, &ddbf);
+	ddraw.backsurf->Blt(NULL, NULL, NULL, DDBLT_WAIT | DDBLT_COLORFILL, &ddbf);
+	dd_leave_criticalsection();
+}
+
 void scrnmngDD_shutdown(void) {
 	
 	if(dd_cs_initialized){
@@ -1123,6 +1180,9 @@ void scrnmngDD_setheight(int posy, int height) {
 	
 	if(scrnstat.multiple < 1) scrnstat.multiple = 8;
 	scrnstat.height = height;
+	if (scrnstat.height > ddraw.height) {
+		scrnmngDD_recreate(scrnstat.width, scrnstat.height);
+	}
 	renewalclientsize(TRUE);
 }
 
@@ -1131,6 +1191,9 @@ void scrnmngDD_setsize(int posx, int posy, int width, int height) {
 	if(scrnstat.multiple < 1) scrnstat.multiple = 8;
 	scrnstat.width = width;
 	scrnstat.height = height;
+	if (scrnstat.height > ddraw.height) {
+		scrnmngDD_recreate(scrnstat.width, scrnstat.height);
+	}
 	renewalclientsize(TRUE);
 }
 
@@ -1500,35 +1563,7 @@ void scrnmngDD_updatefsres(void) {
 		dd_enter_criticalsection();
 		np2wab.lastWidth = width;
 		np2wab.lastHeight = height;
-		if((g_scrnmode & SCRNMODE_FULLSCREEN)!=0){
-			g_scrnmode = g_scrnmode & ~SCRNMODE_FULLSCREEN;
-			scrnmngDD_destroy();
-			if (scrnmngDD_create(g_scrnmode | SCRNMODE_FULLSCREEN) == SUCCESS) {
-				g_scrnmode = g_scrnmode | SCRNMODE_FULLSCREEN;
-			}
-			else {
-				if (scrnmngDD_create(g_scrnmode) != SUCCESS) {
-					scrnmng_create_pending = true;
-					//PostQuitMessage(0);
-					dd_leave_criticalsection();
-					return;
-				}
-			}
-		}else if(ddraw.width < width || ddraw.height < height){
-			scrnmngDD_destroy();
-			if (scrnmngDD_create(g_scrnmode) != SUCCESS) {
-				if (scrnmngDD_create(g_scrnmode | SCRNMODE_FULLSCREEN) != SUCCESS) { // フルスクリーンでリトライ
-					scrnmng_create_pending = true;
-					//PostQuitMessage(0);
-					dd_leave_criticalsection();
-					return;
-				}
-				g_scrnmode = g_scrnmode | SCRNMODE_FULLSCREEN;
-			}
-		}
-		clearoutscreen();
-		ddraw.wabsurf->Blt(NULL, NULL, NULL, DDBLT_WAIT | DDBLT_COLORFILL, &ddbf);
-		ddraw.backsurf->Blt(NULL, NULL, NULL, DDBLT_WAIT | DDBLT_COLORFILL, &ddbf);
+		scrnmngDD_recreate(width, height);
 		dd_leave_criticalsection();
 	}
 #endif

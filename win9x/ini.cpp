@@ -706,6 +706,7 @@ static const PFTBL s_IniItems[] =
 	PFVAL("CPUSPEED", PFTYPE_UINT32,	&np2cfg.emuspeed),
 	PFSTR("fontface", PFRO_STR,			np2cfg.fontface),
 	PFVAL("SLOWMOUS", PFTYPE_BOOL,		&np2cfg.slowmous),
+	PFVAL("GDCWOVRG", PFTYPE_BOOL,		&np2cfg.gdcwovrg), // 98標準グラフィックで画面幅80桁超えを認める
 	
 
 	// OS依存？

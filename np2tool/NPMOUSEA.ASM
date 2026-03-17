@@ -6,7 +6,7 @@
 
 %include	'np2tool.inc'
 
-%define	VERSION_ID		"20260226"
+%define	VERSION_ID		"20260303"
 %define	NP2_MAGIC		4e50h
 
 %define	NPMFLAG_NONE		00h
@@ -998,6 +998,15 @@ IsInstalled:
 				; INT 33hのアドレスが自分のint33_handlerか
 				cmp		bx, int33_handler
 				jne		.no
+				
+				; 中身も簡易チェック
+				mov		ax, [cs:bx]
+				cmp		ax, [es:bx]
+				jne		.no
+				mov		ax, [cs:bx + 10h]
+				cmp		ax, [es:bx + 10h]
+				jne		.no
+				
 				stc
 				pop		cx
 				pop		bx

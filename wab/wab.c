@@ -32,6 +32,9 @@
 #if defined(_WINDOWS)
 #include	<process.h>
 #endif
+#if defined(SUPPORT_WAB_NPDISP)
+#include "npdisp.h"
+#endif
 
 NP2WAB		np2wab = {0};
 NP2WABWND	np2wabwnd = {0};
@@ -443,7 +446,13 @@ void np2wab_drawframe()
 	if(!ga_threadmode){
 		if(np2wabwnd.ready && np2wabwnd.hWndWAB!=NULL && (np2wab.relay&0x3)!=0){
 			// マルチスレッドじゃない場合はここで描画処理
-			if (np2wabwnd.drawframe())
+			NP2WAB_DrawFrame drawFrameFunc = np2wabwnd.drawframe;
+#if defined(SUPPORT_WAB_NPDISP)
+			if (npdisp.enabled) {
+				drawFrameFunc = npdisp_drawGraphic;
+			}
+#endif
+			if (drawFrameFunc != NULL && drawFrameFunc())
 			{
 				np2wab_drawWABWindow(np2wabwnd.hDCBuf);
 				if (!np2wabwnd.multiwindow)
@@ -490,12 +499,20 @@ unsigned int __stdcall ga_ThreadFunc(LPVOID vdParam) {
 	int timeleft = 0;
 	while (WaitForSingleObject(wab_thread_eventhandle, INFINITE) == WAIT_OBJECT_0)
 	{
+		NP2WAB_DrawFrame drawFrameFunc;
+
 		if (ga_exitThread || !ga_threadmode) break;
 
 		//wab_enter_criticalsection();
 		//wab_leave_criticalsection();
-		if(np2wabwnd.ready && np2wabwnd.hWndWAB!=NULL && np2wabwnd.drawframe!=NULL && (np2wab.relay&0x3)!=0){
-			if (np2wabwnd.drawframe() || np2wab_forceupdateflag)
+		drawFrameFunc = np2wabwnd.drawframe;
+#if defined(SUPPORT_WAB_NPDISP)
+		if (npdisp.enabled) {
+			drawFrameFunc = npdisp_drawGraphic;
+		}
+#endif
+		if(np2wabwnd.ready && np2wabwnd.hWndWAB!=NULL && drawFrameFunc !=NULL && (np2wab.relay&0x3)!=0){
+			if (drawFrameFunc() || np2wab_forceupdateflag)
 			{
 				np2wab_forceupdateflag = 0;
 				np2wab_drawWABWindow(np2wabwnd.hDCBuf);

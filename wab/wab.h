@@ -7,8 +7,8 @@
 
 #pragma once
 
-// XXX: 回転させても1600x1600以上にならないので差し当たってはこれで十分
-#define WAB_MAX_WIDTH	1600
+// XXX: 1920x1600以上にならないので差し当たってはこれで十分
+#define WAB_MAX_WIDTH	1920
 #define WAB_MAX_HEIGHT	1600
 
 #ifdef __cplusplus
@@ -25,7 +25,7 @@ typedef struct {
 	int		readonly; // from np2oscfg
 } NP2WABCFG;
 
-typedef int NP2WAB_DrawFrame();
+typedef int(*NP2WAB_DrawFrame)(void);
 typedef struct {
 	REG8 relay; // 画面出力リレー状態（bit0=内蔵ウィンドウアクセラレータ, bit1=RGB INスルー, それ以外のビットはReserved。bit0,1が00で98グラフィック
 	REG8 paletteChanged; // パレット要更新フラグ
@@ -51,7 +51,7 @@ typedef struct {
 	HDC hDCWAB; // ウィンドウアクセラレータ別窓のHDC
 	HBITMAP hBmpBuf; // バッファビットマップ（常に等倍）
 	HDC     hDCBuf; // バッファのHDC
-	NP2WAB_DrawFrame *drawframe; // 画面描画関数。hDCBufにアクセラレータ画面データを転送する。
+	NP2WAB_DrawFrame drawframe; // 画面描画関数。hDCBufにアクセラレータ画面データを転送する。
 } NP2WABWND;
 
 void np2wab_init(HINSTANCE hInstance, HWND g_hWndMain);

@@ -2406,6 +2406,9 @@
     <ClCompile Include="commng\print\pmpr201.cpp">
       <Filter>ソース ファイル\win9x\commng\print</Filter>
     </ClCompile>
+    <ClCompile Include="..\wab\npdisp.cpp">
+      <Filter>ソース ファイル\wab</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\calendar.h">
@@ -3580,6 +3583,12 @@
     </ClInclude>
     <ClInclude Include="commng\print\pmpr201.h">
       <Filter>ヘッダー ファイル\win9x\commng\print</Filter>
+    </ClInclude>
+    <ClInclude Include="..\wab\npdisp.h">
+      <Filter>ヘッダー ファイル\wab</Filter>
+    </ClInclude>
+    <ClInclude Include="..\wab\npdispdef.h">
+      <Filter>ヘッダー ファイル\wab</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

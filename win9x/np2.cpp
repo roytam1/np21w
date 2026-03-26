@@ -95,6 +95,9 @@
 #if defined(SUPPORT_CL_GD5430)
 #include "wab/cirrus_vga_extern.h"
 #endif
+#ifdef SUPPORT_WAB_NPDISP
+#include "wab/npdisp.h"
+#endif
 #include "fmboard.h"
 #include "pcm86.h"
 #if defined(SUPPORT_PHYSICAL_CDDRV)
@@ -4327,10 +4330,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInst,
 
 	rand_setseed((unsigned)time(NULL));
 
-	szClassName[0] = (TCHAR)np2oscfg.winid[0];
-	szClassName[1] = (TCHAR)np2oscfg.winid[1];
-	szClassName[2] = (TCHAR)np2oscfg.winid[2];
-	
 #ifndef ALLOW_MULTIRUN
 	if ((hWnd = FindWindow(szClassName, NULL)) != NULL) {
 		ShowWindow(hWnd, SW_RESTORE);
@@ -4880,6 +4879,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInst,
 
 #ifdef SUPPORT_WAB
 	np2wab_shutdown();
+#endif
+#ifdef SUPPORT_WAB_NPDISP
+	npdisp_shutdown();
 #endif
 #ifdef SUPPORT_NET
 	np2net_shutdown();

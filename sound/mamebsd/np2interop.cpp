@@ -17,7 +17,7 @@
  // 旧np21wとのステートセーブ互換を維持する　旧→新のみ互換
 #include "np2compatible.h"
 
-__declspec(noinline)
+//__declspec(noinline)
 void* YMF262Init(int clock, int rate)
 {
 	opl3bsd* chipbsd = new opl3bsd();
@@ -36,7 +36,7 @@ void* YMF262Init(int clock, int rate)
 	return chipbsd;
 }
 
-__declspec(noinline)
+//__declspec(noinline)
 void YMF262Shutdown(void* chipptr)
 {
 	if (!chipptr) return;

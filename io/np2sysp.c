@@ -942,6 +942,12 @@ void np2sysp_bind(void) {
 	iocore_attachinp(0x07ed, np2sysp_i7ed);
 	iocore_attachinp(0x07ef, np2sysp_i7ef);
 
+	// 他、
+	// hostdrv for NT（generic/hostdrvnt.c）が0x07ec, 0x07ee
+	// Neko Project II Fast SCSI（cbus/scsiio.c）が0x07ea, 0x07eb
+	// Neko Project II Display Adapter（wab/npdisp.c）が0x07e8, 0x07e9
+	// を使う
+
 #if defined(NP2APPDEV)
 	iocore_attachout(0x00e9, np2sysp_o0e9);
 	iocore_attachinp(0x00e9, np2sysp_i0e9);

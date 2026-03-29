@@ -1009,9 +1009,10 @@ static void sendmpudata(REG8 data) {
 
 	if (smpu98.cmd.phase) {
 		sendmpucmd(&smpu98.cmd, data);
+		smpu98.status |= MIDIOUT_BUSY; // 一瞬だけBUSY
 		return;
 	}
-
+	smpu98_writecounter = SMPU98_WRITEBUFFER + 1;
 	if (smpu98.recvevent & MIDIE_STEP) {
 		MPUTR *tr;
 		smpu98.recvevent ^= MIDIE_STEP;
@@ -1219,6 +1220,10 @@ REG8 IOINPCALL smpu98_i2(UINT port) {
 		ret = smpu98.status;
 		if ((smpu98.r.cnt == 0) && (smpu98.intreq == 0)) {
 			ret |= MIDIIN_AVAIL;
+		}
+		if (smpu98_writecounter < SMPU98_WRITEBUFFER) {
+			// カウンタがバッファサイズより小さいならBUSY解除（次回に反映）
+			smpu98.status &= ~MIDIOUT_BUSY;
 		}
 // TRACEOUT(("smpu98 inp %.4x %.2x", port, ret));
 		return(ret);

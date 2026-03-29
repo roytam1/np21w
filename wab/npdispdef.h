@@ -2,7 +2,9 @@
  * @file	npdispdef.h
  * @brief	Definition of the Neko Project II Display Adapter
  */
- 
+
+#pragma once
+
 #if defined(SUPPORT_WAB_NPDISP)
 
 #define NPDISP_RETCODE_NONE		0
@@ -77,6 +79,7 @@ extern "C" {
 #endif
 
 #pragma pack(push, 1)
+
 	typedef struct _tagNPDISP_REQUEST
 	{
 		UINT16 version;
@@ -167,8 +170,8 @@ extern "C" {
 			{
 				UINT32 lpRetValueAddr;
 				UINT32 lpDestDevAddr;
-				UINT16 X;
-				UINT16 Y;
+				SINT16 X;
+				SINT16 Y;
 				UINT16 iScan;
 				UINT16 cScans;
 				UINT32 lpClipRectAddr;
@@ -233,6 +236,44 @@ extern "C" {
 				UINT32 lpDrawModeAddr;
 				UINT32 lpClipRectAddr;
 			} output;
+			struct
+			{
+				UINT32 lpRetValueAddr;
+				UINT32 lpRectAddr;
+				UINT16 wHorizBorderThick;
+				UINT16 wVertBorderThick;
+				UINT32 dwRasterOp;
+				UINT32 lpDestDevAddr;
+				UINT32 lpPBrushAddr;
+				UINT32 lpDrawModeAddr;
+				UINT32 lpClipRectAddr;
+			} fastBorder;
+			struct
+			{
+				UINT32 lpRetValueAddr;
+				UINT32 lpDestDevAddr;
+				UINT16 X;
+				UINT16 Y;
+				UINT32 dwPhysColor;
+				UINT32 lpDrawModeAddr;
+			} pixel;
+			struct
+			{
+				UINT32 lpRetValueAddr;
+				UINT32 lpDestDevAddr;
+				UINT16 X;
+				UINT16 Y;
+				UINT32 dwPhysColor;
+				UINT16 Style;
+			} scanLR;
+			struct
+			{
+				UINT32 lpRetValueAddr; // 0=Complete, 1=hasData
+				UINT32 lpDestDevAddr;
+				UINT16 wStyle; // 1=pen, 2=brush
+				UINT16 enumIdx; // 返すオブジェクトの要素番号
+				UINT32 lpLogObjAddr; // オブジェクトの内容書き込み先
+			} enumObj;
 			struct
 			{
 				UINT16 ax;
@@ -341,7 +382,7 @@ extern "C" {
 		SINT16 txfOverhang;
 	} NPDISP_TEXTXFORM;
 	typedef struct {
-		SINT32 opnStyle;
+		SINT16 opnStyle;
 		NPDISP_POINT lopnWidth;
 		SINT32 lopnColor;
 	} NPDISP_LPEN;
@@ -490,12 +531,75 @@ extern "C" {
 		NPDISP_LBRUSH lbrush;
 		NPDISP_HOSTPATTERNBITMAP pattern;
 		HBRUSH brs; // Windows向け
+		UINT32 refCount; // 参照数
 	} NPDISP_HOSTBRUSH;
 
 	typedef struct {
 		NPDISP_LPEN lpen;
 		HPEN pen; // Windows向け
+		UINT32 refCount; // 参照数
 	} NPDISP_HOSTPEN;
+
+
+
+	// Windows向けコード群
+
+	typedef struct {
+		BITMAPINFOHEADER bmiHeader;
+		RGBQUAD          bmiColors[256];
+	} BITMAPINFO_8BPP;
+
+	typedef struct {
+		BITMAPINFO_8BPP bi;
+		HDC hdc;
+		void* pBits;
+		HBITMAP hBmp;
+		HPALETTE hPalette;
+		HGDIOBJ hOldBmp;
+		HGDIOBJ hOldPen;
+		HGDIOBJ hOldBrush;
+		HPALETTE hOldPalette;
+		UINT32 stride;
+		HFONT hFont;
+
+		HDC hdcShadow;
+		void* pBitsShadow;
+		HBITMAP hBmpShadow;
+		HGDIOBJ hOldBmpShadow;
+		RECT rectShadow;
+
+		HDC hdcBltBuf;
+		void* pBitsBltBuf;
+		HBITMAP hBmpBltBuf;
+		HGDIOBJ hOldBmpBltBuf;
+
+		HDC hdcCursor;
+		HBITMAP hBmpCursor;
+		HBITMAP hOldBmpCursor;
+		HDC hdcCursorMask;
+		HBITMAP hBmpCursorMask;
+		HBITMAP hOldBmpCursorMask;
+		HBRUSH scanlineBrush;
+
+		HDC hdcCache[2];
+
+		HGDIOBJ hEEBrush;
+
+		UINT32 pensIdx;
+		std::map<UINT32, NPDISP_HOSTPEN> pens;
+		UINT32 brushesIdx;
+		std::map<UINT32, NPDISP_HOSTBRUSH> brushes;
+	} NPDISP_WINDOWS;
+
+	typedef struct {
+		HDC hdc;
+		void* pBits;
+		HBITMAP hBmp;
+		HGDIOBJ hOldBmp;
+		UINT32 stride;
+		BITMAPINFO* lpbi;
+	} NPDISP_WINDOWS_BMPHDC;
+
 #pragma pack(pop)
 
 

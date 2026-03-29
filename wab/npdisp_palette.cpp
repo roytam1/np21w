@@ -1,0 +1,370 @@
+/**
+ * @file	npdisp_palette.c
+ * @brief	Implementation of the Neko Project II Display Adapter Palette
+ */
+
+#include	"compiler.h"
+
+#if defined(SUPPORT_WAB_NPDISP)
+
+#include	<windows.h>
+#include	<cmath>
+#include	<cstdint>
+
+#include	<map>
+#include	<vector>
+
+#include	"pccore.h"
+#include	"cpucore.h"
+
+#include	"npdispdef.h"
+#include	"npdisp.h"
+#include	"npdisp_mem.h"
+#include	"npdisp_palette.h"
+
+NPDISP_RGB3 npdisp_palette_rgb2[2] = {
+	{0x00,0x00,0x00}, /* 0 black */
+	{0xFF,0xFF,0xFF}  /* 1 white */
+};
+NPDISP_RGB3 npdisp_palette_rgb16[16] = {
+	{0x00,0x00,0x00}, /* 0 black */
+	{0x80,0x00,0x00}, /* 1 dark red */
+	{0x00,0x80,0x00}, /* 2 dark green */
+	{0x80,0x80,0x00}, /* 3 dark yellow */
+	{0x00,0x00,0x80}, /* 4 dark blue */
+	{0x80,0x00,0x80}, /* 5 dark magenta */
+	{0x00,0x80,0x80}, /* 6 dark cyan */
+	{0x80,0x80,0x80}, /* 7 dark gray */
+	{0xC0,0xC0,0xC0}, /* 8 light gray */
+	{0xFF,0x00,0x00}, /* 9 red */
+	{0x00,0xFF,0x00}, /* 10 green */
+	{0xFF,0xFF,0x00}, /* 11 yellow */
+	{0x00,0x00,0xFF}, /* 12 blue */
+	{0xFF,0x00,0xFF}, /* 13 magenta */
+	{0x00,0xFF,0xFF}, /* 14 cyan */
+	{0xFF,0xFF,0xFF}  /* 15 white */
+};
+NPDISP_RGB3 npdisp_palette_rgb256[256] = { 0 };
+
+void npdisp_palette_makeTable() 
+{
+	NPDISP_RGB3* p256 = npdisp_palette_rgb256;
+
+	// static colors
+	p256[0].r = 0x00; p256[0].g = 0x00; p256[0].b = 0x00;
+	p256[1].r = 0x80; p256[1].g = 0x00; p256[1].b = 0x00;
+	p256[2].r = 0x00; p256[2].g = 0x80; p256[2].b = 0x00;
+	p256[3].r = 0x80; p256[3].g = 0x80; p256[3].b = 0x00;
+	p256[4].r = 0x00; p256[4].g = 0x00; p256[4].b = 0x80;
+	p256[5].r = 0x80; p256[5].g = 0x00; p256[5].b = 0x80;
+	p256[6].r = 0x00; p256[6].g = 0x80; p256[6].b = 0x80;
+	p256[7].r = 0xc0; p256[7].g = 0xc0; p256[7].b = 0xc0;
+	p256[8].r = 0xc0; p256[8].g = 0xdc; p256[8].b = 0xc0;
+	p256[9].r = 0xa6; p256[9].g = 0xca; p256[9].b = 0xf0;
+
+	p256[255].r = 0xff; p256[255].g = 0xff; p256[255].b = 0xff;
+	p256[254].r = 0x00; p256[254].g = 0xff; p256[254].b = 0xff;
+	p256[253].r = 0xff; p256[253].g = 0x00; p256[253].b = 0xff;
+	p256[252].r = 0x00; p256[252].g = 0x00; p256[252].b = 0xff;
+	p256[251].r = 0xff; p256[251].g = 0xff; p256[251].b = 0x00;
+	p256[250].r = 0x00; p256[250].g = 0xff; p256[250].b = 0x00;
+	p256[249].r = 0xff; p256[249].g = 0x00; p256[249].b = 0x00;
+	p256[248].r = 0x80; p256[248].g = 0x80; p256[248].b = 0x80;
+	p256[247].r = 0xa0; p256[247].g = 0xa0; p256[247].b = 0xa4;
+	p256[246].r = 0xff; p256[246].g = 0xfb; p256[246].b = 0xf0;
+
+	// とりあえずカラーキューブで埋める
+	int index = 10;
+	for (int r = 0; r < 6; r++) {
+		for (int g = 0; g < 6; g++) {
+			for (int b = 0; b < 6; b++) {
+				p256[index].r = r * 51;
+				p256[index].g = g * 51;
+				p256[index].b = b * 51;
+				index++;
+			}
+		}
+	}
+}
+
+int npdisp_FindNearest2(UINT8 r, UINT8 g, UINT8 b)
+{
+	return ((UINT32)r + g + b > NPDISP_MONO_THRESHOLD_N) ? 1 : 0;
+	//int i;
+	//int best = 0;
+	//long bestDist = 0x7FFFFFFFL;
+	//for (i = 0; i < NELEMENTS(npdisp_palette_rgb2); i++) {
+	//	long dr = (long)r - npdisp_palette_rgb2[i].r;
+	//	long dg = (long)g - npdisp_palette_rgb2[i].g;
+	//	long db = (long)b - npdisp_palette_rgb2[i].b;
+	//	long dist = dr * dr + dg * dg + db * db;
+	//	if (dist < bestDist) {
+	//		bestDist = dist;
+	//		best = i;
+	//	}
+	//}
+	//return best;
+}
+int npdisp_FindNearest16(UINT8 r, UINT8 g, UINT8 b)
+{
+	int i;
+	int best = 0;
+	long bestDist = 0x7FFFFFFFL;
+	for (i = 0; i < NELEMENTS(npdisp_palette_rgb16); i++) {
+		long dr = (long)r - npdisp_palette_rgb16[i].r;
+		long dg = (long)g - npdisp_palette_rgb16[i].g;
+		long db = (long)b - npdisp_palette_rgb16[i].b;
+		long dist = dr * dr + dg * dg + db * db;
+		if (dist < bestDist) {
+			bestDist = dist;
+			best = i;
+		}
+	}
+	return best;
+}
+int npdisp_FindNearest256(UINT8 r, UINT8 g, UINT8 b)
+{
+	int i;
+	int best = 0;
+	long bestDist = 0x7FFFFFFFL;
+	// システムカラー（固定色）優先で探す
+	for (i = 246; i < 256; i++) {
+		long dr = (long)r - npdisp_palette_rgb256[i].r;
+		long dg = (long)g - npdisp_palette_rgb256[i].g;
+		long db = (long)b - npdisp_palette_rgb256[i].b;
+		long dist = dr * dr + dg * dg + db * db;
+		if (dist < bestDist) {
+			bestDist = dist;
+			best = i;
+		}
+	}
+	for (i = 0; i < 10; i++) {
+		long dr = (long)r - npdisp_palette_rgb256[i].r;
+		long dg = (long)g - npdisp_palette_rgb256[i].g;
+		long db = (long)b - npdisp_palette_rgb256[i].b;
+		long dist = dr * dr + dg * dg + db * db;
+		if (dist < bestDist) {
+			bestDist = dist;
+			best = i;
+		}
+	}
+	// 無ければ自由色で
+	for (i = 10; i < 246; i++) {
+		long dr = (long)r - npdisp_palette_rgb256[i].r;
+		long dg = (long)g - npdisp_palette_rgb256[i].g;
+		long db = (long)b - npdisp_palette_rgb256[i].b;
+		long dist = dr * dr + dg * dg + db * db;
+		if (dist < bestDist) {
+			bestDist = dist;
+			best = i;
+		}
+	}
+	return best;
+}
+
+UINT32 npdisp_FindNearestColor(UINT8 r, UINT8 g, UINT8 b)
+{
+	if (npdisp.bpp == 1) {
+		// 2値
+		int idx = npdisp_FindNearest2(r, g, b);
+		return ((UINT32)npdisp_palette_rgb2[idx].r) | ((UINT32)npdisp_palette_rgb2[idx].g << 8) | ((UINT32)npdisp_palette_rgb2[idx].b << 16);
+	}
+	else if (npdisp.bpp == 4) {
+		// 16色
+		int idx = npdisp_FindNearest16(r, g, b);
+		return ((UINT32)npdisp_palette_rgb16[idx].r) | ((UINT32)npdisp_palette_rgb16[idx].g << 8) | ((UINT32)npdisp_palette_rgb16[idx].b << 16);
+	}
+	else {
+		// そのまま
+		return ((UINT32)r) | ((UINT32)g << 8) | ((b << 16));
+	}
+}
+UINT32 npdisp_FindNearestColorUINT32(UINT32 color)
+{
+	UINT8 r = (UINT8)(color & 0xFF);
+	UINT8 g = (UINT8)((color >> 8) & 0xFF);
+	UINT8 b = (UINT8)((color >> 16) & 0xFF);
+	return npdisp_FindNearestColor(r, g, b);
+}
+
+UINT32 npdisp_ObjIdxToColor(int idx)
+{
+	if (npdisp.bpp == 1) {
+		// 2値カラーを返す
+		if (idx < NELEMENTS(npdisp_palette_rgb2)) {
+			return ((UINT32)npdisp_palette_rgb2[idx].r) | ((UINT32)npdisp_palette_rgb2[idx].g << 8) | ((UINT32)npdisp_palette_rgb2[idx].b << 16);
+		}
+	}
+	else if (npdisp.bpp == 4) {
+		// 16色パレットカラーを返す
+		if (idx < NELEMENTS(npdisp_palette_rgb16)) {
+			return ((UINT32)npdisp_palette_rgb16[idx].r) | ((UINT32)npdisp_palette_rgb16[idx].g << 8) | ((UINT32)npdisp_palette_rgb16[idx].b << 16);
+		}
+	}
+	else {
+		// 256色固定カラーを返す
+		if (idx < 10) {
+			return ((UINT32)npdisp_palette_rgb256[idx].r) | ((UINT32)npdisp_palette_rgb256[idx].g << 8) | ((UINT32)npdisp_palette_rgb256[idx].b << 16);
+		}
+		else if (idx < 20) {
+			int lidx = NELEMENTS(npdisp_palette_rgb256) - 20 + idx;
+			return ((UINT32)npdisp_palette_rgb256[lidx].r) | ((UINT32)npdisp_palette_rgb256[lidx].g << 8) | ((UINT32)npdisp_palette_rgb256[lidx].b << 16);
+		}
+	}
+	return 0xffffffff;
+}
+
+
+struct RGBd {
+	double r, g, b;
+};
+
+static double Dist2(const NPDISP_RGB3& color, BYTE r, BYTE g, BYTE b)
+{
+	double dr = double(color.r) - r;
+	double dg = double(color.g) - g;
+	double db = double(color.b) - b;
+	return dr * dr + dg * dg + db * db;
+}
+
+static double Clamp01(double x)
+{
+	if (x < 0.0) return 0.0;
+	if (x > 1.0) return 1.0;
+	return x;
+}
+
+// c0 + t*(c1-c0) が target に最も近くなる t を求める
+static double MixFactor(const NPDISP_RGB3& c0, const NPDISP_RGB3& c1, BYTE tr, BYTE tg, BYTE tb)
+{
+	double v0r = c0.r, v0g = c0.g, v0b = c0.b;
+	double v1r = c1.r, v1g = c1.g, v1b = c1.b;
+	double dr = v1r - v0r, dg = v1g - v0g, db = v1b - v0b;
+	double rr = tr - v0r, rg = tg - v0g, rb = tb - v0b;
+
+	double denom = dr * dr + dg * dg + db * db;
+	if (denom <= 1e-12) return 0.0;
+
+	double t = (rr * dr + rg * dg + rb * db) / denom;
+	return Clamp01(t);
+}
+
+HBRUSH CreatePaletteDitherBrush(UINT32 target)
+{
+	NPDISP_RGB3* colors = NULL;
+	int n = 0;
+
+	if (npdisp.bpp == 1) {
+		colors = npdisp_palette_rgb2;
+		n = NELEMENTS(npdisp_palette_rgb2);
+	}
+	else if (npdisp.bpp == 4) {
+		colors = npdisp_palette_rgb16;
+		n = NELEMENTS(npdisp_palette_rgb16);
+	}
+	else {
+		return CreateSolidBrush(target);
+	}
+
+	BYTE tr = GetRValue(target);
+	BYTE tg = GetGValue(target);
+	BYTE tb = GetBValue(target);
+
+	// 最も近い1色
+	int i0 = 0;
+	double best0 = Dist2(colors[0], tr, tg, tb);
+	for (int i = 1; i < n; ++i) {
+		double d = Dist2(colors[i], tr, tg, tb);
+		if (d < best0) {
+			best0 = d;
+			i0 = i;
+		}
+	}
+
+	// 混ぜて最も良くなる相手色を探す
+	int i1 = i0;
+	double bestMixErr = best0;
+	double bestT = 0.0;
+
+	for (int i = 0; i < n; ++i) {
+		if (i == i0) continue;
+
+		double t = MixFactor(colors[i0], colors[i], tr, tg, tb);
+
+		double mr = colors[i0].r + t * (colors[i].r - colors[i0].r);
+		double mg = colors[i0].g + t * (colors[i].g - colors[i0].g);
+		double mb = colors[i0].b + t * (colors[i].b - colors[i0].b);
+
+		double er = mr - tr;
+		double eg = mg - tg;
+		double eb = mb - tb;
+		double err = er * er + eg * eg + eb * eb;
+
+		if (err < bestMixErr) {
+			bestMixErr = err;
+			i1 = i;
+			bestT = t;
+		}
+	}
+
+	// 8x8 Bayer matrix
+	static const BYTE bayer8[8][8] = {
+		{ 0,48,12,60, 3,51,15,63 },
+		{32,16,44,28,35,19,47,31 },
+		{ 8,56, 4,52,11,59, 7,55 },
+		{40,24,36,20,43,27,39,23 },
+		{ 2,50,14,62, 1,49,13,61 },
+		{34,18,46,30,33,17,45,29 },
+		{10,58, 6,54, 9,57, 5,53 },
+		{42,26,38,22,41,25,37,21 }
+	};
+
+	// 8bpp BI_RGB DIB:
+	// [BITMAPINFOHEADER][RGBQUAD x paletteSize][pixel data]
+	const int W = 8;
+	const int H = 8;
+	const int paletteSize = n;
+	const int stride = ((W + 3) & ~3); // 8bppなので1pixel=1byte
+	const int imageSize = stride * H;
+
+	size_t totalSize =
+		sizeof(BITMAPINFOHEADER) +
+		sizeof(RGBQUAD) * paletteSize +
+		imageSize;
+
+	std::vector<BYTE> dib(totalSize, 0);
+
+	BITMAPINFOHEADER* bih = reinterpret_cast<BITMAPINFOHEADER*>(dib.data());
+	bih->biSize = sizeof(BITMAPINFOHEADER);
+	bih->biWidth = W;
+	bih->biHeight = H;   // bottom-up
+	bih->biPlanes = 1;
+	bih->biBitCount = 8;
+	bih->biCompression = BI_RGB;
+	bih->biSizeImage = imageSize;
+	bih->biClrUsed = paletteSize;
+	bih->biClrImportant = paletteSize;
+
+	RGBQUAD* table = reinterpret_cast<RGBQUAD*>(dib.data() + sizeof(BITMAPINFOHEADER));
+	for (int i = 0; i < paletteSize; ++i) {
+		table[i].rgbRed = colors[i].r;
+		table[i].rgbGreen = colors[i].g;
+		table[i].rgbBlue = colors[i].b;
+		table[i].rgbReserved = 0;
+	}
+
+	BYTE* bits = dib.data() + sizeof(BITMAPINFOHEADER) + sizeof(RGBQUAD) * paletteSize;
+
+	int threshold = int(bestT * 64.0 + 0.5);
+
+	for (int y = 0; y < H; ++y) {
+		BYTE* row = bits + (H - 1 - y) * stride; // bottom-up
+		for (int x = 0; x < W; ++x) {
+			row[x] = (bayer8[y][x] < threshold) ? (BYTE)i1 : (BYTE)i0;
+		}
+	}
+
+	return CreateDIBPatternBrushPt(dib.data(), DIB_RGB_COLORS);
+}
+
+#endif

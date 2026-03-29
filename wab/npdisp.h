@@ -3,6 +3,8 @@
  * @brief	Interface of the Neko Project II Display Adapter
  */
 
+#pragma once
+
 #if defined(SUPPORT_WAB_NPDISP)
 
 #ifdef __cplusplus

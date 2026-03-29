@@ -979,6 +979,9 @@
     <ClCompile Include="..\wab\npdisp.cpp">
       <WholeProgramOptimization Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</WholeProgramOptimization>
     </ClCompile>
+    <ClCompile Include="..\wab\npdisp_mem.cpp" />
+    <ClCompile Include="..\wab\npdisp_palette.cpp" />
+    <ClCompile Include="..\wab\npdisp_rle.cpp" />
     <ClCompile Include="..\wab\wab.c" />
     <ClCompile Include="..\zlib\adler32.c" />
     <ClCompile Include="..\zlib\crc32.c" />
@@ -1366,6 +1369,9 @@
     <ClInclude Include="..\wab\cirrus_vga_rop2.h" />
     <ClInclude Include="..\wab\npdisp.h" />
     <ClInclude Include="..\wab\npdispdef.h" />
+    <ClInclude Include="..\wab\npdisp_mem.h" />
+    <ClInclude Include="..\wab\npdisp_palette.h" />
+    <ClInclude Include="..\wab\npdisp_rle.h" />
     <ClInclude Include="..\wab\tgui9680.h" />
     <ClInclude Include="..\wab\tgui9680_extern.h" />
     <ClInclude Include="..\wab\tgui9680_wrapper.h" />

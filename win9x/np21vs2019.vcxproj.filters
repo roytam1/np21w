@@ -2409,6 +2409,15 @@
     <ClCompile Include="..\wab\npdisp.cpp">
       <Filter>ソース ファイル\wab</Filter>
     </ClCompile>
+    <ClCompile Include="..\wab\npdisp_rle.cpp">
+      <Filter>ソース ファイル\wab</Filter>
+    </ClCompile>
+    <ClCompile Include="..\wab\npdisp_mem.cpp">
+      <Filter>ソース ファイル\wab</Filter>
+    </ClCompile>
+    <ClCompile Include="..\wab\npdisp_palette.cpp">
+      <Filter>ソース ファイル\wab</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\calendar.h">
@@ -3588,6 +3597,15 @@
       <Filter>ヘッダー ファイル\wab</Filter>
     </ClInclude>
     <ClInclude Include="..\wab\npdispdef.h">
+      <Filter>ヘッダー ファイル\wab</Filter>
+    </ClInclude>
+    <ClInclude Include="..\wab\npdisp_rle.h">
+      <Filter>ヘッダー ファイル\wab</Filter>
+    </ClInclude>
+    <ClInclude Include="..\wab\npdisp_mem.h">
+      <Filter>ヘッダー ファイル\wab</Filter>
+    </ClInclude>
+    <ClInclude Include="..\wab\npdisp_palette.h">
       <Filter>ヘッダー ファイル\wab</Filter>
     </ClInclude>
   </ItemGroup>

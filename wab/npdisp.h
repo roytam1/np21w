@@ -21,8 +21,10 @@ extern "C" {
 		UINT32	bpp;
 		UINT32	dpiX;
 		UINT32	dpiY;
+		UINT32	usePalette;
 
 		UINT32	updated;
+		UINT32	paletteUpdated;
 		UINT16	devType;
 
 		SINT32	cursorX;

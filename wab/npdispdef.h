@@ -7,6 +7,8 @@
 
 #if defined(SUPPORT_WAB_NPDISP)
 
+#define NPDISP_EXEC_MAGIC	0x3132504e
+
 #define NPDISP_RETCODE_NONE		0
 #define NPDISP_RETCODE_SUCCESS	1
 #define NPDISP_RETCODE_FAILED	2
@@ -274,6 +276,52 @@ extern "C" {
 				UINT16 enumIdx; // 返すオブジェクトの要素番号
 				UINT32 lpLogObjAddr; // オブジェクトの内容書き込み先
 			} enumObj;
+			struct
+			{
+				UINT32 lpRetValueAddr;
+				UINT32 lpDestDevAddr;
+				SINT16 wDestX;
+				SINT16 wDestY;
+				UINT16 wDestXext;
+				UINT16 wDestYext;
+				UINT32 lpSrcDevAddr;
+				SINT16 wSrcX;
+				SINT16 wSrcY;
+				UINT16 wSrcXext;
+				UINT16 wSrcYext;
+				UINT32 Rop3;
+				UINT32 lpPBrushAddr;
+				UINT32 lpDrawModeAddr;
+				UINT32 lpClipAddr;
+			} stretchBlt;
+			struct
+			{
+				UINT16 nStartIndex;
+				UINT16 nNumEntries;
+				UINT32 lpPaletteAddr;
+			} getPalette;
+			struct
+			{
+				UINT16 nStartIndex;
+				UINT16 nNumEntries;
+				UINT32 lpPaletteAddr;
+			} setPalette;
+			struct
+			{
+				UINT32 lpIndexesAddr;
+			} getPalTrans;
+			struct
+			{
+				UINT32 lpIndexesAddr;
+			} setPalTrans;
+			struct
+			{
+				UINT16 wStartX;
+				UINT16 wStartY;
+				UINT16 wExtX;
+				UINT16 wExtY;
+				UINT32 lpTranslateAddr;
+			} updateColors;
 			struct
 			{
 				UINT16 ax;
@@ -566,12 +614,14 @@ extern "C" {
 		void* pBitsShadow;
 		HBITMAP hBmpShadow;
 		HGDIOBJ hOldBmpShadow;
+		HPALETTE hOldPaletteShadow;
 		RECT rectShadow;
 
 		HDC hdcBltBuf;
 		void* pBitsBltBuf;
 		HBITMAP hBmpBltBuf;
 		HGDIOBJ hOldBmpBltBuf;
+		HPALETTE hOldPaletteBltBuf;
 
 		HDC hdcCursor;
 		HBITMAP hBmpCursor;
@@ -582,8 +632,6 @@ extern "C" {
 		HBRUSH scanlineBrush;
 
 		HDC hdcCache[2];
-
-		HGDIOBJ hEEBrush;
 
 		UINT32 pensIdx;
 		std::map<UINT32, NPDISP_HOSTPEN> pens;

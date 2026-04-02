@@ -17,6 +17,7 @@
 #include	"npdisp.h"
 #include	"npdisp_mem.h"
 #include	"npdisp_palette.h"
+#include	"wab.h"
 
 extern NPDISP_WINDOWS	npdispwin;
 
@@ -486,7 +487,7 @@ void npdisp_PreloadBitmapFromPBITMAP(NPDISP_PBITMAP* srcPBmp, int dcIdx, int beg
 	int bpp = srcPBmp->bmPlanes * srcPBmp->bmBitsPixel;
 	int	srcstride = srcPBmp->bmWidthBytes;
 	int	dststride = ((srcPBmp->bmWidth * bpp + 31) / 32) * 4;
-	if (numLines == -1 || numLines > srcPBmp->bmHeight) numLines = srcPBmp->bmHeight;
+	if (numLines == -1 || numLines > srcPBmp->bmHeight || beginLine + numLines > srcPBmp->bmHeight) numLines = srcPBmp->bmHeight;
 	int endLine = beginLine + numLines;
 	lastPreload_imgsize = srcstride * numLines;
 	// 先に読み取り
@@ -535,7 +536,7 @@ void npdisp_PreloadBitmapFromPBITMAP(NPDISP_PBITMAP* srcPBmp, int dcIdx, int beg
 	lastPreload_memread_size2 = npdisp_memread_buf.size();
 }
 
-int npdisp_MakeBitmapFromPBITMAP(NPDISP_PBITMAP* srcPBmp, NPDISP_WINDOWS_BMPHDC* bmpHDC, int dcIdx, int beginLine, int numLines) {
+int npdisp_MakeBitmapFromPBITMAP(NPDISP_PBITMAP* srcPBmp, NPDISP_WINDOWS_BMPHDC* bmpHDC, int dcIdx, int beginLine, int numLines, UINT16* transTable) {
 	int i, j;
 	int bpp = srcPBmp->bmPlanes * srcPBmp->bmBitsPixel;
 	int	srcstride = srcPBmp->bmWidthBytes;
@@ -566,11 +567,33 @@ int npdisp_MakeBitmapFromPBITMAP(NPDISP_PBITMAP* srcPBmp, NPDISP_WINDOWS_BMPHDC*
 			}
 			else if (bpp == 8) {
 				// 256色パレットセット
-				for (i = 0; i < NELEMENTS(npdisp_palette_rgb256); i++) {
-					lpbi->bmiColors[i].rgbRed = npdisp_palette_rgb256[i].r;
-					lpbi->bmiColors[i].rgbGreen = npdisp_palette_rgb256[i].g;
-					lpbi->bmiColors[i].rgbBlue = npdisp_palette_rgb256[i].b;
-					lpbi->bmiColors[i].rgbReserved = 0;
+				if (npdisp.usePalette) {
+					if (transTable) {
+						// パレット番号変換の上転送
+						for (i = 0; i < NELEMENTS(npdisp_palette_rgb256); i++) {
+							lpbi->bmiColors[i].rgbRed = transTable[i] & 0xff;
+							lpbi->bmiColors[i].rgbGreen = transTable[i] & 0xff;
+							lpbi->bmiColors[i].rgbBlue = transTable[i] & 0xff;
+							lpbi->bmiColors[i].rgbReserved = 0;
+						}
+					}
+					else {
+						// 仮想パレット番号
+						for (i = 0; i < NELEMENTS(npdisp_palette_rgb256); i++) {
+							lpbi->bmiColors[i].rgbRed = i;
+							lpbi->bmiColors[i].rgbGreen = i;
+							lpbi->bmiColors[i].rgbBlue = i;
+							lpbi->bmiColors[i].rgbReserved = 0;
+						}
+					}
+				}
+				else {
+					for (i = 0; i < NELEMENTS(npdisp_palette_rgb256); i++) {
+						lpbi->bmiColors[i].rgbRed = npdisp_palette_rgb256[i].r;
+						lpbi->bmiColors[i].rgbGreen = npdisp_palette_rgb256[i].g;
+						lpbi->bmiColors[i].rgbBlue = npdisp_palette_rgb256[i].b;
+						lpbi->bmiColors[i].rgbReserved = 0;
+					}
 				}
 			}
 		}
@@ -593,11 +616,11 @@ int npdisp_MakeBitmapFromPBITMAP(NPDISP_PBITMAP* srcPBmp, NPDISP_WINDOWS_BMPHDC*
 			lpbi->bmiHeader.biYPelsPerMeter = 0;
 			lpbi->bmiHeader.biClrUsed = 1 << srcPBmp->bmBitsPixel;
 			lpbi->bmiHeader.biClrImportant = lpbi->bmiHeader.biClrUsed;
-			bmpHDC->hBmp = CreateDIBSection(npdispwin.hdc, lpbi, DIB_RGB_COLORS, &bmpHDC->pBits, NULL, 0);
+			bmpHDC->hBmp = CreateDIBSection(bmpHDC->hdc, lpbi, DIB_RGB_COLORS, &bmpHDC->pBits, NULL, 0);
 			if (bmpHDC->hBmp) {
 				HBITMAP hbmpSrcOld;
 				bmpHDC->stride = ((srcPBmp->bmWidth * bpp + 31) / 32) * 4;
-				if (numLines == -1 || numLines > srcPBmp->bmHeight) numLines = srcPBmp->bmHeight;
+				if (numLines == -1 || numLines > srcPBmp->bmHeight || beginLine + numLines > srcPBmp->bmHeight) numLines = srcPBmp->bmHeight;
 				int endLine = beginLine + numLines;
 				if (srcPBmp->bmSegmentIndex != 0) {
 					// 64KB超え転送
@@ -646,10 +669,18 @@ int npdisp_MakeBitmapFromPBITMAP(NPDISP_PBITMAP* srcPBmp, NPDISP_WINDOWS_BMPHDC*
 						}
 					}
 				}
+				//char* dstPtr2 = (char*)(bmpHDC->pBits);
+				//for (i = beginLine; i < beginLine+2; i++) {
+				//	for (int x = 0; x < bmpHDC->stride; x++) {
+				//		dstPtr2[x] = x;
+				//	}
+				//	dstPtr2 += bmpHDC->stride;
+				//}
 
 				if (npdisp.longjmpnum == 0) {
 					bmpHDC->hOldBmp = SelectObject(bmpHDC->hdc, bmpHDC->hBmp);
 					bmpHDC->lpbi = lpbi;
+					//BitBlt(np2wabwnd.hDCBuf, npdisp.width / 2, 0, npdisp.width / 2, npdisp.height, bmpHDC->hdc, 0, 0, SRCCOPY);
 				}
 				else {
 					DeleteObject(bmpHDC->hBmp);
@@ -683,7 +714,7 @@ void npdisp_WriteBitmapToPBITMAP(NPDISP_PBITMAP* dstPBmp, NPDISP_WINDOWS_BMPHDC*
 		int i, j;
 		int bpp = dstPBmp->bmPlanes * dstPBmp->bmBitsPixel;
 		int	dststride = dstPBmp->bmWidthBytes;
-		if (numLines == -1 || numLines > dstPBmp->bmHeight) numLines = dstPBmp->bmHeight;
+		if (numLines == -1 || numLines > dstPBmp->bmHeight || beginLine + numLines > dstPBmp->bmHeight) numLines = dstPBmp->bmHeight;
 		int endLine = beginLine + numLines;
 
 		//if (bpp == 1) {

@@ -22,6 +22,18 @@
 #include	"npdisp_mem.h"
 #include	"npdisp_palette.h"
 
+ // パレットカラー指定 or RGB指定を調整
+#define NPDISP_ADJUST_COLORREF(a)	(((a) & 0xff000000) == 0x01000000 ? (a) : ((a) & 0xffffff))
+
+// モノクロの場合RGB指定を白黒へ変換
+#define NPDISP_ADJUST_MONOCOLOR_R(a)	((a) & 0xff)
+#define NPDISP_ADJUST_MONOCOLOR_G(a)	(((a) >> 8) & 0xff)
+#define NPDISP_ADJUST_MONOCOLOR_B(a)	(((a) >> 16) & 0xff)
+#define NPDISP_ADJUST_MONOCOLOR_SUMRGB(a)	( NPDISP_ADJUST_MONOCOLOR_R(a) + NPDISP_ADJUST_MONOCOLOR_G(a) + NPDISP_ADJUST_MONOCOLOR_B(a) )
+#define NPDISP_ADJUST_MONOCOLOR_TOMONO(a)	( (NPDISP_ADJUST_MONOCOLOR_SUMRGB(a) > NPDISP_MONO_THRESHOLD) ? 0xffffff : 0 )
+#define NPDISP_ADJUST_MONOCOLOR_PAL(a)		( (a)==1 ? 0xffffff : 0x000000 )
+#define NPDISP_ADJUST_MONOCOLOR(a)			(npdisp.bpp == 1 ? ( (((a) & 0xff000000) == 0x01000000) ? NPDISP_ADJUST_MONOCOLOR_PAL(a) : NPDISP_ADJUST_MONOCOLOR_TOMONO(a) ) : (a))
+
 NPDISP_RGB3 npdisp_palette_rgb2[2] = {
 	{0x00,0x00,0x00}, /* 0 black */
 	{0xFF,0xFF,0xFF}  /* 1 white */
@@ -45,6 +57,9 @@ NPDISP_RGB3 npdisp_palette_rgb16[16] = {
 	{0xFF,0xFF,0xFF}  /* 15 white */
 };
 NPDISP_RGB3 npdisp_palette_rgb256[256] = { 0 };
+NPDISP_RGB3 npdisp_palette_gray256[256] = { 0 };
+
+UINT16 npdisp_palette_transTbl[256] = { 0 };
 
 void npdisp_palette_makeTable() 
 {
@@ -62,16 +77,16 @@ void npdisp_palette_makeTable()
 	p256[8].r = 0xc0; p256[8].g = 0xdc; p256[8].b = 0xc0;
 	p256[9].r = 0xa6; p256[9].g = 0xca; p256[9].b = 0xf0;
 
-	p256[255].r = 0xff; p256[255].g = 0xff; p256[255].b = 0xff;
-	p256[254].r = 0x00; p256[254].g = 0xff; p256[254].b = 0xff;
-	p256[253].r = 0xff; p256[253].g = 0x00; p256[253].b = 0xff;
-	p256[252].r = 0x00; p256[252].g = 0x00; p256[252].b = 0xff;
-	p256[251].r = 0xff; p256[251].g = 0xff; p256[251].b = 0x00;
-	p256[250].r = 0x00; p256[250].g = 0xff; p256[250].b = 0x00;
-	p256[249].r = 0xff; p256[249].g = 0x00; p256[249].b = 0x00;
-	p256[248].r = 0x80; p256[248].g = 0x80; p256[248].b = 0x80;
-	p256[247].r = 0xa0; p256[247].g = 0xa0; p256[247].b = 0xa4;
 	p256[246].r = 0xff; p256[246].g = 0xfb; p256[246].b = 0xf0;
+	p256[247].r = 0xa0; p256[247].g = 0xa0; p256[247].b = 0xa4;
+	p256[248].r = 0x80; p256[248].g = 0x80; p256[248].b = 0x80;
+	p256[249].r = 0xff; p256[249].g = 0x00; p256[249].b = 0x00;
+	p256[250].r = 0x00; p256[250].g = 0xff; p256[250].b = 0x00;
+	p256[251].r = 0xff; p256[251].g = 0xff; p256[251].b = 0x00;
+	p256[252].r = 0x00; p256[252].g = 0x00; p256[252].b = 0xff;
+	p256[253].r = 0xff; p256[253].g = 0x00; p256[253].b = 0xff;
+	p256[254].r = 0x00; p256[254].g = 0xff; p256[254].b = 0xff;
+	p256[255].r = 0xff; p256[255].g = 0xff; p256[255].b = 0xff;
 
 	// とりあえずカラーキューブで埋める
 	int index = 10;
@@ -84,6 +99,18 @@ void npdisp_palette_makeTable()
 				index++;
 			}
 		}
+	}
+
+	// グレースケール256色
+	for (int i = 0; i < NELEMENTS(npdisp_palette_gray256); i++) {
+		npdisp_palette_gray256[i].r = i;
+		npdisp_palette_gray256[i].g = i;
+		npdisp_palette_gray256[i].b = i;
+	}
+
+	// 変換無し
+	for (int i = 0; i < NELEMENTS(npdisp_palette_transTbl); i++) {
+		npdisp_palette_transTbl[i] = i;
 	}
 }
 
@@ -161,6 +188,24 @@ int npdisp_FindNearest256(UINT8 r, UINT8 g, UINT8 b)
 	}
 	return best;
 }
+int npdisp_FindNearest256Tbl(UINT8 r, UINT8 g, UINT8 b)
+{
+	int i;
+	int best = 0;
+	long bestDist = 0x7FFFFFFFL;
+	// テーブルから引く
+	for (i = 0; i < 256; i++) {
+		long dr = (long)r - npdisp_palette_rgb256[npdisp_palette_transTbl[i]].r;
+		long dg = (long)g - npdisp_palette_rgb256[npdisp_palette_transTbl[i]].g;
+		long db = (long)b - npdisp_palette_rgb256[npdisp_palette_transTbl[i]].b;
+		long dist = dr * dr + dg * dg + db * db;
+		if (dist < bestDist) {
+			bestDist = dist;
+			best = i;
+		}
+	}
+	return best;
+}
 
 UINT32 npdisp_FindNearestColor(UINT8 r, UINT8 g, UINT8 b)
 {
@@ -214,6 +259,64 @@ UINT32 npdisp_ObjIdxToColor(int idx)
 	return 0xffffffff;
 }
 
+UINT32 npdisp_AdjustColorRefForGDI(UINT32 color, bool *preferDither)
+{
+	if (preferDither) *preferDither = false;
+	if (npdisp.bpp == 1) {
+		if (color & 0xff000000) {
+			// パレットで渡された場合、白黒変換
+			int colorIdx = color & 0x1;
+			return ((UINT32)npdisp_palette_rgb2[colorIdx].r) | ((UINT32)npdisp_palette_rgb2[colorIdx].g << 8) | ((UINT32)npdisp_palette_rgb2[colorIdx].b << 16);
+		}
+		else {
+			// 色で渡された場合、素通し
+			if (preferDither) {
+				// 純色か調べ、そうでなければディザ推奨とする
+				int physicalColor = npdisp_FindNearestColorUINT32(color);
+				*preferDither = (physicalColor != color);
+			}
+			return color;
+		}
+	}
+	else if (npdisp.bpp == 4) {
+		if (color & 0xff000000) {
+			// パレットで渡された場合、色変換
+			int colorIdx = color & 0xf;
+			return ((UINT32)npdisp_palette_rgb16[colorIdx].r) | ((UINT32)npdisp_palette_rgb16[colorIdx].g << 8) | ((UINT32)npdisp_palette_rgb16[colorIdx].b << 16);
+		}
+		else {
+			// 色で渡された場合、素通し
+			if (preferDither) {
+				// 純色か調べ、そうでなければディザ推奨とする
+				int physicalColor = npdisp_FindNearestColorUINT32(color);
+				*preferDither = (physicalColor != color);
+			}
+			return color;
+		}
+	}
+	else if (npdisp.bpp == 8) {
+		UINT32 idx = 0;
+		if (color & 0xff000000) {
+			// パレットで渡された場合、既に物理パレットなのでそのまま
+			idx = color & 0xff;
+		}
+		else {
+			// 色で渡された場合、物理パレットインデックスへ変換
+			idx = npdisp_FindNearest256(color & 0xff, (color >> 8) & 0xff, (color >> 16) & 0xff);
+		}
+		return idx | (idx << 8) | (idx << 16);
+	}
+	else {
+		// 素通し
+		return color;
+	}
+}
+void npdisp_AdjustDrawModeColor(NPDISP_DRAWMODE* drawMode) {
+	if (npdisp.bpp <= 8) {
+		drawMode->LTextColor = npdisp_AdjustColorRefForGDI(drawMode->TextColor);
+		drawMode->LbkColor = npdisp_AdjustColorRefForGDI(drawMode->bkColor);
+	}
+}
 
 struct RGBd {
 	double r, g, b;

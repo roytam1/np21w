@@ -2418,6 +2418,12 @@
     <ClCompile Include="..\wab\npdisp_palette.cpp">
       <Filter>ソース ファイル\wab</Filter>
     </ClCompile>
+    <ClCompile Include="..\wab\npdisp_gdioutput.cpp">
+      <Filter>ソース ファイル\wab</Filter>
+    </ClCompile>
+    <ClCompile Include="..\wab\npdisp_gdibitblt.cpp">
+      <Filter>ソース ファイル\wab</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\calendar.h">
@@ -3606,6 +3612,12 @@
       <Filter>ヘッダー ファイル\wab</Filter>
     </ClInclude>
     <ClInclude Include="..\wab\npdisp_palette.h">
+      <Filter>ヘッダー ファイル\wab</Filter>
+    </ClInclude>
+    <ClInclude Include="..\wab\npdisp_gdioutput.h">
+      <Filter>ヘッダー ファイル\wab</Filter>
+    </ClInclude>
+    <ClInclude Include="..\wab\npdisp_gdibitblt.h">
       <Filter>ヘッダー ファイル\wab</Filter>
     </ClInclude>
   </ItemGroup>

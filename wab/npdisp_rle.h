@@ -8,7 +8,8 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-	int DecompressRLEBMP(const BITMAPINFOHEADER* bih, const UINT8* rle_data, int rle_size, UINT8* out_pixels);
+	int npdisp_DecompressRLEBMP(const BITMAPINFOHEADER* bih, const UINT8* rle_data, int rle_size, UINT8* out_pixels);
+	int npdisp_RLEBMPReadAndCalcSize(const UINT32 lpDIBitsAddr, const UINT32 biCompression, UINT8* rle_data_buf, int rle_size_max);
 #ifdef __cplusplus
 }
 #endif

@@ -21,7 +21,7 @@ extern "C" {
 	int npdisp_preloadMemory(UINT32 lpAddr, int size);
 	int npdisp_readMemoryWith32Offset(void* dst, UINT16 selector, UINT32 offset, int size);
 	int npdisp_readMemory(void* dst, UINT32 lpAddr, int size);
-	int npdisp_writeMemory(void* dst, UINT32 lpAddr, int size);
+	int npdisp_writeMemory(void* src, UINT32 lpAddr, int size);
 
 	UINT8 npdisp_readMemory8With32Offset(UINT16 selector, UINT32 offset);
 	UINT8 npdisp_readMemory8(UINT32 lpAddr);

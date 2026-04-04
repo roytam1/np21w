@@ -255,6 +255,9 @@ struct tagNP2Config
 	UINT8	gd5430melofs;
 	UINT8	ga98nb_bigscrn_ex;
 #endif
+#if defined(SUPPORT_WAB_NPDISP)
+	UINT8	usenpdisp;
+#endif
 #if defined(SUPPORT_VGA_MODEX)
 	UINT8	usemodex;
 #endif

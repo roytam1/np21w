@@ -53,6 +53,8 @@ extern "C" {
 
 	UINT32 npdisp_FindNearestColor(UINT8 r, UINT8 g, UINT8 b);
 	UINT32 npdisp_FindNearestColorUINT32(UINT32 color);
+	UINT32 npdisp_FindNearestColorIndex(UINT8 r, UINT8 g, UINT8 b);
+	UINT32 npdisp_FindNearestColorIndexUINT32(UINT32 color);
 
 	UINT32 npdisp_ObjIdxToColor(int idx);
 
@@ -67,8 +69,16 @@ extern "C" {
 	/// </summary>
 	/// <param name="drawMode"></param>
 	void npdisp_AdjustDrawModeColor(NPDISP_DRAWMODE *drawMode);
+	/// <summary>
+	/// DrawModeの値に基づいてソース2値ビットマップの色を修正する
+	/// </summary>
+	/// <param name="bmpHdcSrc"></param>
+	/// <param name="bmpHdcDst"></param>
+	/// <param name="drawMode"></param>
+	void npdisp_AdjustSrcMonoPaletteByDrawMode(NPDISP_WINDOWS_BMPHDC* bmpHdcSrc, NPDISP_WINDOWS_BMPHDC* bmpHdcDst, NPDISP_DRAWMODE* drawMode);
 
-	HBRUSH CreatePaletteDitherBrush(UINT32 target);
+	void MakePaletteDitherBrushColor(UINT32 target, UINT32* actual1, UINT32* actual2, double* bestTValue);
+	HBRUSH CreatePaletteDitherBrush(UINT32 actual1, UINT32 actual2, double bestTValue);
 #ifdef __cplusplus
 }
 #endif

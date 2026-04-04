@@ -114,11 +114,11 @@ bool npdisp_func_Output_GetYRange_SCANLINES(int* lineBegin, int* numLines, HPEN 
 bool npdisp_func_Output_RECTANGLE(HDC tgtDC, NPDISP_WINDOWS_BMPHDC* bmphdc, NPDISP_PBITMAP* dstPBmp, HPEN curPen, HBRUSH curBrush, UINT16 wCount, UINT32 lpPointsAddr)
 {
 	int penWidthOffset = 0;
-	if (curPen) {
-		LOGPEN lp;
-		GetObject(curPen, sizeof(LOGPEN), &lp);
-		penWidthOffset = lp.lopnWidth.x / 2;
-	}
+	//if (curPen) {
+	//	LOGPEN lp;
+	//	GetObject(curPen, sizeof(LOGPEN), &lp);
+	//	penWidthOffset = lp.lopnWidth.x / 2;
+	//}
 	NPDISP_POINT pt1, pt2;
 	if (npdisp_readMemory(&pt1, lpPointsAddr, sizeof(NPDISP_POINT))) {
 		lpPointsAddr += sizeof(NPDISP_POINT);
@@ -235,11 +235,6 @@ bool npdisp_func_Output_GetYRange_POLYGON(int* lineBegin, int* numLines, HPEN cu
 bool npdisp_func_Output_ELLIPSE(HDC tgtDC, NPDISP_WINDOWS_BMPHDC* bmphdc, NPDISP_PBITMAP* dstPBmp, HPEN curPen, HBRUSH curBrush, UINT16 wCount, UINT32 lpPointsAddr)
 {
 	int penWidthOffset = 0;
-	if (curPen) {
-		LOGPEN lp;
-		GetObject(curPen, sizeof(LOGPEN), &lp);
-		penWidthOffset = lp.lopnWidth.x / 2;
-	}
 	NPDISP_POINT pt1, pt2;
 	if (npdisp_readMemory(&pt1, lpPointsAddr, sizeof(NPDISP_POINT))) {
 		lpPointsAddr += sizeof(NPDISP_POINT);
@@ -282,11 +277,6 @@ bool npdisp_func_Output_GetYRange_ELLIPSE(int* lineBegin, int* numLines, HPEN cu
 bool npdisp_func_Output_ARC(HDC tgtDC, NPDISP_WINDOWS_BMPHDC* bmphdc, NPDISP_PBITMAP* dstPBmp, HPEN curPen, HBRUSH curBrush, UINT16 wCount, UINT32 lpPointsAddr)
 {
 	int penWidthOffset = 0;
-	if (curPen) {
-		LOGPEN lp;
-		GetObject(curPen, sizeof(LOGPEN), &lp);
-		penWidthOffset = lp.lopnWidth.x / 2;
-	}
 	NPDISP_POINT pts[4];
 	for (int i = 0; i < NELEMENTS(pts); i++) {
 		if (!npdisp_readMemory(pts + i, lpPointsAddr, sizeof(NPDISP_POINT))) {
@@ -329,11 +319,6 @@ bool npdisp_func_Output_GetYRange_ARC(int* lineBegin, int* numLines, HPEN curPen
 bool npdisp_func_Output_PIE(HDC tgtDC, NPDISP_WINDOWS_BMPHDC* bmphdc, NPDISP_PBITMAP* dstPBmp, HPEN curPen, HBRUSH curBrush, UINT16 wCount, UINT32 lpPointsAddr)
 {
 	int penWidthOffset = 0;
-	if (curPen) {
-		LOGPEN lp;
-		GetObject(curPen, sizeof(LOGPEN), &lp);
-		penWidthOffset = lp.lopnWidth.x / 2;
-	}
 	NPDISP_POINT pts[4];
 	for (int i = 0; i < NELEMENTS(pts); i++) {
 		if (!npdisp_readMemory(pts + i, lpPointsAddr, sizeof(NPDISP_POINT))) {
@@ -376,11 +361,6 @@ bool npdisp_func_Output_GetYRange_PIE(int* lineBegin, int* numLines, HPEN curPen
 bool npdisp_func_Output_CHORD(HDC tgtDC, NPDISP_WINDOWS_BMPHDC* bmphdc, NPDISP_PBITMAP* dstPBmp, HPEN curPen, HBRUSH curBrush, UINT16 wCount, UINT32 lpPointsAddr)
 {
 	int penWidthOffset = 0;
-	if (curPen) {
-		LOGPEN lp;
-		GetObject(curPen, sizeof(LOGPEN), &lp);
-		penWidthOffset = lp.lopnWidth.x / 2;
-	}
 	NPDISP_POINT pts[4];
 	for (int i = 0; i < NELEMENTS(pts); i++) {
 		if (!npdisp_readMemory(pts + i, lpPointsAddr, sizeof(NPDISP_POINT))) {
@@ -423,11 +403,6 @@ bool npdisp_func_Output_GetYRange_CHORD(int* lineBegin, int* numLines, HPEN curP
 bool npdisp_func_Output_ROUNDRECT(HDC tgtDC, NPDISP_WINDOWS_BMPHDC* bmphdc, NPDISP_PBITMAP* dstPBmp, HPEN curPen, HBRUSH curBrush, UINT16 wCount, UINT32 lpPointsAddr)
 {
 	int penWidthOffset = 0;
-	if (curPen) {
-		LOGPEN lp;
-		GetObject(curPen, sizeof(LOGPEN), &lp);
-		penWidthOffset = lp.lopnWidth.x / 2;
-	}
 	NPDISP_POINT pt1, pt2, pt3;
 	if (npdisp_readMemory(&pt1, lpPointsAddr, sizeof(NPDISP_POINT))) {
 		lpPointsAddr += sizeof(NPDISP_POINT);

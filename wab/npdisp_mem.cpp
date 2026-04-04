@@ -272,7 +272,7 @@ int npdisp_writeLMemory(UINT32 vaddr, void* buffer, UINT32 size)
 			while (writesize > 0) {
 				UINT32 inPageSize = CPU_PAGE_SIZE - (writeaddr & CPU_PAGE_MASK);
 				inPageSize = min(inPageSize, writesize);
-				cpu_lmemorywrites(writeaddr, writeptr, inPageSize, CPU_PAGE_READ_DATA | CPU_MODE_SUPERVISER);
+				cpu_lmemorywrites(writeaddr, writeptr, inPageSize, CPU_PAGE_WRITE_DATA | CPU_MODE_SUPERVISER);
 				npdisp_memwrite_bufwpos += inPageSize;
 				npdisp_memwrite_curpos += inPageSize;
 				writesize -= inPageSize;
@@ -370,7 +370,7 @@ int npdisp_readMemory(void* dst, UINT32 lpAddr, int size)
 	}
 	return 0;
 }
-int npdisp_writeMemory(void* dst, UINT32 lpAddr, int size) 
+int npdisp_writeMemory(void* src, UINT32 lpAddr, int size) 
 {
 	UINT16 seg = (lpAddr >> 16) & 0xffff;
 	UINT16 ofs = lpAddr & 0xffff;
@@ -384,7 +384,7 @@ int npdisp_writeMemory(void* dst, UINT32 lpAddr, int size)
 	}
 	if (selector_to_linear(seg, ofs, &linearAddr)) 
 	{
-		return npdisp_writeLMemory(linearAddr, dst, size);
+		return npdisp_writeLMemory(linearAddr, src, size);
 	}
 	return 0;
 }
@@ -466,13 +466,13 @@ char* npdisp_readMemoryStringWithCount(UINT32 lpAddr, int count)
 	return strBuf;
 }
 
-static int lastPreloadB = 0;
-static int lastPreload = 0;
-static int lastPreload_memread_curpos;
-static int lastPreload_memread_curpos2;
-static int lastPreload_memread_size;
-static int lastPreload_memread_size2;
-static int lastPreload_imgsize;
+//static int lastPreloadB = 0;
+//static int lastPreload = 0;
+//static int lastPreload_memread_curpos;
+//static int lastPreload_memread_curpos2;
+//static int lastPreload_memread_size;
+//static int lastPreload_memread_size2;
+//static int lastPreload_imgsize;
 
 // ƒƒ‚ƒŠæ“Ç‚Ý
 // ’ˆÓF‚±‚ê‚ðŒÄ‚ñ‚¾Œã‚Énpdisp_MakeBitmapFromPBITMAP‚ð‚·‚®‚ÉŒÄ‚Ô‚±‚ÆBŠÔ‚É•Ê‚Ìread‚ðŠš‚Ü‚¹‚Ä‚Í‚¢‚¯‚È‚¢B
@@ -480,16 +480,21 @@ static int lastPreload_imgsize;
 void npdisp_PreloadBitmapFromPBITMAP(NPDISP_PBITMAP* srcPBmp, int dcIdx, int beginLine, int numLines) {
 	if (npdisp.longjmpnum != 0) return;
 
-	lastPreloadB = npdisp_memread_preloadcount;
-	lastPreload_memread_curpos = npdisp_memread_curpos;
-	lastPreload_memread_size = npdisp_memread_buf.size();
+	//lastPreloadB = npdisp_memread_preloadcount;
+	//lastPreload_memread_curpos = npdisp_memread_curpos;
+	//lastPreload_memread_size = npdisp_memread_buf.size();
 	int i, j;
 	int bpp = srcPBmp->bmPlanes * srcPBmp->bmBitsPixel;
 	int	srcstride = srcPBmp->bmWidthBytes;
 	int	dststride = ((srcPBmp->bmWidth * bpp + 31) / 32) * 4;
-	if (numLines == -1 || numLines > srcPBmp->bmHeight || beginLine + numLines > srcPBmp->bmHeight) numLines = srcPBmp->bmHeight;
+	if (numLines == -1 || numLines > srcPBmp->bmHeight) numLines = srcPBmp->bmHeight;
+	if (beginLine + numLines > srcPBmp->bmHeight) numLines = srcPBmp->bmHeight - beginLine;
+	if (beginLine >= srcPBmp->bmHeight) {
+		beginLine = 0;
+		numLines = 0;
+	}
 	int endLine = beginLine + numLines;
-	lastPreload_imgsize = srcstride * numLines;
+	//lastPreload_imgsize = srcstride * numLines;
 	// æ‚É“Ç‚ÝŽæ‚è
 	if (srcPBmp->bmSegmentIndex != 0) {
 		// 64KB’´‚¦“]‘—
@@ -531,9 +536,9 @@ void npdisp_PreloadBitmapFromPBITMAP(NPDISP_PBITMAP* srcPBmp, int dcIdx, int beg
 			}
 		}
 	}
-	lastPreload = npdisp_memread_preloadcount;
-	lastPreload_memread_curpos2 = npdisp_memread_curpos;
-	lastPreload_memread_size2 = npdisp_memread_buf.size();
+	//lastPreload = npdisp_memread_preloadcount;
+	//lastPreload_memread_curpos2 = npdisp_memread_curpos;
+	//lastPreload_memread_size2 = npdisp_memread_buf.size();
 }
 
 int npdisp_MakeBitmapFromPBITMAP(NPDISP_PBITMAP* srcPBmp, NPDISP_WINDOWS_BMPHDC* bmpHDC, int dcIdx, int beginLine, int numLines, UINT16* transTable) {
@@ -620,7 +625,12 @@ int npdisp_MakeBitmapFromPBITMAP(NPDISP_PBITMAP* srcPBmp, NPDISP_WINDOWS_BMPHDC*
 			if (bmpHDC->hBmp) {
 				HBITMAP hbmpSrcOld;
 				bmpHDC->stride = ((srcPBmp->bmWidth * bpp + 31) / 32) * 4;
-				if (numLines == -1 || numLines > srcPBmp->bmHeight || beginLine + numLines > srcPBmp->bmHeight) numLines = srcPBmp->bmHeight;
+				if (numLines == -1 || numLines > srcPBmp->bmHeight) numLines = srcPBmp->bmHeight;
+				if (beginLine + numLines > srcPBmp->bmHeight) numLines = srcPBmp->bmHeight - beginLine;
+				if (beginLine >= srcPBmp->bmHeight) {
+					beginLine = 0;
+					numLines = 0;
+				}
 				int endLine = beginLine + numLines;
 				if (srcPBmp->bmSegmentIndex != 0) {
 					// 64KB’´‚¦“]‘—
@@ -714,7 +724,12 @@ void npdisp_WriteBitmapToPBITMAP(NPDISP_PBITMAP* dstPBmp, NPDISP_WINDOWS_BMPHDC*
 		int i, j;
 		int bpp = dstPBmp->bmPlanes * dstPBmp->bmBitsPixel;
 		int	dststride = dstPBmp->bmWidthBytes;
-		if (numLines == -1 || numLines > dstPBmp->bmHeight || beginLine + numLines > dstPBmp->bmHeight) numLines = dstPBmp->bmHeight;
+		if (numLines == -1 || numLines > dstPBmp->bmHeight) numLines = dstPBmp->bmHeight;
+		if (beginLine + numLines > dstPBmp->bmHeight) numLines = dstPBmp->bmHeight - beginLine;
+		if (beginLine >= dstPBmp->bmHeight) {
+			beginLine = 0;
+			numLines = 0;
+		}
 		int endLine = beginLine + numLines;
 
 		//if (bpp == 1) {

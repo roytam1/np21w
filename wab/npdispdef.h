@@ -282,13 +282,13 @@ extern "C" {
 				UINT32 lpDestDevAddr;
 				SINT16 wDestX;
 				SINT16 wDestY;
-				UINT16 wDestXext;
-				UINT16 wDestYext;
+				SINT16 wDestXext;
+				SINT16 wDestYext;
 				UINT32 lpSrcDevAddr;
 				SINT16 wSrcX;
 				SINT16 wSrcY;
-				UINT16 wSrcXext;
-				UINT16 wSrcYext;
+				SINT16 wSrcXext;
+				SINT16 wSrcYext;
 				UINT32 Rop3;
 				UINT32 lpPBrushAddr;
 				UINT32 lpDrawModeAddr;
@@ -316,12 +316,23 @@ extern "C" {
 			} setPalTrans;
 			struct
 			{
-				UINT16 wStartX;
-				UINT16 wStartY;
+				SINT16 wStartX;
+				SINT16 wStartY;
 				UINT16 wExtX;
 				UINT16 wExtY;
 				UINT32 lpTranslateAddr;
 			} updateColors;
+			struct
+			{
+				UINT32 lpRetValueAddr;
+				UINT32 lpDestDevAddr;
+				UINT32 lpBufferAddr;
+				UINT16 wFirstChar;
+				UINT16 wLastChar;
+				UINT32 lpFontInfoAddr;
+				UINT32 lpDrawModeAddr;
+				UINT32 lpFontTransAddr;
+			} getCharWidth;
 			struct
 			{
 				UINT16 ax;
@@ -458,12 +469,10 @@ extern "C" {
 	} NPDISP_LFONT;
 
 	typedef struct {
-		char dummy[3];
 		NPDISP_LPEN lpen; // NPDISP_PENの先頭はLPENとする
 		int key; // np2側のキー 
 	} NPDISP_PEN;
 	typedef struct {
-		char dummy[54];
 		NPDISP_LBRUSH lbrush; // NPDISP_BRUSHの先頭はLBRUSHとする
 		int key; // np2側のキー 
 	} NPDISP_BRUSH;
@@ -544,8 +553,8 @@ extern "C" {
 		SINT16 dfMaxWidth;
 		UINT8 dfFirstChar;
 		UINT8 dfLastChar;
-		SINT8 dfDefaultChar;
-		SINT8 dfBreakChar;
+		UINT8 dfDefaultChar;
+		UINT8 dfBreakChar;
 
 		SINT16 dfWidthBytes;
 		SINT32 dfDevice;
@@ -566,24 +575,26 @@ extern "C" {
 	// np2側で控えておく情報
 
 	typedef struct {
-		SINT16 bmType;
-		SINT16 bmWidth;
-		SINT16 bmHeight;
-		SINT16 bmWidthBytes;
-		UINT8 bmPlanes;
-		UINT8 bmBitsPixel;
+		BITMAPINFOHEADER biHeader;
+		UINT32 pal[256];
 		char bmBits[4 * 8 * 8]; // Win3.1は8x8px上限
 	} NPDISP_HOSTPATTERNBITMAP;
 
 	typedef struct {
 		NPDISP_LBRUSH lbrush;
 		NPDISP_HOSTPATTERNBITMAP pattern;
+		UINT8 actualColorNum; // 実際の色の数 0=無効（計算が必要）, 1=1色, 2=2色
+		UINT32 actualColor; // 実際の色
+		UINT32 actualColor2; // ディザの場合の第2色目
+		double actualColor2Ratio; // ディザの場合の混合比
 		HBRUSH brs; // Windows向け
 		UINT32 refCount; // 参照数
 	} NPDISP_HOSTBRUSH;
 
 	typedef struct {
 		NPDISP_LPEN lpen;
+		UINT8 actualColorNum; // 実際の色の数 0=無効（計算が必要）, 1=1色
+		UINT32 actualColor; // 実際の色
 		HPEN pen; // Windows向け
 		UINT32 refCount; // 参照数
 	} NPDISP_HOSTPEN;
@@ -602,11 +613,9 @@ extern "C" {
 		HDC hdc;
 		void* pBits;
 		HBITMAP hBmp;
-		HPALETTE hPalette;
 		HGDIOBJ hOldBmp;
 		HGDIOBJ hOldPen;
 		HGDIOBJ hOldBrush;
-		HPALETTE hOldPalette;
 		UINT32 stride;
 		HFONT hFont;
 
@@ -614,22 +623,21 @@ extern "C" {
 		void* pBitsShadow;
 		HBITMAP hBmpShadow;
 		HGDIOBJ hOldBmpShadow;
-		HPALETTE hOldPaletteShadow;
 		RECT rectShadow;
 
 		HDC hdcBltBuf;
 		void* pBitsBltBuf;
 		HBITMAP hBmpBltBuf;
 		HGDIOBJ hOldBmpBltBuf;
-		HPALETTE hOldPaletteBltBuf;
 
 		HDC hdcCursor;
 		HBITMAP hBmpCursor;
 		HBITMAP hOldBmpCursor;
+		void* pBitsCursor;
 		HDC hdcCursorMask;
 		HBITMAP hBmpCursorMask;
 		HBITMAP hOldBmpCursorMask;
-		HBRUSH scanlineBrush;
+		void* pBitsCursorMask;
 
 		HDC hdcCache[2];
 

@@ -15,6 +15,9 @@ extern "C" {
 		UINT32	dataAddr;
 		UINT32	cmdBuf;
 
+		UINT16	version;
+
+		UINT8	ioenabled;
 		UINT8	enabled;
 		UINT32	width;
 		UINT32	height;
@@ -33,6 +36,7 @@ extern "C" {
 		SINT32	cursorHeight;
 		SINT32  cursorHotSpotX;
 		SINT32  cursorHotSpotY;
+		UINT32  cursorStride;
 
 		int longjmpnum;
 	} NPDISP;
@@ -47,6 +51,7 @@ extern "C" {
 	void npdisp_bind(void);
 	void npdisp_unbind(void);
 	void npdisp_shutdown(void);
+
 #ifdef __cplusplus
 }
 #endif

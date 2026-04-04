@@ -219,12 +219,43 @@ UINT32 npdisp_FindNearestColor(UINT8 r, UINT8 g, UINT8 b)
 		int idx = npdisp_FindNearest16(r, g, b);
 		return ((UINT32)npdisp_palette_rgb16[idx].r) | ((UINT32)npdisp_palette_rgb16[idx].g << 8) | ((UINT32)npdisp_palette_rgb16[idx].b << 16);
 	}
+	else if (npdisp.bpp == 8) {
+		// 256色
+		int idx = npdisp_FindNearest256(r, g, b);
+		return ((UINT32)npdisp_palette_rgb16[idx].r) | ((UINT32)npdisp_palette_rgb16[idx].g << 8) | ((UINT32)npdisp_palette_rgb16[idx].b << 16);
+	}
 	else {
 		// そのまま
 		return ((UINT32)r) | ((UINT32)g << 8) | ((b << 16));
 	}
 }
 UINT32 npdisp_FindNearestColorUINT32(UINT32 color)
+{
+	UINT8 r = (UINT8)(color & 0xFF);
+	UINT8 g = (UINT8)((color >> 8) & 0xFF);
+	UINT8 b = (UINT8)((color >> 16) & 0xFF);
+	return npdisp_FindNearestColor(r, g, b);
+}
+UINT32 npdisp_FindNearestColorIndex(UINT8 r, UINT8 g, UINT8 b)
+{
+	if (npdisp.bpp == 1) {
+		// 2値
+		return npdisp_FindNearest2(r, g, b);
+	}
+	else if (npdisp.bpp == 4) {
+		// 16色
+		return npdisp_FindNearest16(r, g, b);
+	}
+	else if (npdisp.bpp == 8) {
+		// 256色
+		return npdisp_FindNearest256(r, g, b);
+	}
+	else {
+		// ない
+		return 0xffffffff;
+	}
+}
+UINT32 npdisp_FindNearestColorIndexUINT32(UINT32 color)
 {
 	UINT8 r = (UINT8)(color & 0xFF);
 	UINT8 g = (UINT8)((color >> 8) & 0xFF);
@@ -303,6 +334,14 @@ UINT32 npdisp_AdjustColorRefForGDI(UINT32 color, bool *preferDither)
 		else {
 			// 色で渡された場合、物理パレットインデックスへ変換
 			idx = npdisp_FindNearest256(color & 0xff, (color >> 8) & 0xff, (color >> 16) & 0xff);
+			if (preferDither) {
+				// 純色か調べ、そうでなければディザ推奨とする
+				int physicalColor = ((UINT32)npdisp_palette_rgb256[idx].r) | ((UINT32)npdisp_palette_rgb256[idx].g << 8) | ((UINT32)npdisp_palette_rgb256[idx].b << 16);
+				if (physicalColor != color) {
+					*preferDither = true;
+					return color; // 返す色も実際の色とする
+				}
+			}
 		}
 		return idx | (idx << 8) | (idx << 16);
 	}
@@ -317,10 +356,20 @@ void npdisp_AdjustDrawModeColor(NPDISP_DRAWMODE* drawMode) {
 		drawMode->LbkColor = npdisp_AdjustColorRefForGDI(drawMode->bkColor);
 	}
 }
-
-struct RGBd {
-	double r, g, b;
-};
+void npdisp_AdjustSrcMonoPaletteByDrawMode(NPDISP_WINDOWS_BMPHDC *bmpHdcSrc, NPDISP_WINDOWS_BMPHDC *bmpHdcDst, NPDISP_DRAWMODE* drawMode) {
+	if (bmpHdcSrc->lpbi->bmiHeader.biBitCount == 1 && (bmpHdcDst && bmpHdcDst->lpbi->bmiHeader.biBitCount != 1 || !bmpHdcDst && npdisp.bpp != 1)) {
+		RGBQUAD pal[2];
+		pal[0].rgbRed = drawMode->LTextColor & 0xff;
+		pal[0].rgbGreen = (drawMode->LTextColor >> 8) & 0xff;
+		pal[0].rgbBlue = (drawMode->LTextColor >> 16) & 0xff;
+		pal[0].rgbReserved = 0;
+		pal[1].rgbRed = drawMode->LbkColor & 0xff;
+		pal[1].rgbGreen = (drawMode->LbkColor >> 8) & 0xff;
+		pal[1].rgbBlue = (drawMode->LbkColor >> 16) & 0xff;
+		pal[1].rgbReserved = 0;
+		SetDIBColorTable(bmpHdcSrc->hdc, 0, 2, pal);
+	}
+}
 
 static double Dist2(const NPDISP_RGB3& color, BYTE r, BYTE g, BYTE b)
 {
@@ -352,7 +401,7 @@ static double MixFactor(const NPDISP_RGB3& c0, const NPDISP_RGB3& c1, BYTE tr, B
 	return Clamp01(t);
 }
 
-HBRUSH CreatePaletteDitherBrush(UINT32 target)
+void MakePaletteDitherBrushColor(UINT32 target, UINT32 *actual1, UINT32 *actual2, double *bestTValue)
 {
 	NPDISP_RGB3* colors = NULL;
 	int n = 0;
@@ -365,50 +414,121 @@ HBRUSH CreatePaletteDitherBrush(UINT32 target)
 		colors = npdisp_palette_rgb16;
 		n = NELEMENTS(npdisp_palette_rgb16);
 	}
+	else if (npdisp.bpp == 8) {
+		colors = npdisp_palette_rgb256;
+		n = NELEMENTS(npdisp_palette_rgb256);
+	}
 	else {
-		return CreateSolidBrush(target);
+		*actual1 = target;
+		*actual2 = target;
+		return;
 	}
 
 	BYTE tr = GetRValue(target);
 	BYTE tg = GetGValue(target);
 	BYTE tb = GetBValue(target);
 
-	// 最も近い1色
+	// 単色最近傍も初期値として保持しておく
 	int i0 = 0;
-	double best0 = Dist2(colors[0], tr, tg, tb);
-	for (int i = 1; i < n; ++i) {
-		double d = Dist2(colors[i], tr, tg, tb);
-		if (d < best0) {
-			best0 = d;
-			i0 = i;
-		}
-	}
-
-	// 混ぜて最も良くなる相手色を探す
-	int i1 = i0;
-	double bestMixErr = best0;
+	int i1 = 0;
+	double bestErr = Dist2(colors[0], tr, tg, tb);
 	double bestT = 0.0;
 
-	for (int i = 0; i < n; ++i) {
-		if (i == i0) continue;
-
-		double t = MixFactor(colors[i0], colors[i], tr, tg, tb);
-
-		double mr = colors[i0].r + t * (colors[i].r - colors[i0].r);
-		double mg = colors[i0].g + t * (colors[i].g - colors[i0].g);
-		double mb = colors[i0].b + t * (colors[i].b - colors[i0].b);
-
-		double er = mr - tr;
-		double eg = mg - tg;
-		double eb = mb - tb;
-		double err = er * er + eg * eg + eb * eb;
-
-		if (err < bestMixErr) {
-			bestMixErr = err;
+	for (int i = 1; i < n; ++i) {
+		double d = Dist2(colors[i], tr, tg, tb);
+		if (d < bestErr) {
+			bestErr = d;
+			i0 = i;
 			i1 = i;
-			bestT = t;
+			bestT = 0.0;
 		}
 	}
+	if (npdisp.bpp == 8 && tr == tg && tg == tb) {
+		// 特例　グレーの範囲の色だけを探す
+		// 全組み合わせを探索
+		for (int a = 0; a < n; ++a) {
+			for (int b = 0; b < n; ++b) {
+				if (a == b) continue;
+
+				if (colors[a].r != colors[a].g || colors[a].g != colors[a].b) continue; // グレーでないなら除外
+				if (colors[b].r != colors[b].g || colors[b].g != colors[b].b) continue; // グレーでないなら除外
+
+				double t = MixFactor(colors[a], colors[b], tr, tg, tb);
+
+				double mr = colors[a].r + t * (colors[b].r - colors[a].r);
+				double mg = colors[a].g + t * (colors[b].g - colors[a].g);
+				double mb = colors[a].b + t * (colors[b].b - colors[a].b);
+
+				double er = mr - tr;
+				double eg = mg - tg;
+				double eb = mb - tb;
+				double err = er * er + eg * eg + eb * eb;
+
+				if (err < bestErr) {
+					bestErr = err;
+					i0 = a;
+					i1 = b;
+					bestT = t;
+				}
+			}
+		}
+	}
+	else {
+		// 全組み合わせを探索
+		for (int a = 0; a < n; ++a) {
+			for (int b = 0; b < n; ++b) {
+				if (a == b) continue;
+
+				double t = MixFactor(colors[a], colors[b], tr, tg, tb);
+
+				double mr = colors[a].r + t * (colors[b].r - colors[a].r);
+				double mg = colors[a].g + t * (colors[b].g - colors[a].g);
+				double mb = colors[a].b + t * (colors[b].b - colors[a].b);
+
+				double er = mr - tr;
+				double eg = mg - tg;
+				double eb = mb - tb;
+				double err = er * er + eg * eg + eb * eb;
+
+				if (err < bestErr) {
+					bestErr = err;
+					i0 = a;
+					i1 = b;
+					bestT = t;
+				}
+			}
+		}
+	}
+
+	*actual1 = i0;
+	*actual2 = i1;
+	*bestTValue = bestT;
+}
+
+HBRUSH CreatePaletteDitherBrush(UINT32 actual1, UINT32 actual2, double bestTValue)
+{
+	NPDISP_RGB3* colors = NULL;
+	int n = 0;
+
+	if (npdisp.bpp == 1) {
+		colors = npdisp_palette_rgb2;
+		n = NELEMENTS(npdisp_palette_rgb2);
+	}
+	else if (npdisp.bpp == 4) {
+		colors = npdisp_palette_rgb16;
+		n = NELEMENTS(npdisp_palette_rgb16);
+	}
+	else if (npdisp.bpp == 8) {
+		colors = npdisp_palette_gray256;
+		n = NELEMENTS(npdisp_palette_gray256);
+	}
+	else {
+		return CreateSolidBrush(actual1);
+	}
+
+	int i0 = actual1;
+	int i1 = actual2;
+	double bestT = bestTValue;
 
 	// 8x8 Bayer matrix
 	static const BYTE bayer8[8][8] = {

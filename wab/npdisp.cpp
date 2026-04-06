@@ -162,6 +162,7 @@ static void npdisp_func_NP2Initialize(UINT16 dpiX, UINT16 dpiY, UINT16 width, UI
 {
 	// 初期化
 	npdisp.enabled = 0;
+	npdisp.active = 0;
 	np2wab.relaystateext = 0;
 	np2wab_setRelayState(np2wab.relaystateint | np2wab.relaystateext);
 	npdisp_releaseScreen();
@@ -331,6 +332,7 @@ static UINT16 npdisp_func_Enable(UINT32 lpDevInfoAddr, UINT16 wStyle, UINT32 lpD
 			npdisp_writeMemory(&devInfo, lpDevInfoAddr, 2);
 			npdisp_createScreen();
 			npdisp.enabled = 1;
+			npdisp.active = 1;
 			np2wab.realWidth = npdisp.width;
 			np2wab.realHeight = npdisp.height;
 			np2wab.relaystateext = 3;
@@ -361,6 +363,7 @@ static void npdisp_func_Disable(UINT32 lpDestDevAddr)
 		NPDISP_PDEVICE destDev;
 		npdisp_readMemory(&destDev, lpDestDevAddr, sizeof(destDev));
 		npdisp.enabled = 0;
+		npdisp.active = 0;
 		np2wab.relaystateext = 0;
 		np2wab_setRelayState(np2wab.relaystateint | np2wab.relaystateext);
 	}
@@ -1223,7 +1226,7 @@ static UINT16 npdisp_func_DeviceBitmapBits(UINT32 lpBitmapAddr, UINT16 fGet, UIN
 	return retValue;
 }
 
-static UINT32 npdisp_func_ExtTextOut(UINT32 lpRetValueAddr, UINT32 lpDestDevAddr, SINT16 wDestXOrg, SINT16 wDestYOrg, UINT32 lpClipRectAddr, UINT32 lpStringAddr, SINT16 wCount, UINT32 lpFontInfoAddr, UINT32 lpDrawModeAddr, UINT32 lpTextXFormAddr, UINT32 lpCharWidthsAddr, UINT32 lpOpaqueRectAddr, UINT16 wOptions)
+static UINT32 npdisp_func_ExtTextOut(UINT32 lpDestDevAddr, SINT16 wDestXOrg, SINT16 wDestYOrg, UINT32 lpClipRectAddr, UINT32 lpStringAddr, SINT16 wCount, UINT32 lpFontInfoAddr, UINT32 lpDrawModeAddr, UINT32 lpTextXFormAddr, UINT32 lpCharWidthsAddr, UINT32 lpOpaqueRectAddr, UINT16 wOptions)
 {
 	UINT32 retValue = 0;
 	UINT8* lpText;
@@ -1552,7 +1555,7 @@ static UINT32 npdisp_func_ExtTextOut(UINT32 lpRetValueAddr, UINT32 lpDestDevAddr
 	return retValue;
 }
 
-static UINT16 npdisp_func_SetDIBitsToDevice(UINT32 lpRetValueAddr, UINT32 lpDestDevAddr, SINT16 X, SINT16 Y, UINT16 iScan ,UINT16 cScans, UINT32 lpClipRectAddr, UINT32 lpDrawModeAddr, UINT32 lpDIBitsAddr, UINT32 lpBitmapInfoAddr, UINT32 lpTranslateAddr)
+static UINT16 npdisp_func_SetDIBitsToDevice(UINT32 lpDestDevAddr, SINT16 X, SINT16 Y, UINT16 iScan ,UINT16 cScans, UINT32 lpClipRectAddr, UINT32 lpDrawModeAddr, UINT32 lpDIBitsAddr, UINT32 lpBitmapInfoAddr, UINT32 lpTranslateAddr)
 {
 	int dstDevType = 0;
 	UINT16* transTbl = NULL;
@@ -1599,109 +1602,111 @@ static UINT16 npdisp_func_SetDIBitsToDevice(UINT32 lpRetValueAddr, UINT32 lpDest
 					UINT8* pBits = (UINT8*)malloc(stride * height);
 					if (pBits) {
 						npdisp_readMemory(pBits, lpDIBitsAddr, stride * height);
-						HDC tgtDC = npdispwin.hdc;
-						if (height > iScan) {
-							int i;
-							if (npdisp.usePalette) {
-								if (lpbi->bmiHeader.biBitCount <= 8) {
-									int colors = (1 << lpbi->bmiHeader.biBitCount);
-									UINT16 palTrans[256];
-									memcpy(palTrans, lpbi->bmiColors, colors * sizeof(UINT16));
-									for (i = 0; i < colors; i++) {
-										lpbi->bmiColors[i].rgbRed = palTrans[i] & 0xff;
-										lpbi->bmiColors[i].rgbGreen = palTrans[i] & 0xff;
-										lpbi->bmiColors[i].rgbBlue = palTrans[i] & 0xff;
-										lpbi->bmiColors[i].rgbReserved = 0;
-										lpbi->bmiColors[i].rgbReserved = 0;
-									}
-								}
-							}
-							else {
-								if (lpbi->bmiHeader.biBitCount == 1) {
-									// 2色パレットセット
-									for (i = 0; i < NELEMENTS(npdisp_palette_rgb2); i++) {
-										lpbi->bmiColors[i].rgbRed = npdisp_palette_rgb2[i].r;
-										lpbi->bmiColors[i].rgbGreen = npdisp_palette_rgb2[i].g;
-										lpbi->bmiColors[i].rgbBlue = npdisp_palette_rgb2[i].b;
-										lpbi->bmiColors[i].rgbReserved = 0;
-									}
-								}
-								else if (lpbi->bmiHeader.biBitCount == 4) {
-									// 有効なパレットでなければ16色パレットセット
-									if (lpbi->bmiColors[0].rgbRed != 0 || lpbi->bmiColors[0].rgbGreen != 0 || lpbi->bmiColors[0].rgbBlue != 0 || lpbi->bmiColors[0].rgbReserved != 0 ||
-										lpbi->bmiColors[15].rgbRed != 0xff || lpbi->bmiColors[15].rgbGreen != 0xff || lpbi->bmiColors[15].rgbBlue != 0xff || lpbi->bmiColors[15].rgbReserved != 0) {
-										for (i = 0; i < NELEMENTS(npdisp_palette_rgb16); i++) {
-											lpbi->bmiColors[i].rgbRed = npdisp_palette_rgb16[i].r;
-											lpbi->bmiColors[i].rgbGreen = npdisp_palette_rgb16[i].g;
-											lpbi->bmiColors[i].rgbBlue = npdisp_palette_rgb16[i].b;
+						if (npdisp.longjmpnum == 0) {
+							HDC tgtDC = npdispwin.hdc;
+							if (height > iScan) {
+								int i;
+								if (npdisp.usePalette) {
+									if (lpbi->bmiHeader.biBitCount <= 8) {
+										int colors = (1 << lpbi->bmiHeader.biBitCount);
+										UINT16 palTrans[256];
+										memcpy(palTrans, lpbi->bmiColors, colors * sizeof(UINT16));
+										for (i = 0; i < colors; i++) {
+											lpbi->bmiColors[i].rgbRed = palTrans[i] & 0xff;
+											lpbi->bmiColors[i].rgbGreen = palTrans[i] & 0xff;
+											lpbi->bmiColors[i].rgbBlue = palTrans[i] & 0xff;
+											lpbi->bmiColors[i].rgbReserved = 0;
 											lpbi->bmiColors[i].rgbReserved = 0;
 										}
 									}
 								}
-							}
-							NPDISP_DRAWMODE drawMode = { 0 };
-							if (npdisp_readMemory(&drawMode, lpDrawModeAddr, sizeof(NPDISP_DRAWMODE))) {
-								npdisp_AdjustDrawModeColor(&drawMode);
-								SetBkColor(tgtDC, drawMode.LbkColor);
-								SetTextColor(tgtDC, drawMode.LTextColor);
-								SetBkMode(tgtDC, drawMode.bkMode);
-								SetROP2(tgtDC, drawMode.Rop2);
-							}
-							HRGN hRgn = NULL;
-							if (lpClipRectAddr) {
-								RECT cliprect = { 0 };
-								NPDISP_RECT rectTmp = { 0 };
-								npdisp_readMemory(&rectTmp, lpClipRectAddr, sizeof(NPDISP_RECT));
-								cliprect.top = rectTmp.top;
-								cliprect.left = rectTmp.left;
-								cliprect.bottom = rectTmp.bottom;
-								cliprect.right = rectTmp.right;
-								hRgn = CreateRectRgn(cliprect.left, cliprect.top, cliprect.right, cliprect.bottom);
-								SelectClipRgn(tgtDC, hRgn);
-							}
-
-							if (iScan + cScans > height) {
-								cScans = height - iScan;
-							}
-
-							bool palChanged = false;
-							if (npdisp.usePalette) {
-								if (lpbi->bmiHeader.biBitCount > 8) {
-									// グレースケールから実際のデバイス色へ置き換え
-									if (npdisp.bpp == 8) {
-										RGBQUAD pal[256];
-										for (int i = 0; i < 256; i++) {
-											pal[i].rgbRed = npdisp_palette_rgb256[i].r;
-											pal[i].rgbGreen = npdisp_palette_rgb256[i].g;
-											pal[i].rgbBlue = npdisp_palette_rgb256[i].b;
-											pal[i].rgbReserved = 0;
+								else {
+									if (lpbi->bmiHeader.biBitCount == 1) {
+										// 2色パレットセット
+										for (i = 0; i < NELEMENTS(npdisp_palette_rgb2); i++) {
+											lpbi->bmiColors[i].rgbRed = npdisp_palette_rgb2[i].r;
+											lpbi->bmiColors[i].rgbGreen = npdisp_palette_rgb2[i].g;
+											lpbi->bmiColors[i].rgbBlue = npdisp_palette_rgb2[i].b;
+											lpbi->bmiColors[i].rgbReserved = 0;
 										}
-										SetDIBColorTable(tgtDC, 0, 256, pal);
-										palChanged = true;
+									}
+									else if (lpbi->bmiHeader.biBitCount == 4) {
+										// 有効なパレットでなければ16色パレットセット
+										if (lpbi->bmiColors[0].rgbRed != 0 || lpbi->bmiColors[0].rgbGreen != 0 || lpbi->bmiColors[0].rgbBlue != 0 || lpbi->bmiColors[0].rgbReserved != 0 ||
+											lpbi->bmiColors[15].rgbRed != 0xff || lpbi->bmiColors[15].rgbGreen != 0xff || lpbi->bmiColors[15].rgbBlue != 0xff || lpbi->bmiColors[15].rgbReserved != 0) {
+											for (i = 0; i < NELEMENTS(npdisp_palette_rgb16); i++) {
+												lpbi->bmiColors[i].rgbRed = npdisp_palette_rgb16[i].r;
+												lpbi->bmiColors[i].rgbGreen = npdisp_palette_rgb16[i].g;
+												lpbi->bmiColors[i].rgbBlue = npdisp_palette_rgb16[i].b;
+												lpbi->bmiColors[i].rgbReserved = 0;
+											}
+										}
 									}
 								}
-							}
+								NPDISP_DRAWMODE drawMode = { 0 };
+								if (npdisp_readMemory(&drawMode, lpDrawModeAddr, sizeof(NPDISP_DRAWMODE))) {
+									npdisp_AdjustDrawModeColor(&drawMode);
+									SetBkColor(tgtDC, drawMode.LbkColor);
+									SetTextColor(tgtDC, drawMode.LTextColor);
+									SetBkMode(tgtDC, drawMode.bkMode);
+									SetROP2(tgtDC, drawMode.Rop2);
+								}
+								HRGN hRgn = NULL;
+								if (lpClipRectAddr) {
+									RECT cliprect = { 0 };
+									NPDISP_RECT rectTmp = { 0 };
+									npdisp_readMemory(&rectTmp, lpClipRectAddr, sizeof(NPDISP_RECT));
+									cliprect.top = rectTmp.top;
+									cliprect.left = rectTmp.left;
+									cliprect.bottom = rectTmp.bottom;
+									cliprect.right = rectTmp.right;
+									hRgn = CreateRectRgn(cliprect.left, cliprect.top, cliprect.right, cliprect.bottom);
+									SelectClipRgn(tgtDC, hRgn);
+								}
 
-							if (SetDIBitsToDevice(tgtDC, X, Y, biHeader.biWidth, height, 0, 0,
-								iScan, cScans, pBits, lpbi, DIB_RGB_COLORS) == 0) {
-								TRACEOUTF(("ERROR"));
+								if (iScan + cScans > height) {
+									cScans = height - iScan;
+								}
 
-							}
+								bool palChanged = false;
+								if (npdisp.usePalette) {
+									if (lpbi->bmiHeader.biBitCount > 8) {
+										// グレースケールから実際のデバイス色へ置き換え
+										if (npdisp.bpp == 8) {
+											RGBQUAD pal[256];
+											for (int i = 0; i < 256; i++) {
+												pal[i].rgbRed = npdisp_palette_rgb256[i].r;
+												pal[i].rgbGreen = npdisp_palette_rgb256[i].g;
+												pal[i].rgbBlue = npdisp_palette_rgb256[i].b;
+												pal[i].rgbReserved = 0;
+											}
+											SetDIBColorTable(tgtDC, 0, 256, pal);
+											palChanged = true;
+										}
+									}
+								}
 
-							if (hRgn) {
-								SelectClipRgn(tgtDC, NULL);
-								DeleteObject(hRgn);
-							}
+								if (SetDIBitsToDevice(tgtDC, X, Y, biHeader.biWidth, height, 0, 0,
+									iScan, cScans, pBits, lpbi, DIB_RGB_COLORS) == 0) {
+									TRACEOUTF(("ERROR"));
 
-							if (palChanged) {
-								// 色を戻す
-								SetDIBColorTable(tgtDC, 0, 256, (RGBQUAD*)npdisp_palette_gray256);
-							}
+								}
 
-							npdisp.updated = 1;
-							retValue = cScans;
-							if (cScans == 24 && iScan == 0) {
-								TRACEOUTF(("OK"));
+								if (hRgn) {
+									SelectClipRgn(tgtDC, NULL);
+									DeleteObject(hRgn);
+								}
+
+								if (palChanged) {
+									// 色を戻す
+									SetDIBColorTable(tgtDC, 0, 256, (RGBQUAD*)npdisp_palette_gray256);
+								}
+
+								npdisp.updated = 1;
+								retValue = cScans;
+								if (cScans == 24 && iScan == 0) {
+									TRACEOUTF(("OK"));
+								}
 							}
 						}
 						free(pBits);
@@ -1869,7 +1874,7 @@ static void npdisp_func_CheckCursor()
 	// nothing to do
 }
 
-static UINT16 npdisp_func_FastBorder(UINT32 lpRetValueAddr, UINT32 lpRectAddr, UINT16 wHorizBorderThick, UINT16 wVertBorderThick, UINT32 dwRasterOp, UINT32 lpDestDevAddr, UINT32 lpPBrushAddr, UINT32 lpDrawModeAddr, UINT32 lpClipRectAddr)
+static UINT16 npdisp_func_FastBorder(UINT32 lpRectAddr, UINT16 wHorizBorderThick, UINT16 wVertBorderThick, UINT32 dwRasterOp, UINT32 lpDestDevAddr, UINT32 lpPBrushAddr, UINT32 lpDrawModeAddr, UINT32 lpClipRectAddr)
 {
 	UINT16 retValue = 0;
 	int dstDevType = 0;
@@ -1941,7 +1946,7 @@ static UINT16 npdisp_func_FastBorder(UINT32 lpRetValueAddr, UINT32 lpRectAddr, U
 	return retValue;
 }
 
-static UINT16 npdisp_func_Output(UINT32 lpRetValueAddr, UINT32 lpDestDevAddr, UINT16 wStyle, UINT16 wCount, UINT32 lpPointsAddr, UINT32 lpPPenAddr, UINT32 lpPBrushAddr, UINT32 lpDrawModeAddr, UINT32 lpClipRectAddr)
+static UINT16 npdisp_func_Output(UINT32 lpDestDevAddr, UINT16 wStyle, UINT16 wCount, UINT32 lpPointsAddr, UINT32 lpPPenAddr, UINT32 lpPBrushAddr, UINT32 lpDrawModeAddr, UINT32 lpClipRectAddr)
 {
 	UINT16 retValue = 0xffff;
 	NPDISP_PBITMAP dstPBmp;
@@ -2425,6 +2430,7 @@ static void npdisp_func_SetPalette(UINT16 nStartIndex, UINT16 nNumEntries, UINT3
 		if (endIdx > NELEMENTS(npdisp_palette_rgb256)) endIdx = NELEMENTS(npdisp_palette_rgb256);
 		for (int i = nStartIndex; i < endIdx; i++) {
 			UINT32 col = npdisp_readMemory32(lpPaletteAddr);
+			//npdisp_palette_rgb256[i].reserved = (col >> 24) & 0xff;
 			npdisp_palette_rgb256[i].b = (col >> 16) & 0xff;
 			npdisp_palette_rgb256[i].g = (col >> 8) & 0xff;
 			npdisp_palette_rgb256[i].r = col & 0xff;
@@ -2438,20 +2444,14 @@ static void npdisp_func_GetPalTrans(UINT32 lpIndexesAddr)
 	if (!npdisp.usePalette) return;
 	if (!lpIndexesAddr) return;
 
-	for (int i = 0; i < NELEMENTS(npdisp_palette_transTbl); i++) {
-		npdisp_writeMemory16(npdisp_palette_transTbl[i], lpIndexesAddr);
-		lpIndexesAddr += 2;
-	}
+	npdisp_writeMemory(npdisp_palette_transTbl, lpIndexesAddr, sizeof(npdisp_palette_transTbl));
 }
 static void npdisp_func_SetPalTrans(UINT32 lpIndexesAddr)
 {
 	if (!npdisp.usePalette) return;
 
 	if (lpIndexesAddr) {
-		for (int i = 0; i < NELEMENTS(npdisp_palette_transTbl); i++) {
-			npdisp_palette_transTbl[i] = npdisp_readMemory16(lpIndexesAddr);
-			lpIndexesAddr += 2;
-		}
+		npdisp_readMemory(npdisp_palette_transTbl, lpIndexesAddr, sizeof(npdisp_palette_transTbl));
 	}
 	else {
 		for (int i = 0; i < NELEMENTS(npdisp_palette_transTbl); i++) {
@@ -2526,11 +2526,11 @@ static void npdisp_func_INT2Fh(UINT16 ax)
 		// DOS窓全画面モード設定
 		np2wab.relaystateext = 0;
 		np2wab_setRelayState(np2wab.relaystateint | np2wab.relaystateext);
-		npdisp.enabled = 0;
+		npdisp.active = 0;
 	}
 	else if (ax == 0x4002) {
 		// DOS窓全画面モード解除
-		npdisp.enabled = 1;
+		npdisp.active = 1;
 		npdisp.updated = 1;
 		np2wab.relaystateext = 3;
 		np2wab_setRelayState(np2wab.relaystateint | np2wab.relaystateext);
@@ -2541,6 +2541,7 @@ static void npdisp_func_WEP()
 {
 	// Windows終了
 	npdisp.enabled = 0;
+	npdisp.active = 0;
 	np2wab.relaystateext = 0;
 	np2wab_setRelayState(np2wab.relaystateint | np2wab.relaystateext);
 	npdisp_releaseScreen();
@@ -2549,6 +2550,10 @@ static void npdisp_func_WEP()
 
 // *** エクスポート関数処理 エントリ *****************
 
+/// <summary>
+/// ゲストから渡された序数に対応する機能を実行する　データはnpdisp.dataAddrから受け取る
+/// </summary>
+/// <param name=""></param>
 void npdisp_exec(void) {
 	// 読み書き開始位置を先頭へ戻す
 	npdisp_memory_resetposition();
@@ -2602,11 +2607,11 @@ void npdisp_exec(void) {
 			if (req.parameters.ColorInfo.lpPColorAddr) {
 				npdisp_readMemory(&pcolor, req.parameters.ColorInfo.lpPColorAddr, sizeof(pcolor));
 				retValue = npdisp_func_ColorInfo(&devInfo, req.parameters.ColorInfo.dwColorin, &pcolor);
+				npdisp_writeMemory(&pcolor, req.parameters.ColorInfo.lpPColorAddr, sizeof(pcolor));
 			}
 			else {
 				retValue = npdisp_func_ColorInfo(&devInfo, req.parameters.ColorInfo.dwColorin, NULL);
 			}
-			npdisp_writeMemory(&pcolor, req.parameters.ColorInfo.lpPColorAddr, sizeof(pcolor));
 			npdisp_writeMemory32(retValue, req.parameters.ColorInfo.lpRetValueAddr);
 			break;
 		}
@@ -2658,14 +2663,14 @@ void npdisp_exec(void) {
 			else {
 				TRACEOUT(("ExtTextOut"));
 			}
-			const UINT32 retValue = npdisp_func_ExtTextOut(req.parameters.extTextOut.lpRetValueAddr, req.parameters.extTextOut.lpDestDevAddr, req.parameters.extTextOut.wDestXOrg, req.parameters.extTextOut.wDestYOrg, req.parameters.extTextOut.lpClipRectAddr, req.parameters.extTextOut.lpStringAddr, req.parameters.extTextOut.wCount, req.parameters.extTextOut.lpFontInfoAddr, req.parameters.extTextOut.lpDrawModeAddr, req.parameters.extTextOut.lpTextXFormAddr, req.parameters.extTextOut.lpCharWidthsAddr, req.parameters.extTextOut.lpOpaqueRectAddr, req.parameters.extTextOut.wOptions);
+			const UINT32 retValue = npdisp_func_ExtTextOut(req.parameters.extTextOut.lpDestDevAddr, req.parameters.extTextOut.wDestXOrg, req.parameters.extTextOut.wDestYOrg, req.parameters.extTextOut.lpClipRectAddr, req.parameters.extTextOut.lpStringAddr, req.parameters.extTextOut.wCount, req.parameters.extTextOut.lpFontInfoAddr, req.parameters.extTextOut.lpDrawModeAddr, req.parameters.extTextOut.lpTextXFormAddr, req.parameters.extTextOut.lpCharWidthsAddr, req.parameters.extTextOut.lpOpaqueRectAddr, req.parameters.extTextOut.wOptions);
 			npdisp_writeMemory32(retValue, req.parameters.extTextOut.lpRetValueAddr);
 			break;
 		}
 		case NPDISP_FUNCORDER_SetDIBitsToDevice:
 		{
 			TRACEOUT(("SetDIBitsToDevice"));
-			const UINT16 retValue = npdisp_func_SetDIBitsToDevice(req.parameters.SetDIBitsToDevice.lpRetValueAddr, req.parameters.SetDIBitsToDevice.lpDestDevAddr, req.parameters.SetDIBitsToDevice.X, req.parameters.SetDIBitsToDevice.Y, req.parameters.SetDIBitsToDevice.iScan, req.parameters.SetDIBitsToDevice.cScans, req.parameters.SetDIBitsToDevice.lpClipRectAddr, req.parameters.SetDIBitsToDevice.lpDrawModeAddr, req.parameters.SetDIBitsToDevice.lpDIBitsAddr, req.parameters.SetDIBitsToDevice.lpBitmapInfoAddr, req.parameters.SetDIBitsToDevice.lpTranslateAddr);
+			const UINT16 retValue = npdisp_func_SetDIBitsToDevice(req.parameters.SetDIBitsToDevice.lpDestDevAddr, req.parameters.SetDIBitsToDevice.X, req.parameters.SetDIBitsToDevice.Y, req.parameters.SetDIBitsToDevice.iScan, req.parameters.SetDIBitsToDevice.cScans, req.parameters.SetDIBitsToDevice.lpClipRectAddr, req.parameters.SetDIBitsToDevice.lpDrawModeAddr, req.parameters.SetDIBitsToDevice.lpDIBitsAddr, req.parameters.SetDIBitsToDevice.lpBitmapInfoAddr, req.parameters.SetDIBitsToDevice.lpTranslateAddr);
 			npdisp_writeMemory16(retValue, req.parameters.SetDIBitsToDevice.lpRetValueAddr);
 			break;
 		}
@@ -2697,14 +2702,14 @@ void npdisp_exec(void) {
 		case NPDISP_FUNCORDER_FastBorder:
 		{
 			TRACEOUT(("FastBorder"));
-			const UINT16 retValue = npdisp_func_FastBorder(req.parameters.fastBorder.lpRetValueAddr, req.parameters.fastBorder.lpRectAddr, req.parameters.fastBorder.wHorizBorderThick, req.parameters.fastBorder.wVertBorderThick, req.parameters.fastBorder.dwRasterOp, req.parameters.fastBorder.lpDestDevAddr, req.parameters.fastBorder.lpPBrushAddr, req.parameters.fastBorder.lpDrawModeAddr, req.parameters.fastBorder.lpClipRectAddr);
+			const UINT16 retValue = npdisp_func_FastBorder(req.parameters.fastBorder.lpRectAddr, req.parameters.fastBorder.wHorizBorderThick, req.parameters.fastBorder.wVertBorderThick, req.parameters.fastBorder.dwRasterOp, req.parameters.fastBorder.lpDestDevAddr, req.parameters.fastBorder.lpPBrushAddr, req.parameters.fastBorder.lpDrawModeAddr, req.parameters.fastBorder.lpClipRectAddr);
 			npdisp_writeMemory16(retValue, req.parameters.fastBorder.lpRetValueAddr);
 			break;
 		}
 		case NPDISP_FUNCORDER_Output:
 		{
 			//TRACEOUT(("Output"));
-			const UINT16 retValue = npdisp_func_Output(req.parameters.output.lpRetValueAddr, req.parameters.output.lpDestDevAddr, req.parameters.output.wStyle, req.parameters.output.wCount, req.parameters.output.lpPointsAddr, req.parameters.output.lpPPenAddr, req.parameters.output.lpPBrushAddr, req.parameters.output.lpDrawModeAddr, req.parameters.output.lpClipRectAddr);
+			const UINT16 retValue = npdisp_func_Output(req.parameters.output.lpDestDevAddr, req.parameters.output.wStyle, req.parameters.output.wCount, req.parameters.output.lpPointsAddr, req.parameters.output.lpPPenAddr, req.parameters.output.lpPBrushAddr, req.parameters.output.lpDrawModeAddr, req.parameters.output.lpClipRectAddr);
 			npdisp_writeMemory16(retValue, req.parameters.output.lpRetValueAddr);
 			break;
 		}
@@ -2803,6 +2808,560 @@ void npdisp_exec(void) {
 	npdisp_memory_clearpreload();
 }
 
+
+#define NPDISP_REQUEST_READFROMSTACK(a, b, c)  npdisp_readMemoryWith32Offset(&(a.b.c), CPU_SS, CPU_BP + 6 + sizeof(a.b) - ((UINT32)((char*)&a.b.c - (char*)&a) - offsetof(NPDISP_REQUEST, parameters.others.arguments)) - sizeof(a.b.c), sizeof(a.b.c))
+
+/// <summary>
+/// npdisp_execの高速実行版。スタックから直接パラメータを読み取る。一部のfuncOrderには非対応のため注意。使用するには一度ver.2を指定してnpdisp_execを実行する必要あり。
+/// </summary>
+/// <param name=""></param>
+void npdisp_exec_fast(void) {
+	UINT16 lastAX = CPU_AX;
+	UINT16 lastDX = CPU_DX;
+
+	// 読み書き開始位置を先頭へ戻す
+	npdisp_memory_resetposition();
+
+	UINT16 version = npdisp_readMemory16(npdisp.dataAddr); // バージョンだけ取得
+
+	// 排他開始
+	npdispcs_enter_criticalsection();
+
+	// スタックの状態は次のようになっている前提
+	// [bp + 6以降]　引数（PASCALコール）
+	// [bp + 4]  return CS
+	// [bp + 2]  return IP
+	// [bp + 0]  old BP
+
+	UINT16 bx = CPU_BX;
+	switch (bx) {
+	//case NPDISP_FUNCORDER_NP2INITIALIZE: // 非対応
+	//{
+	//	break;
+	//}
+	case NPDISP_FUNCORDER_Enable:
+	{
+		NPDISP_REQUEST req;
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.enable, lpDevInfoAddr);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.enable, wStyle);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.enable, lpDestDevTypeAddr);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.enable, lpOutputFileAddr);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.enable, lpDataAddr);
+
+		TRACEOUT(("Enable"));
+		const UINT16 retValue = npdisp_func_Enable(req.parameters.enable.lpDevInfoAddr, req.parameters.enable.wStyle, req.parameters.enable.lpDestDevTypeAddr, req.parameters.enable.lpOutputFileAddr, req.parameters.enable.lpDataAddr);
+
+		if (!npdisp.longjmpnum) {
+			// 戻り値
+			CPU_AX = retValue;
+
+			CPU_CX = 0; // 成功の時CXを0に
+		}
+		break;
+	}
+	case NPDISP_FUNCORDER_Disable:
+	{
+		NPDISP_REQUEST req;
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.disable, lpDestDevAddr);
+
+		TRACEOUT(("Disable"));
+		npdisp_func_Disable(req.parameters.disable.lpDestDevAddr);
+		break;
+	}
+	case NPDISP_FUNCORDER_GetDriverResourceID:
+	{
+		NPDISP_REQUEST req;
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.GetDriverResourceID, iResId);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.GetDriverResourceID, lpResTypeAddr);
+
+		TRACEOUT(("GetDriverResourceID"));
+		const SINT16 retValue = npdisp_func_GetDriverResourceID(req.parameters.GetDriverResourceID.iResId, req.parameters.GetDriverResourceID.lpResTypeAddr);
+
+		if (!npdisp.longjmpnum) {
+			// 戻り値
+			CPU_AX = retValue;
+
+			CPU_CX = 0; // 成功の時CXを0に
+		}
+		break;
+	}
+	case NPDISP_FUNCORDER_ColorInfo:
+	{
+		NPDISP_REQUEST req;
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.ColorInfo, lpDestDevAddr);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.ColorInfo, dwColorin);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.ColorInfo, lpPColorAddr);
+
+		// 色の変換
+		UINT32 retValue = 0;
+		NPDISP_PDEVICE devInfo;
+		UINT32 pcolor;
+		npdisp_readMemory(&devInfo, req.parameters.ColorInfo.lpDestDevAddr, sizeof(devInfo));
+		if (req.parameters.ColorInfo.lpPColorAddr) {
+			npdisp_readMemory(&pcolor, req.parameters.ColorInfo.lpPColorAddr, sizeof(pcolor));
+			retValue = npdisp_func_ColorInfo(&devInfo, req.parameters.ColorInfo.dwColorin, &pcolor);
+			npdisp_writeMemory(&pcolor, req.parameters.ColorInfo.lpPColorAddr, sizeof(pcolor));
+		}
+		else {
+			retValue = npdisp_func_ColorInfo(&devInfo, req.parameters.ColorInfo.dwColorin, NULL);
+		}
+
+		if (!npdisp.longjmpnum) {
+			// 戻り値
+			CPU_AX = retValue & 0xffff;
+			CPU_DX = (retValue >> 16) & 0xffff;
+
+			CPU_CX = 0; // 成功の時CXを0に
+		}
+		break;
+	}
+	case NPDISP_FUNCORDER_RealizeObject:
+	{
+		NPDISP_REQUEST req;
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.RealizeObject, lpDestDevAddr);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.RealizeObject, wStyle);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.RealizeObject, lpInObjAddr);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.RealizeObject, lpOutObjAddr);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.RealizeObject, lpTextXFormAddr);
+
+		TRACEOUT(("RealizeObject"));
+		// オブジェクト生成と破棄
+		const UINT32 retValue = npdisp_func_RealizeObject(req.parameters.RealizeObject.lpDestDevAddr, req.parameters.RealizeObject.wStyle, req.parameters.RealizeObject.lpInObjAddr, req.parameters.RealizeObject.lpOutObjAddr, req.parameters.RealizeObject.lpTextXFormAddr);
+
+		if (!npdisp.longjmpnum) {
+			// 戻り値
+			CPU_AX = retValue & 0xffff;
+			CPU_DX = (retValue >> 16) & 0xffff;
+
+			CPU_CX = 0; // 成功の時CXを0に
+		}
+
+		break;
+	}
+	case NPDISP_FUNCORDER_Control:
+	{
+		NPDISP_REQUEST req;
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.Control, lpDestDevAddr);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.Control, wFunction);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.Control, lpInDataAddr);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.Control, lpOutDataAddr);
+
+		TRACEOUT(("Control"));
+		const UINT16 retValue = npdisp_func_Control(req.parameters.Control.lpDestDevAddr, req.parameters.Control.wFunction, req.parameters.Control.lpInDataAddr, req.parameters.Control.lpOutDataAddr);
+
+		if (!npdisp.longjmpnum) {
+			// 戻り値
+			CPU_AX = retValue;
+
+			CPU_CX = 0; // 成功の時CXを0に
+		}
+		break;
+	}
+	case NPDISP_FUNCORDER_BitBlt:
+	{
+		NPDISP_REQUEST req;
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.BitBlt, lpDestDevAddr);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.BitBlt, wDestX);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.BitBlt, wDestY);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.BitBlt, lpSrcDevAddr);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.BitBlt, wSrcX);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.BitBlt, wSrcY);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.BitBlt, wXext);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.BitBlt, wYext);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.BitBlt, Rop3);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.BitBlt, lpPBrushAddr);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.BitBlt, lpDrawModeAddr);
+
+		const UINT16 retValue = npdisp_func_BitBlt(req.parameters.BitBlt.lpDestDevAddr, req.parameters.BitBlt.wDestX, req.parameters.BitBlt.wDestY, req.parameters.BitBlt.lpSrcDevAddr, req.parameters.BitBlt.wSrcX, req.parameters.BitBlt.wSrcY, req.parameters.BitBlt.wXext, req.parameters.BitBlt.wYext, req.parameters.BitBlt.Rop3, req.parameters.BitBlt.lpPBrushAddr, req.parameters.BitBlt.lpDrawModeAddr);
+
+		if (!npdisp.longjmpnum) {
+			// 戻り値
+			CPU_AX = retValue;
+
+			CPU_CX = 0; // 成功の時CXを0に
+		}
+		break;
+	}
+	case NPDISP_FUNCORDER_StretchBlt:
+	{
+		NPDISP_REQUEST req;
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.stretchBlt, lpDestDevAddr);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.stretchBlt, wDestX);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.stretchBlt, wDestY);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.stretchBlt, wDestXext);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.stretchBlt, wDestYext);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.stretchBlt, lpSrcDevAddr);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.stretchBlt, wSrcX);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.stretchBlt, wSrcY);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.stretchBlt, wSrcXext);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.stretchBlt, wSrcYext);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.stretchBlt, Rop3);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.stretchBlt, lpPBrushAddr);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.stretchBlt, lpDrawModeAddr);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.stretchBlt, lpClipAddr);
+
+		//TRACEOUT(("StretchBlt"));
+		const UINT16 retValue = npdisp_func_StretchBlt(req.parameters.stretchBlt.lpDestDevAddr, req.parameters.stretchBlt.wDestX, req.parameters.stretchBlt.wDestY, req.parameters.stretchBlt.wDestXext, req.parameters.stretchBlt.wDestYext, req.parameters.stretchBlt.lpSrcDevAddr, req.parameters.stretchBlt.wSrcX, req.parameters.stretchBlt.wSrcY, req.parameters.stretchBlt.wSrcXext, req.parameters.stretchBlt.wSrcYext, req.parameters.stretchBlt.Rop3, req.parameters.stretchBlt.lpPBrushAddr, req.parameters.stretchBlt.lpDrawModeAddr, req.parameters.stretchBlt.lpClipAddr);
+
+		if (!npdisp.longjmpnum) {
+			// 戻り値
+			CPU_AX = retValue;
+
+			CPU_CX = 0; // 成功の時CXを0に
+		}
+		break;
+	}
+	case NPDISP_FUNCORDER_DeviceBitmapBits:
+	{
+		NPDISP_REQUEST req;
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.DeviceBitmapBits, lpBitmapAddr);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.DeviceBitmapBits, fGet);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.DeviceBitmapBits, iStart);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.DeviceBitmapBits, cScans);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.DeviceBitmapBits, lpDIBitsAddr);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.DeviceBitmapBits, lpBitmapInfoAddr);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.DeviceBitmapBits, lpDrawModeAddr);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.DeviceBitmapBits, lpTranslateAddr);
+
+		TRACEOUT(("DeviceBitmapBits"));
+		const UINT16 retValue = npdisp_func_DeviceBitmapBits(req.parameters.DeviceBitmapBits.lpBitmapAddr, req.parameters.DeviceBitmapBits.fGet, req.parameters.DeviceBitmapBits.iStart, req.parameters.DeviceBitmapBits.cScans, req.parameters.DeviceBitmapBits.lpDIBitsAddr, req.parameters.DeviceBitmapBits.lpBitmapInfoAddr, req.parameters.DeviceBitmapBits.lpDrawModeAddr, req.parameters.DeviceBitmapBits.lpTranslateAddr);
+
+		if (!npdisp.longjmpnum) {
+			// 戻り値
+			CPU_AX = retValue;
+
+			CPU_CX = 0; // 成功の時CXを0に
+		}
+		break;
+	}
+	case NPDISP_FUNCORDER_StrBlt:
+	case NPDISP_FUNCORDER_ExtTextOut:
+	{
+		NPDISP_REQUEST req;
+		if (bx == NPDISP_FUNCORDER_StrBlt) {
+			TRACEOUT(("StrBlt"));
+			NPDISP_REQUEST_READFROMSTACK(req, parameters.strBlt, lpDestDevAddr);
+			NPDISP_REQUEST_READFROMSTACK(req, parameters.strBlt, wDestXOrg);
+			NPDISP_REQUEST_READFROMSTACK(req, parameters.strBlt, wDestYOrg);
+			NPDISP_REQUEST_READFROMSTACK(req, parameters.strBlt, lpClipRectAddr);
+			NPDISP_REQUEST_READFROMSTACK(req, parameters.strBlt, lpStringAddr);
+			NPDISP_REQUEST_READFROMSTACK(req, parameters.strBlt, wCount);
+			NPDISP_REQUEST_READFROMSTACK(req, parameters.strBlt, lpFontInfoAddr);
+			NPDISP_REQUEST_READFROMSTACK(req, parameters.strBlt, lpDrawModeAddr);
+			NPDISP_REQUEST_READFROMSTACK(req, parameters.strBlt, lpTextXFormAddr);
+			req.parameters.extTextOut.lpCharWidthsAddr = 0;
+			req.parameters.extTextOut.lpOpaqueRectAddr = 0;
+			req.parameters.extTextOut.wOptions = 0;
+		}
+		else {
+			TRACEOUT(("ExtTextOut"));
+			NPDISP_REQUEST_READFROMSTACK(req, parameters.extTextOut, lpDestDevAddr);
+			NPDISP_REQUEST_READFROMSTACK(req, parameters.extTextOut, wDestXOrg);
+			NPDISP_REQUEST_READFROMSTACK(req, parameters.extTextOut, wDestYOrg);
+			NPDISP_REQUEST_READFROMSTACK(req, parameters.extTextOut, lpClipRectAddr);
+			NPDISP_REQUEST_READFROMSTACK(req, parameters.extTextOut, lpStringAddr);
+			NPDISP_REQUEST_READFROMSTACK(req, parameters.extTextOut, wCount);
+			NPDISP_REQUEST_READFROMSTACK(req, parameters.extTextOut, lpFontInfoAddr);
+			NPDISP_REQUEST_READFROMSTACK(req, parameters.extTextOut, lpDrawModeAddr);
+			NPDISP_REQUEST_READFROMSTACK(req, parameters.extTextOut, lpTextXFormAddr);
+			NPDISP_REQUEST_READFROMSTACK(req, parameters.extTextOut, lpCharWidthsAddr);
+			NPDISP_REQUEST_READFROMSTACK(req, parameters.extTextOut, lpOpaqueRectAddr);
+			NPDISP_REQUEST_READFROMSTACK(req, parameters.extTextOut, wOptions);
+		}
+		const UINT32 retValue = npdisp_func_ExtTextOut(req.parameters.extTextOut.lpDestDevAddr, req.parameters.extTextOut.wDestXOrg, req.parameters.extTextOut.wDestYOrg, req.parameters.extTextOut.lpClipRectAddr, req.parameters.extTextOut.lpStringAddr, req.parameters.extTextOut.wCount, req.parameters.extTextOut.lpFontInfoAddr, req.parameters.extTextOut.lpDrawModeAddr, req.parameters.extTextOut.lpTextXFormAddr, req.parameters.extTextOut.lpCharWidthsAddr, req.parameters.extTextOut.lpOpaqueRectAddr, req.parameters.extTextOut.wOptions);
+		
+		if (!npdisp.longjmpnum) {
+			// 戻り値
+			CPU_AX = retValue & 0xffff;
+			CPU_DX = (retValue >> 16) & 0xffff;
+
+			CPU_CX = 0; // 成功の時CXを0に
+		}
+		break;
+	}
+	case NPDISP_FUNCORDER_SetDIBitsToDevice:
+	{
+		NPDISP_REQUEST req;
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.SetDIBitsToDevice, lpDestDevAddr);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.SetDIBitsToDevice, X);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.SetDIBitsToDevice, Y);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.SetDIBitsToDevice, iScan);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.SetDIBitsToDevice, cScans);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.SetDIBitsToDevice, lpClipRectAddr);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.SetDIBitsToDevice, lpDrawModeAddr);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.SetDIBitsToDevice, lpDIBitsAddr);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.SetDIBitsToDevice, lpBitmapInfoAddr);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.SetDIBitsToDevice, lpTranslateAddr);
+
+		TRACEOUT(("SetDIBitsToDevice"));
+		const UINT16 retValue = npdisp_func_SetDIBitsToDevice(req.parameters.SetDIBitsToDevice.lpDestDevAddr, req.parameters.SetDIBitsToDevice.X, req.parameters.SetDIBitsToDevice.Y, req.parameters.SetDIBitsToDevice.iScan, req.parameters.SetDIBitsToDevice.cScans, req.parameters.SetDIBitsToDevice.lpClipRectAddr, req.parameters.SetDIBitsToDevice.lpDrawModeAddr, req.parameters.SetDIBitsToDevice.lpDIBitsAddr, req.parameters.SetDIBitsToDevice.lpBitmapInfoAddr, req.parameters.SetDIBitsToDevice.lpTranslateAddr);
+
+		if (!npdisp.longjmpnum) {
+			// 戻り値
+			CPU_AX = retValue;
+
+			CPU_CX = 0; // 成功の時CXを0に
+		}
+		break;
+	}
+	case NPDISP_FUNCORDER_SaveScreenBitmap:
+	{
+		NPDISP_REQUEST req;
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.SaveScreenBitmap, lpRect);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.SaveScreenBitmap, wCommand);
+
+		TRACEOUT(("SaveScreenBitmap"));
+		const UINT16 retValue = npdisp_func_SaveScreenBitmap(req.parameters.SaveScreenBitmap.lpRect, req.parameters.SaveScreenBitmap.wCommand);
+
+		if (!npdisp.longjmpnum) {
+			// 戻り値
+			CPU_AX = retValue;
+
+			CPU_CX = 0; // 成功の時CXを0に
+		}
+		break;
+	}
+	case NPDISP_FUNCORDER_SetCursor:
+	{
+		NPDISP_REQUEST req;
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.SetCursor, lpCursorShapeAddr);
+
+		npdisp_func_SetCursor(req.parameters.SetCursor.lpCursorShapeAddr);
+
+		if (!npdisp.longjmpnum) {
+			CPU_CX = 0; // 成功の時CXを0に
+		}
+		break;
+	}
+	case NPDISP_FUNCORDER_MoveCursor:
+	{
+		NPDISP_REQUEST req;
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.MoveCursor, wAbsX);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.MoveCursor, wAbsY);
+
+		npdisp_func_MoveCursor(req.parameters.MoveCursor.wAbsX, req.parameters.MoveCursor.wAbsY);
+
+		if (!npdisp.longjmpnum) {
+			CPU_CX = 0; // 成功の時CXを0に
+		}
+		break;
+	}
+	case NPDISP_FUNCORDER_CheckCursor:
+	{
+		npdisp_func_CheckCursor();
+
+		if (!npdisp.longjmpnum) {
+			CPU_CX = 0; // 成功の時CXを0に
+		}
+		break;
+	}
+	case NPDISP_FUNCORDER_FastBorder:
+	{
+		NPDISP_REQUEST req;
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.fastBorder, lpRectAddr);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.fastBorder, wHorizBorderThick);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.fastBorder, wVertBorderThick);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.fastBorder, dwRasterOp);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.fastBorder, lpDestDevAddr);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.fastBorder, lpPBrushAddr);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.fastBorder, lpDrawModeAddr);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.fastBorder, lpClipRectAddr);
+
+		TRACEOUT(("FastBorder"));
+		const UINT16 retValue = npdisp_func_FastBorder(req.parameters.fastBorder.lpRectAddr, req.parameters.fastBorder.wHorizBorderThick, req.parameters.fastBorder.wVertBorderThick, req.parameters.fastBorder.dwRasterOp, req.parameters.fastBorder.lpDestDevAddr, req.parameters.fastBorder.lpPBrushAddr, req.parameters.fastBorder.lpDrawModeAddr, req.parameters.fastBorder.lpClipRectAddr);
+
+		if (!npdisp.longjmpnum) {
+			// 戻り値
+			CPU_AX = retValue;
+
+			CPU_CX = 0; // 成功の時CXを0に
+		}
+		break;
+	}
+	case NPDISP_FUNCORDER_Output:
+	{
+		NPDISP_REQUEST req;
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.output, lpDestDevAddr);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.output, wStyle);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.output, wCount);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.output, lpPointsAddr);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.output, lpPPenAddr);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.output, lpPBrushAddr);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.output, lpDrawModeAddr);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.output, lpClipRectAddr);
+
+		const UINT16 retValue = npdisp_func_Output(req.parameters.output.lpDestDevAddr, req.parameters.output.wStyle, req.parameters.output.wCount, req.parameters.output.lpPointsAddr, req.parameters.output.lpPPenAddr, req.parameters.output.lpPBrushAddr, req.parameters.output.lpDrawModeAddr, req.parameters.output.lpClipRectAddr);
+
+		if (!npdisp.longjmpnum) {
+			// 戻り値
+			CPU_AX = retValue;
+
+			CPU_CX = 0; // 成功の時CXを0に
+		}
+		break;
+	}
+	case NPDISP_FUNCORDER_Pixel:
+	{
+		NPDISP_REQUEST req;
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.pixel, lpDestDevAddr);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.pixel, X);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.pixel, Y);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.pixel, dwPhysColor);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.pixel, lpDrawModeAddr);
+
+		TRACEOUT(("Pixel"));
+		const UINT32 retValue = npdisp_func_Pixel(req.parameters.pixel.lpDestDevAddr, req.parameters.pixel.X, req.parameters.pixel.Y, req.parameters.pixel.dwPhysColor, req.parameters.pixel.lpDrawModeAddr);
+
+		if (!npdisp.longjmpnum) {
+			// 戻り値
+			CPU_AX = retValue & 0xffff;
+			CPU_DX = (retValue >> 16) & 0xffff;
+
+			CPU_CX = 0; // 成功の時CXを0に
+		}
+		break;
+	}
+	case NPDISP_FUNCORDER_ScanLR:
+	{
+		NPDISP_REQUEST req;
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.scanLR, lpDestDevAddr);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.scanLR, X);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.scanLR, Y);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.scanLR, dwPhysColor);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.scanLR, Style);
+
+		TRACEOUT(("ScanLR"));
+		const UINT16 retValue = npdisp_func_ScanLR(req.parameters.scanLR.lpDestDevAddr, req.parameters.scanLR.X, req.parameters.scanLR.Y, req.parameters.scanLR.dwPhysColor, req.parameters.scanLR.Style);
+
+		if (!npdisp.longjmpnum) {
+			// 戻り値
+			CPU_AX = retValue;
+
+			CPU_CX = 0; // 成功の時CXを0に
+		}
+		break;
+	}
+	//case NPDISP_FUNCORDER_EnumObj: // 非対応
+	//{
+	//	break;
+	//}
+	case NPDISP_FUNCORDER_GetPalette:
+	{
+		NPDISP_REQUEST req;
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.getPalette, nStartIndex);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.getPalette, nNumEntries);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.getPalette, lpPaletteAddr);
+
+		TRACEOUTP(("GetPalette"));
+		npdisp_func_GetPalette(req.parameters.getPalette.nStartIndex, req.parameters.getPalette.nNumEntries, req.parameters.getPalette.lpPaletteAddr);
+		break;
+	}
+	case NPDISP_FUNCORDER_SetPalette:
+	{
+		NPDISP_REQUEST req;
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.setPalette, nStartIndex);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.setPalette, nNumEntries);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.setPalette, lpPaletteAddr);
+
+		TRACEOUTP(("SetPalette"));
+		npdisp_func_SetPalette(req.parameters.setPalette.nStartIndex, req.parameters.setPalette.nNumEntries, req.parameters.setPalette.lpPaletteAddr);
+		break;
+	}
+	case NPDISP_FUNCORDER_GetPalTrans:
+	{
+		NPDISP_REQUEST req;
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.getPalTrans, lpIndexesAddr);
+
+		TRACEOUTP(("GetPalTrans"));
+		npdisp_func_GetPalTrans(req.parameters.getPalTrans.lpIndexesAddr);
+		break;
+	}
+	case NPDISP_FUNCORDER_SetPalTrans:
+	{
+		NPDISP_REQUEST req;
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.getPalTrans, lpIndexesAddr);
+
+		TRACEOUTP(("SetPalTrans"));
+		npdisp_func_SetPalTrans(req.parameters.setPalTrans.lpIndexesAddr);
+		break;
+	}
+	case NPDISP_FUNCORDER_UpdateColors:
+	{
+		NPDISP_REQUEST req;
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.updateColors, wStartX);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.updateColors, wStartY);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.updateColors, wExtX);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.updateColors, wExtY);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.updateColors, lpTranslateAddr);
+
+		TRACEOUTP(("UpdateColors"));
+		npdisp_func_UpdateColors(req.parameters.updateColors.wStartX, req.parameters.updateColors.wStartY, req.parameters.updateColors.wExtX, req.parameters.updateColors.wExtY, req.parameters.updateColors.lpTranslateAddr);
+		break;
+	}
+	case NPDISP_FUNCORDER_GetCharWidth:
+	{
+		NPDISP_REQUEST req;
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.getCharWidth, lpDestDevAddr);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.getCharWidth, lpBufferAddr);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.getCharWidth, wFirstChar);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.getCharWidth, wLastChar);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.getCharWidth, lpFontInfoAddr);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.getCharWidth, lpDrawModeAddr);
+		NPDISP_REQUEST_READFROMSTACK(req, parameters.getCharWidth, lpFontTransAddr);
+
+		TRACEOUTP(("GetCharWidth"));
+		const UINT16 retValue = npdisp_func_GetCharWidth(req.parameters.getCharWidth.lpDestDevAddr, req.parameters.getCharWidth.lpBufferAddr, req.parameters.getCharWidth.wFirstChar, req.parameters.getCharWidth.wLastChar, req.parameters.getCharWidth.lpFontInfoAddr, req.parameters.getCharWidth.lpDrawModeAddr, req.parameters.getCharWidth.lpFontTransAddr);
+
+		if (!npdisp.longjmpnum) {
+			// 戻り値
+			CPU_AX = retValue;
+
+			CPU_CX = 0; // 成功の時CXを0に
+		}
+		break;
+	}
+	case NPDISP_FUNCORDER_INT2Fh:
+	{
+		TRACEOUT(("INT2Fh"));
+		npdisp_func_INT2Fh(CPU_SI); // 特例 SIに元のAXの値を格納すること
+		break;
+	}
+	case NPDISP_FUNCORDER_WEP:
+	{
+		TRACEOUT(("WEP"));
+		npdisp_func_WEP();
+		break;
+	}
+	default:
+	{
+		TRACEOUT(("npdisp_exec_fast not supported (Function %d).", req.funcOrder));
+		break;
+	}
+	}
+
+	// 排他終了
+	npdispcs_leave_criticalsection();
+
+	// 例外が発生していたらlongjmpで戻る
+	if (npdisp.longjmpnum) {
+		if (npdisp_memory_hasNewCacheData()) {
+			CPU_STAT_EXCEPTION_COUNTER_CLEAR(); // 読み書きが進んでいたら例外繰り返しではない
+		}
+
+		// 戻れるようにレジスタセット
+		CPU_AX = lastAX;
+		CPU_DX = lastDX;
+		CPU_CX = (NPDISP_EXEC_MAGIC & 0xffff);
+
+		int longjmpnum = npdisp.longjmpnum;
+		siglongjmp(exec_1step_jmpbuf, longjmpnum); // 転送
+	}
+
+	// 例外発生せずに全部送れたらCPUクロックを進め、読み書きバッファはクリアする
+	CPU_REMCLOCK -= 2 * (npdisp_memory_getTotalReadSize() + npdisp_memory_getTotalWriteSize()); // メモリアクセスあたり2clock
+	npdisp_memory_clearpreload();
+}
+
  // ---------- IO Ports
 
 static int npdisp_debug_seqCounter = 0;
@@ -2818,7 +3377,6 @@ static void IOOUTCALL npdisp_o7e7(UINT port, REG8 dat)
 	}
 }
 
-static int lastID = 0;
 static void IOOUTCALL npdisp_o7e8(UINT port, REG8 dat)
 {
 	npdisp.dataAddr = (dat << 24) | (npdisp.dataAddr >> 8);
@@ -2828,13 +3386,18 @@ static void IOOUTCALL npdisp_o7e8(UINT port, REG8 dat)
 	else {
 		//TRACEOUT(("ADDRESS %d %08x", npdisp_debug_seqCounter, CPU_SS));
 	}
-	lastID = CPU_SS;
 	npdisp_debug_seqCounter++;
 	(void)port;
 }
 
 static void IOOUTCALL npdisp_o7e9(UINT port, REG8 dat)
 {
+	if (npdisp.version >= 2 && npdisp.enabled && dat == 'F' && CPU_CX == (NPDISP_EXEC_MAGIC & 0xffff)) {
+		// 高速実行パス ver.2以降で対応
+		npdisp_exec_fast();
+		return;
+	}
+
 	const int retFromException = (dat == '1' && npdisp.longjmpnum != 0);
 	if (npdisp.cmdBuf != NPDISP_EXEC_MAGIC || !retFromException) {
 		npdisp.cmdBuf = (dat << 24) | (npdisp.cmdBuf >> 8);
@@ -3107,6 +3670,7 @@ void npdisp_reset(const NP2CFG* pConfig)
 
 	npdisp.ioenabled = pConfig->usenpdisp;
 	npdisp.enabled = 0;
+	npdisp.active = 0;
 	npdisp.width = 1024;
 	npdisp.height = 720;
 	npdisp.bpp = 24;
@@ -3161,7 +3725,7 @@ void npdisp_shutdown()
 
 int npdisp_sfsave(STFLAGH sfh, const SFENTRY* tbl)
 {
-	int	sfVersion = npdisp.version;
+	int	sfVersion = 2;
 	int	ret = STATFLAG_SUCCESS;
 
 	ret = statflag_write(sfh, &sfVersion, sizeof(int));
@@ -3170,68 +3734,63 @@ int npdisp_sfsave(STFLAGH sfh, const SFENTRY* tbl)
 	std::vector<UINT8> buffer;
 
 	// 必要な範囲で記録
-	if (sfVersion == 1)
-	{
-		// 共通
-		buffer.insert(buffer.end(), (UINT8*)(&npdisp), (UINT8*)(&npdisp + 1));
+	// 共通
+	UINT32 npdisplen = sizeof(npdisp);
+	buffer.insert(buffer.end(), (UINT8*)(&npdisplen), (UINT8*)(&npdisplen + 1));
+	buffer.insert(buffer.end(), (UINT8*)(&npdisp), (UINT8*)(&npdisp + 1));
 
-		// WAB有効なら保存
-		if (npdisp.enabled) {
-			// OS依存部
-			// スクリーン
-			buffer.insert(buffer.end(), (UINT8*)(&npdispwin.bi), (UINT8*)(&npdispwin.bi + 1));
-			UINT32 screenBufSize = npdispwin.stride * npdisp.height;
-			if (npdispwin.pBits) {
-				buffer.insert(buffer.end(), (UINT8*)(&screenBufSize), (UINT8*)(&screenBufSize + 1));
-				buffer.insert(buffer.end(), (UINT8*)npdispwin.pBits, (UINT8*)npdispwin.pBits + screenBufSize);
-			}
-			else {
-				screenBufSize = 0;
-				buffer.insert(buffer.end(), (UINT8*)(&screenBufSize), (UINT8*)(&screenBufSize + 1));
-			}
-			// カーソル
-			UINT32 cursorBufSize = npdisp.cursorStride * npdisp.cursorHeight;
-			if (npdispwin.pBitsCursorMask && npdispwin.pBitsCursor) {
-				buffer.insert(buffer.end(), (UINT8*)(&cursorBufSize), (UINT8*)(&cursorBufSize + 1));
-				buffer.insert(buffer.end(), (UINT8*)npdispwin.pBitsCursorMask, (UINT8*)npdispwin.pBitsCursorMask + cursorBufSize);
-				buffer.insert(buffer.end(), (UINT8*)npdispwin.pBitsCursor, (UINT8*)npdispwin.pBitsCursor + cursorBufSize);
-			}
-			else {
-				cursorBufSize = 0;
-				buffer.insert(buffer.end(), (UINT8*)(&cursorBufSize), (UINT8*)(&cursorBufSize + 1));
-			}
-			// パレット
-			if (npdisp.bpp == 1) {
-				buffer.insert(buffer.end(), (UINT8*)npdisp_palette_rgb2, (UINT8*)npdisp_palette_rgb2 + sizeof(npdisp_palette_rgb2));
-			}
-			else if (npdisp.bpp == 4) {
-				buffer.insert(buffer.end(), (UINT8*)npdisp_palette_rgb16, (UINT8*)npdisp_palette_rgb16 + sizeof(npdisp_palette_rgb16));
-			}
-			else if (npdisp.bpp == 8) {
-				buffer.insert(buffer.end(), (UINT8*)npdisp_palette_rgb256, (UINT8*)npdisp_palette_rgb256 + sizeof(npdisp_palette_rgb256));
-				buffer.insert(buffer.end(), (UINT8*)npdisp_palette_transTbl, (UINT8*)npdisp_palette_transTbl + sizeof(npdisp_palette_transTbl));
-			}
-			// ペン
-			buffer.insert(buffer.end(), (UINT8*)(&npdispwin.pensIdx), (UINT8*)(&npdispwin.pensIdx + 1));
-			UINT32 penCount = npdispwin.pens.size();
-			buffer.insert(buffer.end(), (UINT8*)(&penCount), (UINT8*)(&penCount + 1));
-			for (auto it = npdispwin.pens.begin(); it != npdispwin.pens.end(); ++it) {
-				buffer.insert(buffer.end(), (UINT8*)(&(it->first)), (UINT8*)(&(it->first) + 1));
-				buffer.insert(buffer.end(), (UINT8*)(&(it->second)), (UINT8*)(&(it->second) + 1));
-			}
-			// ブラシ
-			buffer.insert(buffer.end(), (UINT8*)(&npdispwin.brushesIdx), (UINT8*)(&npdispwin.brushesIdx + 1));
-			UINT32 brushCount = npdispwin.brushes.size();
-			buffer.insert(buffer.end(), (UINT8*)(&brushCount), (UINT8*)(&brushCount + 1));
-			for (auto it = npdispwin.brushes.begin(); it != npdispwin.brushes.end(); ++it) {
-				buffer.insert(buffer.end(), (UINT8*)(&(it->first)), (UINT8*)(&(it->first) + 1));
-				buffer.insert(buffer.end(), (UINT8*)(&(it->second)), (UINT8*)(&(it->second) + 1));
-			}
+	// WAB有効なら保存
+	if (npdisp.enabled) {
+		// OS依存部
+		// スクリーン
+		buffer.insert(buffer.end(), (UINT8*)(&npdispwin.bi), (UINT8*)(&npdispwin.bi + 1));
+		UINT32 screenBufSize = npdispwin.stride * npdisp.height;
+		if (npdispwin.pBits) {
+			buffer.insert(buffer.end(), (UINT8*)(&screenBufSize), (UINT8*)(&screenBufSize + 1));
+			buffer.insert(buffer.end(), (UINT8*)npdispwin.pBits, (UINT8*)npdispwin.pBits + screenBufSize);
 		}
-	}
-	else
-	{
-		return(STATFLAG_FAILURE);
+		else {
+			screenBufSize = 0;
+			buffer.insert(buffer.end(), (UINT8*)(&screenBufSize), (UINT8*)(&screenBufSize + 1));
+		}
+		// カーソル
+		UINT32 cursorBufSize = npdisp.cursorStride * npdisp.cursorHeight;
+		if (npdispwin.pBitsCursorMask && npdispwin.pBitsCursor) {
+			buffer.insert(buffer.end(), (UINT8*)(&cursorBufSize), (UINT8*)(&cursorBufSize + 1));
+			buffer.insert(buffer.end(), (UINT8*)npdispwin.pBitsCursorMask, (UINT8*)npdispwin.pBitsCursorMask + cursorBufSize);
+			buffer.insert(buffer.end(), (UINT8*)npdispwin.pBitsCursor, (UINT8*)npdispwin.pBitsCursor + cursorBufSize);
+		}
+		else {
+			cursorBufSize = 0;
+			buffer.insert(buffer.end(), (UINT8*)(&cursorBufSize), (UINT8*)(&cursorBufSize + 1));
+		}
+		// パレット
+		if (npdisp.bpp == 1) {
+			buffer.insert(buffer.end(), (UINT8*)npdisp_palette_rgb2, (UINT8*)npdisp_palette_rgb2 + sizeof(npdisp_palette_rgb2));
+		}
+		else if (npdisp.bpp == 4) {
+			buffer.insert(buffer.end(), (UINT8*)npdisp_palette_rgb16, (UINT8*)npdisp_palette_rgb16 + sizeof(npdisp_palette_rgb16));
+		}
+		else if (npdisp.bpp == 8) {
+			buffer.insert(buffer.end(), (UINT8*)npdisp_palette_rgb256, (UINT8*)npdisp_palette_rgb256 + sizeof(npdisp_palette_rgb256));
+			buffer.insert(buffer.end(), (UINT8*)npdisp_palette_transTbl, (UINT8*)npdisp_palette_transTbl + sizeof(npdisp_palette_transTbl));
+		}
+		// ペン
+		buffer.insert(buffer.end(), (UINT8*)(&npdispwin.pensIdx), (UINT8*)(&npdispwin.pensIdx + 1));
+		UINT32 penCount = npdispwin.pens.size();
+		buffer.insert(buffer.end(), (UINT8*)(&penCount), (UINT8*)(&penCount + 1));
+		for (auto it = npdispwin.pens.begin(); it != npdispwin.pens.end(); ++it) {
+			buffer.insert(buffer.end(), (UINT8*)(&(it->first)), (UINT8*)(&(it->first) + 1));
+			buffer.insert(buffer.end(), (UINT8*)(&(it->second)), (UINT8*)(&(it->second) + 1));
+		}
+		// ブラシ
+		buffer.insert(buffer.end(), (UINT8*)(&npdispwin.brushesIdx), (UINT8*)(&npdispwin.brushesIdx + 1));
+		UINT32 brushCount = npdispwin.brushes.size();
+		buffer.insert(buffer.end(), (UINT8*)(&brushCount), (UINT8*)(&brushCount + 1));
+		for (auto it = npdispwin.brushes.begin(); it != npdispwin.brushes.end(); ++it) {
+			buffer.insert(buffer.end(), (UINT8*)(&(it->first)), (UINT8*)(&(it->first) + 1));
+			buffer.insert(buffer.end(), (UINT8*)(&(it->second)), (UINT8*)(&(it->second) + 1));
+		}
 	}
 
 	// 書き込み
@@ -3263,16 +3822,32 @@ int npdisp_sfload(STFLAGH sfh, const SFENTRY* tbl)
 
 	int readBufLen = 0;
 
-	// 読み込み
-	if (sfVersion == 1)
-	{
-		// 共通
-		ret = statflag_read(sfh, &npdisp, sizeof(npdisp));
+	// 共通
+	if (sfVersion == 1) {
+		// ステートセーブ ver.1
+		ret = statflag_read(sfh, &npdisp, sizeof(npdisp) - 1);
 		if (ret != STATFLAG_SUCCESS) return ret;
-		readBufLen += sizeof(npdisp);
+		readBufLen += sizeof(npdisp) - 1;
+		npdisp.active = npdisp.enabled;
+	}
+	else {
+		// ステートセーブ ver.2以降
+		UINT32 npdisplen = 0;
+		ret = statflag_read(sfh, &npdisplen, sizeof(npdisplen));
+		readBufLen += sizeof(npdisplen);
+		if (ret != STATFLAG_SUCCESS) return ret;
+		if (npdisplen < 0 || npdisplen > 32768) return STATFLAG_FAILURE; // 異常
+		std::vector<UINT8> temp(npdisplen);
+		ret = statflag_read(sfh, &(temp[0]), npdisplen);
+		if (ret != STATFLAG_SUCCESS) return ret;
+		readBufLen += npdisplen;
+		memcpy(&npdisp, &(temp[0]), min(sizeof(npdisp), npdisplen));
+	}
 
-		// WAB有効なら読み込み
-		if (npdisp.enabled) {
+	// WAB有効なら読み込み
+	if (npdisp.enabled) {
+		if (sfVersion == 1 || sfVersion == 2)
+		{
 			// 画面など生成
 			npdisp_createScreen();
 
@@ -3298,7 +3873,7 @@ int npdisp_sfload(STFLAGH sfh, const SFENTRY* tbl)
 			if (cursorBufSize) {
 				// 読み取りと再生成
 				void* pBitsCursorMask = (char*)malloc(cursorBufSize);
-				if(!pBitsCursorMask) goto error;
+				if (!pBitsCursorMask) goto error;
 				void* pBitsCursor = (char*)malloc(cursorBufSize);
 				if (!pBitsCursor) {
 					free(pBitsCursorMask);
@@ -3414,10 +3989,10 @@ int npdisp_sfload(STFLAGH sfh, const SFENTRY* tbl)
 			npdisp.paletteUpdated = 1;
 			npdisp.updated = 1;
 		}
-	}
-	else
-	{
-		return(STATFLAG_FAILURE);
+		else
+		{
+			return(STATFLAG_FAILURE);
+		}
 	}
 	return(ret);
 

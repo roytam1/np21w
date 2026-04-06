@@ -1337,6 +1337,7 @@
     <ClInclude Include="..\wab\npdisp_mem.h" />
     <ClInclude Include="..\wab\npdisp_palette.h" />
     <ClInclude Include="..\wab\npdisp_rle.h" />
+    <ClInclude Include="..\wab\npdisp_statsave.h" />
     <ClInclude Include="..\wab\tgui9680.h" />
     <ClInclude Include="..\wab\tgui9680_extern.h" />
     <ClInclude Include="..\wab\tgui9680_wrapper.h" />

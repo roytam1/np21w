@@ -39,6 +39,8 @@ extern "C" {
 		UINT32  cursorStride;
 
 		int longjmpnum;
+
+		UINT8	active;
 	} NPDISP;
 
 	extern NPDISP		npdisp;

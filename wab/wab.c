@@ -448,7 +448,7 @@ void np2wab_drawframe()
 			// マルチスレッドじゃない場合はここで描画処理
 			NP2WAB_DrawFrame drawFrameFunc = np2wabwnd.drawframe;
 #if defined(SUPPORT_WAB_NPDISP)
-			if (npdisp.enabled) {
+			if (npdisp.active) {
 				drawFrameFunc = npdisp_drawGraphic;
 			}
 #endif
@@ -507,7 +507,7 @@ unsigned int __stdcall ga_ThreadFunc(LPVOID vdParam) {
 		//wab_leave_criticalsection();
 		drawFrameFunc = np2wabwnd.drawframe;
 #if defined(SUPPORT_WAB_NPDISP)
-		if (npdisp.enabled) {
+		if (npdisp.active) {
 			drawFrameFunc = npdisp_drawGraphic;
 		}
 #endif

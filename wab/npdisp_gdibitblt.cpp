@@ -175,6 +175,18 @@ UINT16 npdisp_func_StretchBlt_MEMtoVRAM(int hasDstDev, int hasSrcDev, UINT32 lpD
 		dstNumLines += dstBeginLine;
 		dstBeginLine = 0;
 	}
+	int srcBeginX = wSrcX;
+	int srcCopyWidth = wSrcXext;
+	int dstBeginX = wDestX;
+	int dstCopyWidth = wDestXext;
+	if (srcBeginX < 0) {
+		srcCopyWidth += srcBeginX;
+		srcBeginX = 0;
+	}
+	if (dstBeginX < 0) {
+		dstCopyWidth += dstBeginX;
+		dstBeginX = 0;
+	}
 
 	bool isStretch = wDestXext != wSrcXext || wDestYext != wSrcYext;
 	if (isStretch) {
@@ -198,8 +210,8 @@ UINT16 npdisp_func_StretchBlt_MEMtoVRAM(int hasDstDev, int hasSrcDev, UINT32 lpD
 	if (lpSrcDevAddr && npdisp_readMemory(&srcPBmp, lpSrcDevAddr, sizeof(NPDISP_PBITMAP))) {
 		if (!isStretch || srcPBmp.bmBitsPixel != 1) {
 			NPDISP_WINDOWS_BMPHDC bmphdc = { 0 };
-			npdisp_PreloadBitmapFromPBITMAP(&srcPBmp, 0, srcBeginLine, srcNumLines);
-			if (npdisp.longjmpnum == 0 && npdisp_MakeBitmapFromPBITMAP(&srcPBmp, &bmphdc, 0, srcBeginLine, srcNumLines, npdisp_palette_transTbl)) {
+			npdisp_PreloadBitmapFromPBITMAP(&srcPBmp, 0, srcBeginLine, srcNumLines, srcBeginX, srcCopyWidth);
+			if (npdisp.longjmpnum == 0 && npdisp_MakeBitmapFromPBITMAP(&srcPBmp, &bmphdc, 0, srcBeginLine, srcNumLines, srcBeginX, srcCopyWidth, npdisp_palette_transTbl)) {
 				NPDISP_DRAWMODE drawMode = { 0 };
 				int hasDrawMode = npdisp_readMemory(&drawMode, lpDrawModeAddr, sizeof(NPDISP_DRAWMODE));
 				if (hasDrawMode) {
@@ -319,6 +331,18 @@ UINT16 npdisp_func_StretchBlt_VRAMtoMEM(int hasDstDev, int hasSrcDev, UINT32 lpD
 		dstNumLines += dstBeginLine;
 		dstBeginLine = 0;
 	}
+	int srcBeginX = wSrcX;
+	int srcCopyWidth = wSrcXext;
+	int dstBeginX = wDestX;
+	int dstCopyWidth = wDestXext;
+	if (srcBeginX < 0) {
+		srcCopyWidth += srcBeginX;
+		srcBeginX = 0;
+	}
+	if (dstBeginX < 0) {
+		dstCopyWidth += dstBeginX;
+		dstBeginX = 0;
+	}
 
 	bool isStretch = wDestXext != wSrcXext || wDestYext != wSrcYext;
 	if (isStretch) {
@@ -342,8 +366,8 @@ UINT16 npdisp_func_StretchBlt_VRAMtoMEM(int hasDstDev, int hasSrcDev, UINT32 lpD
 	NPDISP_PBITMAP dstPBmp;
 	if (lpDestDevAddr && npdisp_readMemory(&dstPBmp, lpDestDevAddr, sizeof(NPDISP_PBITMAP))) {
 		NPDISP_WINDOWS_BMPHDC bmphdc = { 0 };
-		npdisp_PreloadBitmapFromPBITMAP(&dstPBmp, 0, dstBeginLine, dstNumLines);
-		if (npdisp.longjmpnum == 0 && npdisp_MakeBitmapFromPBITMAP(&dstPBmp, &bmphdc, 0, dstBeginLine, dstNumLines)) {
+		npdisp_PreloadBitmapFromPBITMAP(&dstPBmp, 0, dstBeginLine, dstNumLines, dstBeginX, dstCopyWidth);
+		if (npdisp.longjmpnum == 0 && npdisp_MakeBitmapFromPBITMAP(&dstPBmp, &bmphdc, 0, dstBeginLine, dstNumLines, dstBeginX, dstCopyWidth)) {
 			NPDISP_DRAWMODE drawMode = { 0 };
 			int hasDrawMode = npdisp_readMemory(&drawMode, lpDrawModeAddr, sizeof(NPDISP_DRAWMODE));
 			if (hasDrawMode) {
@@ -408,7 +432,7 @@ UINT16 npdisp_func_StretchBlt_VRAMtoMEM(int hasDstDev, int hasSrcDev, UINT32 lpD
 
 			SelectObject(npdispwin.hdc, npdispwin.hOldBrush);
 
-			npdisp_WriteBitmapToPBITMAP(&dstPBmp, &bmphdc, dstBeginLine, dstNumLines);
+			npdisp_WriteBitmapToPBITMAP(&dstPBmp, &bmphdc, dstBeginLine, dstNumLines, dstBeginX, dstCopyWidth);
 
 			npdisp_FreeBitmap(&bmphdc);
 		}
@@ -442,6 +466,18 @@ UINT16 npdisp_func_StretchBlt_MEMtoMEM(int hasDstDev, int hasSrcDev, UINT32 lpDe
 		dstNumLines += dstBeginLine;
 		dstBeginLine = 0;
 	}
+	int srcBeginX = wSrcX;
+	int srcCopyWidth = wSrcXext;
+	int dstBeginX = wDestX;
+	int dstCopyWidth = wDestXext;
+	if (srcBeginX < 0) {
+		srcCopyWidth += srcBeginX;
+		srcBeginX = 0;
+	}
+	if (dstBeginX < 0) {
+		dstCopyWidth += dstBeginX;
+		dstBeginX = 0;
+	}
 
 	bool isStretch = wDestXext != wSrcXext || wDestYext != wSrcYext;
 	if (isStretch) {
@@ -468,12 +504,12 @@ UINT16 npdisp_func_StretchBlt_MEMtoMEM(int hasDstDev, int hasSrcDev, UINT32 lpDe
 			NPDISP_PBITMAP srcPBmp;
 			if (npdisp_readMemory(&srcPBmp, lpSrcDevAddr, sizeof(NPDISP_PBITMAP))) {
 				if (!isStretch || srcPBmp.bmBitsPixel != 1) {
-					npdisp_PreloadBitmapFromPBITMAP(&srcPBmp, 0, srcBeginLine, srcNumLines);
-					npdisp_PreloadBitmapFromPBITMAP(&dstPBmp, 1, dstBeginLine, dstNumLines);
+					npdisp_PreloadBitmapFromPBITMAP(&srcPBmp, 0, srcBeginLine, srcNumLines, srcBeginX, srcCopyWidth);
+					npdisp_PreloadBitmapFromPBITMAP(&dstPBmp, 1, dstBeginLine, dstNumLines, dstBeginX, dstCopyWidth);
 					NPDISP_WINDOWS_BMPHDC srcbmphdc = { 0 };
-					if (npdisp.longjmpnum == 0 && npdisp_MakeBitmapFromPBITMAP(&srcPBmp, &srcbmphdc, 0, srcBeginLine, srcNumLines)) {
+					if (npdisp.longjmpnum == 0 && npdisp_MakeBitmapFromPBITMAP(&srcPBmp, &srcbmphdc, 0, srcBeginLine, srcNumLines, srcBeginX, srcCopyWidth)) {
 						NPDISP_WINDOWS_BMPHDC dstbmphdc = { 0 };
-						if (npdisp_MakeBitmapFromPBITMAP(&dstPBmp, &dstbmphdc, 1, dstBeginLine, dstNumLines)) {
+						if (npdisp_MakeBitmapFromPBITMAP(&dstPBmp, &dstbmphdc, 1, dstBeginLine, dstNumLines, dstBeginX, dstCopyWidth)) {
 							NPDISP_DRAWMODE drawMode = { 0 };
 							int hasDrawMode = npdisp_readMemory(&drawMode, lpDrawModeAddr, sizeof(NPDISP_DRAWMODE));
 							if (hasDrawMode) {
@@ -541,7 +577,7 @@ UINT16 npdisp_func_StretchBlt_MEMtoMEM(int hasDstDev, int hasSrcDev, UINT32 lpDe
 							SelectObject(npdispwin.hdc, npdispwin.hOldBrush);
 							retValue = 1; // ¬Œ÷
 
-							npdisp_WriteBitmapToPBITMAP(&dstPBmp, &dstbmphdc, dstBeginLine, dstNumLines);
+							npdisp_WriteBitmapToPBITMAP(&dstPBmp, &dstbmphdc, dstBeginLine, dstNumLines, dstBeginX, dstCopyWidth);
 
 							npdisp_FreeBitmap(&dstbmphdc);
 						}
@@ -564,8 +600,8 @@ UINT16 npdisp_func_StretchBlt_MEMtoMEM(int hasDstDev, int hasSrcDev, UINT32 lpDe
 						NPDISP_HOSTBRUSH value = it->second;
 						if (value.brs) {
 							NPDISP_WINDOWS_BMPHDC dstbmphdc = { 0 };
-							npdisp_PreloadBitmapFromPBITMAP(&dstPBmp, 0, dstBeginLine, dstNumLines);
-							if (npdisp.longjmpnum == 0 && npdisp_MakeBitmapFromPBITMAP(&dstPBmp, &dstbmphdc, 0, dstBeginLine, dstNumLines)) {
+							npdisp_PreloadBitmapFromPBITMAP(&dstPBmp, 0, dstBeginLine, dstNumLines, dstBeginX, dstCopyWidth);
+							if (npdisp.longjmpnum == 0 && npdisp_MakeBitmapFromPBITMAP(&dstPBmp, &dstbmphdc, 0, dstBeginLine, dstNumLines, dstBeginX, dstCopyWidth)) {
 								TRACEOUT_BITBLT(("-> style=%d, hatch=%d, color=%08x", value.lbrush.lbStyle, value.lbrush.lbHatch, value.lbrush.lbColor));
 								NPDISP_DRAWMODE drawMode = { 0 };
 								int hasDrawMode = npdisp_readMemory(&drawMode, lpDrawModeAddr, sizeof(NPDISP_DRAWMODE));
@@ -619,7 +655,7 @@ UINT16 npdisp_func_StretchBlt_MEMtoMEM(int hasDstDev, int hasSrcDev, UINT32 lpDe
 								if (hRgn) SelectClipRgn(dstbmphdc.hdc, NULL);
 								SelectObject(dstbmphdc.hdc, oldBrush);
 
-								npdisp_WriteBitmapToPBITMAP(&dstPBmp, &dstbmphdc, dstBeginLine, dstNumLines);
+								npdisp_WriteBitmapToPBITMAP(&dstPBmp, &dstbmphdc, dstBeginLine, dstNumLines, dstBeginX, dstCopyWidth);
 
 								npdisp_FreeBitmap(&dstbmphdc);
 							}

@@ -3569,6 +3569,9 @@
     <ClInclude Include="..\wab\npdisp_gdioutput.h">
       <Filter>ヘッダー ファイル\wab</Filter>
     </ClInclude>
+    <ClInclude Include="..\wab\npdisp_statsave.h">
+      <Filter>ヘッダー ファイル\wab</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <NASM Include="x86\cputype.x86">

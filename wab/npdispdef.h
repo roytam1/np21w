@@ -213,19 +213,19 @@ extern "C" {
 				UINT32 lpOpaqueRectAddr;
 				UINT16 wOptions;
 			} extTextOut;
-			//struct
-			//{
-			//	UINT32 lpRetValueAddr;
-			//	UINT32 lpDestDevAddr;
-			//	UINT16 wDestXOrg;
-			//	UINT16 wDestYOrg;
-			//	UINT32 lpClipRectAddr;
-			//	UINT32 lpStringAddr;
-			//	SINT16 wCount;
-			//	UINT32 lpFontInfoAddr;
-			//	UINT32 lpDrawModeAddr;
-			//	UINT32 lpTextXFormAddr;
-			//} strBlt;
+			struct
+			{
+				UINT32 lpRetValueAddr;
+				UINT32 lpDestDevAddr;
+				SINT16 wDestXOrg;
+				SINT16 wDestYOrg;
+				UINT32 lpClipRectAddr;
+				UINT32 lpStringAddr;
+				SINT16 wCount;
+				UINT32 lpFontInfoAddr;
+				UINT32 lpDrawModeAddr;
+				UINT32 lpTextXFormAddr;
+			} strBlt;
 			struct
 			{
 				UINT32 lpRetValueAddr;

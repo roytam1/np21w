@@ -21,6 +21,7 @@ extern "C" {
 	int npdisp_preloadMemory(UINT32 lpAddr, int size);
 	int npdisp_readMemoryWith32Offset(void* dst, UINT16 selector, UINT32 offset, int size);
 	int npdisp_readMemory(void* dst, UINT32 lpAddr, int size);
+	int npdisp_writeMemoryWith32Offset(void* src, UINT16 selector, UINT32 offset, int size);
 	int npdisp_writeMemory(void* src, UINT32 lpAddr, int size);
 
 	UINT8 npdisp_readMemory8With32Offset(UINT16 selector, UINT32 offset);
@@ -34,9 +35,9 @@ extern "C" {
 	char* npdisp_readMemoryString(UINT32 lpAddr);
 	char* npdisp_readMemoryStringWithCount(UINT32 lpAddr, int count);
 
-	void npdisp_PreloadBitmapFromPBITMAP(NPDISP_PBITMAP* srcPBmp, int dcIdx, int beginLine = 0, int numLines = -1);
-	int npdisp_MakeBitmapFromPBITMAP(NPDISP_PBITMAP* srcPBmp, NPDISP_WINDOWS_BMPHDC* bmpHDC, int dcIdx, int beginLine = 0, int numLines = -1, UINT16 *transTable = NULL);
-	void npdisp_WriteBitmapToPBITMAP(NPDISP_PBITMAP* dstPBmp, NPDISP_WINDOWS_BMPHDC* bmpHDC, int beginLine = 0, int numLines = -1);
+	void npdisp_PreloadBitmapFromPBITMAP(NPDISP_PBITMAP* srcPBmp, int dcIdx, int beginLine = 0, int numLines = -1, int beginX = 0, int copyWidth = -1);
+	int npdisp_MakeBitmapFromPBITMAP(NPDISP_PBITMAP* srcPBmp, NPDISP_WINDOWS_BMPHDC* bmpHDC, int dcIdx, int beginLine = 0, int numLines = -1, int beginX = 0, int copyWidth = -1, UINT16 *transTable = NULL);
+	void npdisp_WriteBitmapToPBITMAP(NPDISP_PBITMAP* dstPBmp, NPDISP_WINDOWS_BMPHDC* bmpHDC, int beginLine = 0, int numLines = -1, int beginX = 0, int copyWidth = -1);
 	void npdisp_FreeBitmap(NPDISP_WINDOWS_BMPHDC* bmpHDC);
 #ifdef __cplusplus
 }

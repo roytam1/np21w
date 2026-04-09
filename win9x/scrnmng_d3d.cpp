@@ -775,7 +775,7 @@ BRESULT scrnmngD3D_create(UINT8 scrnmode) {
 	int				bufwidth, bufheight;
 	int				k = 0;
 
-	np2oscfg.d3d_exclusive = 0;// îrëºÉÇÅ[ÉhÇÕîpé~
+	//np2oscfg.d3d_exclusive = 0;// îrëºÉÇÅ[ÉhÇÕîpé~
 
 	if(devicelostflag) return(FAILURE);
 	

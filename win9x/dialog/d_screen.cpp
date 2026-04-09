@@ -644,7 +644,7 @@ BOOL ScrOptRendererPage::OnInitDialog()
 	
 	m_chkexclusive.SubclassDlgItem(IDC_RENDERER_EXCLUSIVE, this);
 	m_chkexclusive.SendMessage(BM_SETCHECK , (np2oscfg.d3d_exclusive) ? BST_CHECKED : BST_UNCHECKED , 0);
-	::ShowWindow(m_chkexclusive.GetSafeHwnd(), SW_HIDE);
+	//::ShowWindow(m_chkexclusive.GetSafeHwnd(), SW_HIDE);
 	
 	return TRUE;
 }

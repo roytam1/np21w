@@ -379,6 +379,14 @@ static double Dist2(const NPDISP_RGB3& color, BYTE r, BYTE g, BYTE b)
 	return dr * dr + dg * dg + db * db;
 }
 
+static double Dist2Color(const NPDISP_RGB3& a, const NPDISP_RGB3& b)
+{
+	double dr = double(a.r) - b.r;
+	double dg = double(a.g) - b.g;
+	double db = double(a.b) - b.b;
+	return dr * dr + dg * dg + db * db;
+}
+
 static double Clamp01(double x)
 {
 	if (x < 0.0) return 0.0;
@@ -434,6 +442,9 @@ void MakePaletteDitherBrushColor(UINT32 target, UINT32 *actual1, UINT32 *actual2
 	double bestErr = Dist2(colors[0], tr, tg, tb);
 	double bestT = 0.0;
 
+	// 2色が離れすぎる組を避けるための重み
+	const double pairPenaltyWeight = 0.01;
+
 	for (int i = 1; i < n; ++i) {
 		double d = Dist2(colors[i], tr, tg, tb);
 		if (d < bestErr) {
@@ -443,15 +454,15 @@ void MakePaletteDitherBrushColor(UINT32 target, UINT32 *actual1, UINT32 *actual2
 			bestT = 0.0;
 		}
 	}
+
 	if (npdisp.bpp == 8 && tr == tg && tg == tb) {
 		// 特例　グレーの範囲の色だけを探す
-		// 全組み合わせを探索
 		for (int a = 0; a < n; ++a) {
 			for (int b = 0; b < n; ++b) {
 				if (a == b) continue;
 
-				if (colors[a].r != colors[a].g || colors[a].g != colors[a].b) continue; // グレーでないなら除外
-				if (colors[b].r != colors[b].g || colors[b].g != colors[b].b) continue; // グレーでないなら除外
+				if (colors[a].r != colors[a].g || colors[a].g != colors[a].b) continue;
+				if (colors[b].r != colors[b].g || colors[b].g != colors[b].b) continue;
 
 				double t = MixFactor(colors[a], colors[b], tr, tg, tb);
 
@@ -463,6 +474,9 @@ void MakePaletteDitherBrushColor(UINT32 target, UINT32 *actual1, UINT32 *actual2
 				double eg = mg - tg;
 				double eb = mb - tb;
 				double err = er * er + eg * eg + eb * eb;
+
+				// 離れすぎた2色の組にペナルティ
+				err += pairPenaltyWeight * Dist2Color(colors[a], colors[b]);
 
 				if (err < bestErr) {
 					bestErr = err;
@@ -489,6 +503,9 @@ void MakePaletteDitherBrushColor(UINT32 target, UINT32 *actual1, UINT32 *actual2
 				double eg = mg - tg;
 				double eb = mb - tb;
 				double err = er * er + eg * eg + eb * eb;
+
+				// 離れすぎた2色の組にペナルティ
+				err += pairPenaltyWeight * Dist2Color(colors[a], colors[b]);
 
 				if (err < bestErr) {
 					bestErr = err;

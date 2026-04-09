@@ -612,7 +612,7 @@ static void npdisp_createBrush(NPDISP_HOSTBRUSH* lpHostBrush)
 		if (!lpHostBrush->brs) {
 			TRACEOUT2(("RealizeObject Create OBJ_BRUSH SOLID ERROR!!!!!!!!!!!!!!"));
 		}
-		TRACEOUT((" -> Style:%d, Color:%08x", brush.lbrush.lbStyle, brush.lbrush.lbColor));
+		TRACEOUT((" -> Style:%d, Color:%08x", lpHostBrush->lbrush.lbStyle, lpHostBrush->lbrush.lbColor));
 	}
 	else if (lpHostBrush->lbrush.lbStyle == NPDISP_BRUSH_STYLE_HATCHED) {
 		// ハッチブラシ生成
@@ -624,7 +624,7 @@ static void npdisp_createBrush(NPDISP_HOSTBRUSH* lpHostBrush)
 		if (!lpHostBrush->brs) {
 			TRACEOUT2(("RealizeObject Create OBJ_BRUSH HATCHED ERROR!!!!!!!!!!!!!!"));
 		}
-		TRACEOUT((" -> Style:%d, Color:%08x", brush.lbrush.lbStyle, brush.lbrush.lbColor));
+		TRACEOUT((" -> Style:%d, Color:%08x", lpHostBrush->lbrush.lbStyle, lpHostBrush->lbrush.lbColor));
 	}
 	else if (lpHostBrush->lbrush.lbStyle == NPDISP_BRUSH_STYLE_PATTERN) {
 		// パターンブラシ生成
@@ -3334,7 +3334,7 @@ void npdisp_exec_fast(void) {
 	}
 	default:
 	{
-		TRACEOUT(("npdisp_exec_fast not supported (Function %d).", req.funcOrder));
+		TRACEOUT(("npdisp_exec_fast not supported (Function %d).", bx));
 		break;
 	}
 	}
@@ -3380,12 +3380,12 @@ static void IOOUTCALL npdisp_o7e7(UINT port, REG8 dat)
 static void IOOUTCALL npdisp_o7e8(UINT port, REG8 dat)
 {
 	npdisp.dataAddr = (dat << 24) | (npdisp.dataAddr >> 8);
-	if (npdisp_debug_seqCounter >= 4) {
-		TRACEOUT(("ADDRESS ERROR! %d %08x %08x", npdisp_debug_seqCounter, CPU_SS, lastID));
-	}
-	else {
-		//TRACEOUT(("ADDRESS %d %08x", npdisp_debug_seqCounter, CPU_SS));
-	}
+	//if (npdisp_debug_seqCounter >= 4) {
+	//	TRACEOUT(("ADDRESS ERROR! %d %08x %08x", npdisp_debug_seqCounter, CPU_SS, lastID));
+	//}
+	//else {
+	//	//TRACEOUT(("ADDRESS %d %08x", npdisp_debug_seqCounter, CPU_SS));
+	//}
 	npdisp_debug_seqCounter++;
 	(void)port;
 }

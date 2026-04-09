@@ -1238,7 +1238,7 @@ void mpu98ii_midipanic(void) {
 void mpu98ii_changeclock(void) {
 	
 	if(mpu98.enable){
-		mpu98.xferclock = pccore.realclock / (31250 / 8);
+		mpu98.xferclock = pccore.realclock / 3125;
 		makeintclock();
 	}
 }

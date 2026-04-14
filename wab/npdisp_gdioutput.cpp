@@ -18,8 +18,25 @@
 #include	"npdisp_mem.h"
 #include	"npdisp_gdioutput.h"
 
+#if 0
+static void trace_fmt_ex2(const char* fmt, ...)
+{
+	char stmp[2048];
+	va_list ap;
+	va_start(ap, fmt);
+	vsprintf(stmp, fmt, ap);
+	strcat(stmp, "\n");
+	va_end(ap);
+	OutputDebugStringA(stmp);
+}
+#define	TRACEOUT2(s)	trace_fmt_ex2 s
+#else
+#define	TRACEOUT2(s)	(void)s
+#endif	/* 1 */
+
 bool npdisp_func_Output_POLYLINE(HDC tgtDC, NPDISP_WINDOWS_BMPHDC *bmphdc, NPDISP_PBITMAP *dstPBmp, HPEN curPen, HBRUSH curBrush, UINT16 wCount, UINT32 lpPointsAddr)
 {
+	TRACEOUT2(("npdisp_func_Output_POLYLINE %d", wCount));
 	POINT* gdiPoints = (POINT*)malloc(wCount * sizeof(POINT));
 	if (gdiPoints) {
 		for (int i = 0; i < wCount; i++) {
@@ -41,6 +58,7 @@ bool npdisp_func_Output_POLYLINE(HDC tgtDC, NPDISP_WINDOWS_BMPHDC *bmphdc, NPDIS
 }
 bool npdisp_func_Output_GetYRange_POLYLINE(int*lineBegin, int* numLines, HPEN curPen, HBRUSH curBrush, UINT16 wCount, UINT32 lpPointsAddr)
 {
+	TRACEOUT2(("npdisp_func_Output_GetYRange_POLYLINE %d", wCount));
 	int penWidthOffset = 0;
 	if (curPen) {
 		LOGPEN lp;
@@ -71,6 +89,7 @@ bool npdisp_func_Output_GetYRange_POLYLINE(int*lineBegin, int* numLines, HPEN cu
 }
 bool npdisp_func_Output_SCANLINES(HDC tgtDC, NPDISP_WINDOWS_BMPHDC* bmphdc, NPDISP_PBITMAP* dstPBmp, HPEN curPen, HBRUSH curBrush, UINT16 wCount, UINT32 lpPointsAddr)
 {
+	TRACEOUT2(("npdisp_func_Output_SCANLINES %d", wCount));
 	NPDISP_POINT pt;
 	if (npdisp_readMemory(&pt, lpPointsAddr, sizeof(NPDISP_POINT))) {
 		int beginY = pt.y;
@@ -101,6 +120,7 @@ bool npdisp_func_Output_SCANLINES(HDC tgtDC, NPDISP_WINDOWS_BMPHDC* bmphdc, NPDI
 }
 bool npdisp_func_Output_GetYRange_SCANLINES(int* lineBegin, int* numLines, HPEN curPen, HBRUSH curBrush, UINT16 wCount, UINT32 lpPointsAddr)
 {
+	TRACEOUT2(("npdisp_func_Output_GetYRange_SCANLINES %d", wCount));
 	NPDISP_POINT pt;
 	if (npdisp_readMemory(&pt, lpPointsAddr, sizeof(NPDISP_POINT))) {
 		*lineBegin = pt.y;
@@ -113,6 +133,7 @@ bool npdisp_func_Output_GetYRange_SCANLINES(int* lineBegin, int* numLines, HPEN 
 }
 bool npdisp_func_Output_RECTANGLE(HDC tgtDC, NPDISP_WINDOWS_BMPHDC* bmphdc, NPDISP_PBITMAP* dstPBmp, HPEN curPen, HBRUSH curBrush, UINT16 wCount, UINT32 lpPointsAddr)
 {
+	TRACEOUT2(("npdisp_func_Output_RECTANGLE %d", wCount));
 	int penWidthOffset = 0;
 	//if (curPen) {
 	//	LOGPEN lp;
@@ -131,6 +152,7 @@ bool npdisp_func_Output_RECTANGLE(HDC tgtDC, NPDISP_WINDOWS_BMPHDC* bmphdc, NPDI
 }
 bool npdisp_func_Output_GetYRange_RECTANGLE(int* lineBegin, int* numLines, HPEN curPen, HBRUSH curBrush, UINT16 wCount, UINT32 lpPointsAddr)
 {
+	TRACEOUT2(("npdisp_func_Output_GetYRange_RECTANGLE %d", wCount));
 	int penWidthOffset = 0;
 	if (curPen) {
 		LOGPEN lp;
@@ -160,6 +182,7 @@ bool npdisp_func_Output_GetYRange_RECTANGLE(int* lineBegin, int* numLines, HPEN 
 }
 bool npdisp_func_Output_WINDPOLYGON(HDC tgtDC, NPDISP_WINDOWS_BMPHDC* bmphdc, NPDISP_PBITMAP* dstPBmp, HPEN curPen, HBRUSH curBrush, UINT16 wCount, UINT32 lpPointsAddr)
 {
+	TRACEOUT2(("npdisp_func_Output_WINDPOLYGON %d", wCount));
 	POINT* gdiPoints = (POINT*)malloc(wCount * sizeof(POINT));
 	if (gdiPoints) {
 		for (int i = 0; i < wCount; i++) {
@@ -182,6 +205,7 @@ bool npdisp_func_Output_WINDPOLYGON(HDC tgtDC, NPDISP_WINDOWS_BMPHDC* bmphdc, NP
 }
 bool npdisp_func_Output_ALTPOLYGON(HDC tgtDC, NPDISP_WINDOWS_BMPHDC* bmphdc, NPDISP_PBITMAP* dstPBmp, HPEN curPen, HBRUSH curBrush, UINT16 wCount, UINT32 lpPointsAddr)
 {
+	TRACEOUT2(("npdisp_func_Output_ALTPOLYGON %d", wCount));
 	POINT* gdiPoints = (POINT*)malloc(wCount * sizeof(POINT));
 	if (gdiPoints) {
 		for (int i = 0; i < wCount; i++) {
@@ -204,6 +228,7 @@ bool npdisp_func_Output_ALTPOLYGON(HDC tgtDC, NPDISP_WINDOWS_BMPHDC* bmphdc, NPD
 }
 bool npdisp_func_Output_GetYRange_POLYGON(int* lineBegin, int* numLines, HPEN curPen, HBRUSH curBrush, UINT16 wCount, UINT32 lpPointsAddr)
 {
+	TRACEOUT2(("npdisp_func_Output_GetYRange_POLYGON %d", wCount));
 	int penWidthOffset = 0;
 	if (curPen) {
 		LOGPEN lp;
@@ -234,6 +259,7 @@ bool npdisp_func_Output_GetYRange_POLYGON(int* lineBegin, int* numLines, HPEN cu
 }
 bool npdisp_func_Output_ELLIPSE(HDC tgtDC, NPDISP_WINDOWS_BMPHDC* bmphdc, NPDISP_PBITMAP* dstPBmp, HPEN curPen, HBRUSH curBrush, UINT16 wCount, UINT32 lpPointsAddr)
 {
+	TRACEOUT2(("npdisp_func_Output_ELLIPSE %d", wCount));
 	int penWidthOffset = 0;
 	NPDISP_POINT pt1, pt2;
 	if (npdisp_readMemory(&pt1, lpPointsAddr, sizeof(NPDISP_POINT))) {
@@ -247,6 +273,7 @@ bool npdisp_func_Output_ELLIPSE(HDC tgtDC, NPDISP_WINDOWS_BMPHDC* bmphdc, NPDISP
 }
 bool npdisp_func_Output_GetYRange_ELLIPSE(int* lineBegin, int* numLines, HPEN curPen, HBRUSH curBrush, UINT16 wCount, UINT32 lpPointsAddr)
 {
+	TRACEOUT2(("npdisp_func_Output_GetYRange_ELLIPSE %d", wCount));
 	int penWidthOffset = 0;
 	if (curPen) {
 		LOGPEN lp;
@@ -276,6 +303,7 @@ bool npdisp_func_Output_GetYRange_ELLIPSE(int* lineBegin, int* numLines, HPEN cu
 }
 bool npdisp_func_Output_ARC(HDC tgtDC, NPDISP_WINDOWS_BMPHDC* bmphdc, NPDISP_PBITMAP* dstPBmp, HPEN curPen, HBRUSH curBrush, UINT16 wCount, UINT32 lpPointsAddr)
 {
+	TRACEOUT2(("npdisp_func_Output_ARC %d", wCount));
 	int penWidthOffset = 0;
 	NPDISP_POINT pts[4];
 	for (int i = 0; i < NELEMENTS(pts); i++) {
@@ -289,6 +317,7 @@ bool npdisp_func_Output_ARC(HDC tgtDC, NPDISP_WINDOWS_BMPHDC* bmphdc, NPDISP_PBI
 }
 bool npdisp_func_Output_GetYRange_ARC(int* lineBegin, int* numLines, HPEN curPen, HBRUSH curBrush, UINT16 wCount, UINT32 lpPointsAddr)
 {
+	TRACEOUT2(("npdisp_func_Output_ARC %d", wCount));
 	int penWidthOffset = 0;
 	if (curPen) {
 		LOGPEN lp;
@@ -318,6 +347,7 @@ bool npdisp_func_Output_GetYRange_ARC(int* lineBegin, int* numLines, HPEN curPen
 }
 bool npdisp_func_Output_PIE(HDC tgtDC, NPDISP_WINDOWS_BMPHDC* bmphdc, NPDISP_PBITMAP* dstPBmp, HPEN curPen, HBRUSH curBrush, UINT16 wCount, UINT32 lpPointsAddr)
 {
+	TRACEOUT2(("npdisp_func_Output_PIE %d", wCount));
 	int penWidthOffset = 0;
 	NPDISP_POINT pts[4];
 	for (int i = 0; i < NELEMENTS(pts); i++) {
@@ -331,6 +361,7 @@ bool npdisp_func_Output_PIE(HDC tgtDC, NPDISP_WINDOWS_BMPHDC* bmphdc, NPDISP_PBI
 }
 bool npdisp_func_Output_GetYRange_PIE(int* lineBegin, int* numLines, HPEN curPen, HBRUSH curBrush, UINT16 wCount, UINT32 lpPointsAddr)
 {
+	TRACEOUT2(("npdisp_func_Output_GetYRange_PIE %d", wCount));
 	int penWidthOffset = 0;
 	if (curPen) {
 		LOGPEN lp;
@@ -360,6 +391,7 @@ bool npdisp_func_Output_GetYRange_PIE(int* lineBegin, int* numLines, HPEN curPen
 }
 bool npdisp_func_Output_CHORD(HDC tgtDC, NPDISP_WINDOWS_BMPHDC* bmphdc, NPDISP_PBITMAP* dstPBmp, HPEN curPen, HBRUSH curBrush, UINT16 wCount, UINT32 lpPointsAddr)
 {
+	TRACEOUT2(("npdisp_func_Output_CHORD %d", wCount));
 	int penWidthOffset = 0;
 	NPDISP_POINT pts[4];
 	for (int i = 0; i < NELEMENTS(pts); i++) {
@@ -373,6 +405,7 @@ bool npdisp_func_Output_CHORD(HDC tgtDC, NPDISP_WINDOWS_BMPHDC* bmphdc, NPDISP_P
 }
 bool npdisp_func_Output_GetYRange_CHORD(int* lineBegin, int* numLines, HPEN curPen, HBRUSH curBrush, UINT16 wCount, UINT32 lpPointsAddr)
 {
+	TRACEOUT2(("npdisp_func_Output_GetYRange_CHORD %d", wCount));
 	int penWidthOffset = 0;
 	if (curPen) {
 		LOGPEN lp;
@@ -402,6 +435,7 @@ bool npdisp_func_Output_GetYRange_CHORD(int* lineBegin, int* numLines, HPEN curP
 }
 bool npdisp_func_Output_ROUNDRECT(HDC tgtDC, NPDISP_WINDOWS_BMPHDC* bmphdc, NPDISP_PBITMAP* dstPBmp, HPEN curPen, HBRUSH curBrush, UINT16 wCount, UINT32 lpPointsAddr)
 {
+	TRACEOUT2(("npdisp_func_Output_ROUNDRECT %d", wCount));
 	int penWidthOffset = 0;
 	NPDISP_POINT pt1, pt2, pt3;
 	if (npdisp_readMemory(&pt1, lpPointsAddr, sizeof(NPDISP_POINT))) {
@@ -418,6 +452,7 @@ bool npdisp_func_Output_ROUNDRECT(HDC tgtDC, NPDISP_WINDOWS_BMPHDC* bmphdc, NPDI
 }
 bool npdisp_func_Output_GetYRange_ROUNDRECT(int* lineBegin, int* numLines, HPEN curPen, HBRUSH curBrush, UINT16 wCount, UINT32 lpPointsAddr)
 {
+	TRACEOUT2(("npdisp_func_Output_GetYRange_ROUNDRECT %d", wCount));
 	int penWidthOffset = 0;
 	if (curPen) {
 		LOGPEN lp;

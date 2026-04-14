@@ -7,9 +7,12 @@
 
 #pragma once
 
-// XXX: 1920x1600以上にならないので差し当たってはこれで十分
-#define WAB_MAX_WIDTH	1920
-#define WAB_MAX_HEIGHT	1600
+// 最低限確保する画面サイズ
+#define WAB_RESERVED_WIDTH	640
+#define WAB_RESERVED_HEIGHT	480
+// 動的確保できる最大画面サイズ
+#define WAB_MAX_WIDTH	4096
+#define WAB_MAX_HEIGHT	4096
 
 #ifdef __cplusplus
 extern "C" {
@@ -52,6 +55,9 @@ typedef struct {
 	HBITMAP hBmpBuf; // バッファビットマップ（常に等倍）
 	HDC     hDCBuf; // バッファのHDC
 	NP2WAB_DrawFrame drawframe; // 画面描画関数。hDCBufにアクセラレータ画面データを転送する。
+	int curWidth; // 実際に確保済み領域サイズ(幅)
+	int curHeight; // 実際に確保済み領域サイズ(高さ)
+	HGDIOBJ hBmpOld;
 } NP2WABWND;
 
 void np2wab_init(HINSTANCE hInstance, HWND g_hWndMain);

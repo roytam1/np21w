@@ -22,6 +22,8 @@
 #include	"npdisp_mem.h"
 #include	"npdisp_palette.h"
 
+extern NPDISP_WINDOWS	npdispwin;
+
  // パレットカラー指定 or RGB指定を調整
 #define NPDISP_ADJUST_COLORREF(a)	(((a) & 0xff000000) == 0x01000000 ? (a) : ((a) & 0xffffff))
 
@@ -40,20 +42,20 @@ NPDISP_RGB3 npdisp_palette_rgb2[2] = {
 };
 NPDISP_RGB3 npdisp_palette_rgb16[16] = {
 	{0x00,0x00,0x00}, /* 0 black */
-	{0x80,0x00,0x00}, /* 1 dark red */
+	{0x00,0x00,0x80}, /* 1 dark red */
 	{0x00,0x80,0x00}, /* 2 dark green */
-	{0x80,0x80,0x00}, /* 3 dark yellow */
-	{0x00,0x00,0x80}, /* 4 dark blue */
+	{0x00,0x80,0x80}, /* 3 dark yellow */
+	{0x80,0x00,0x00}, /* 4 dark blue */
 	{0x80,0x00,0x80}, /* 5 dark magenta */
-	{0x00,0x80,0x80}, /* 6 dark cyan */
+	{0x80,0x80,0x00}, /* 6 dark cyan */
 	{0x80,0x80,0x80}, /* 7 dark gray */
 	{0xC0,0xC0,0xC0}, /* 8 light gray */
-	{0xFF,0x00,0x00}, /* 9 red */
+	{0x00,0x00,0xFF}, /* 9 red */
 	{0x00,0xFF,0x00}, /* 10 green */
-	{0xFF,0xFF,0x00}, /* 11 yellow */
-	{0x00,0x00,0xFF}, /* 12 blue */
+	{0x00,0xFF,0xFF}, /* 11 yellow */
+	{0xFF,0x00,0x00}, /* 12 blue */
 	{0xFF,0x00,0xFF}, /* 13 magenta */
-	{0x00,0xFF,0xFF}, /* 14 cyan */
+	{0xFF,0xFF,0x00}, /* 14 cyan */
 	{0xFF,0xFF,0xFF}  /* 15 white */
 };
 NPDISP_RGB3 npdisp_palette_rgb256[256] = { 0 };
@@ -61,7 +63,7 @@ NPDISP_RGB3 npdisp_palette_gray256[256] = { 0 };
 
 UINT16 npdisp_palette_transTbl[256] = { 0 };
 
-void npdisp_palette_makeTable() 
+void npdisp_palette_makeTable()
 {
 	NPDISP_RGB3* p256 = npdisp_palette_rgb256;
 
@@ -108,10 +110,26 @@ void npdisp_palette_makeTable()
 		npdisp_palette_gray256[i].b = i;
 	}
 
+	//// グレースケール16色
+	//for (int i = 0; i < NELEMENTS(npdisp_palette_rgb16); i++) {
+	//	npdisp_palette_rgb16[i].r = i * 255 / 15;
+	//	npdisp_palette_rgb16[i].g = i * 255 / 15;
+	//	npdisp_palette_rgb16[i].b = i * 255 / 15;
+	//}
+
+	//// 変なパレットテスト
+	//npdisp_palette_rgb16[5].r = 0x60; npdisp_palette_rgb16[5].g = 0x38; npdisp_palette_rgb16[5].b = 0x30;
+	//npdisp_palette_rgb16[6].r = 0xff; npdisp_palette_rgb16[6].g = 0xe0; npdisp_palette_rgb16[6].b = 0xd0;
+
 	// 変換無し
 	for (int i = 0; i < NELEMENTS(npdisp_palette_transTbl); i++) {
 		npdisp_palette_transTbl[i] = i;
 	}
+}
+
+void npdisp_palette_clearCache(int indexbegin, int indexEnd)
+{
+
 }
 
 int npdisp_FindNearest2(UINT8 r, UINT8 g, UINT8 b)
@@ -290,7 +308,36 @@ UINT32 npdisp_ObjIdxToColor(int idx)
 	return 0xffffffff;
 }
 
-UINT32 npdisp_AdjustColorRefForGDI(UINT32 color, bool *preferDither)
+static UINT32 npdisp_AdjustRGB555(UINT32 rgb, bool use24buf) {
+	UINT8 r = rgb & 0xff;
+	UINT8 g = (rgb >> 8) & 0xff;
+	UINT8 b = (rgb >> 16) & 0xff;
+	UINT16* pBits = (UINT16*)npdispwin.pBitsBltBuf;
+	*pBits = (b >> 3) | ((g >> 3) << 5) | ((r >> 3) << 10);
+	if (use24buf) {
+		BitBlt(npdispwin.hdc16BltBuf, 0, 0, 1, 1, npdispwin.hdcBltBuf, 0, 0, SRCCOPY);
+		return GetPixel(npdispwin.hdc16BltBuf, 0, 0);
+	}
+	else {
+		return GetPixel(npdispwin.hdcBltBuf, 0, 0);
+	}
+}
+static UINT32 npdisp_AdjustRGB565(UINT32 rgb, bool use24buf) {
+	UINT8 r = rgb & 0xff;
+	UINT8 g = (rgb >> 8) & 0xff;
+	UINT8 b = (rgb >> 16) & 0xff;
+	UINT16* pBits = (UINT16*)npdispwin.pBitsBltBuf;
+	*pBits = (b >> 3) | ((g >> 2) << 5) | ((r >> 3) << 11);
+	if (use24buf) {
+		BitBlt(npdispwin.hdc16BltBuf, 0, 0, 1, 1, npdispwin.hdcBltBuf, 0, 0, SRCCOPY);
+		return GetPixel(npdispwin.hdc16BltBuf, 0, 0);
+	}
+	else {
+		return GetPixel(npdispwin.hdcBltBuf, 0, 0);
+	}
+}
+
+UINT32 npdisp_AdjustColorRefForGDI(UINT32 color, bool* preferDither)
 {
 	if (preferDither) *preferDither = false;
 	if (npdisp.bpp == 1) {
@@ -350,13 +397,23 @@ UINT32 npdisp_AdjustColorRefForGDI(UINT32 color, bool *preferDither)
 		return color;
 	}
 }
-void npdisp_AdjustDrawModeColor(NPDISP_DRAWMODE* drawMode) {
+void npdisp_AdjustDrawModeColor(NPDISP_DRAWMODE* drawMode, bool use24buf) {
 	if (npdisp.bpp <= 8) {
 		drawMode->LTextColor = npdisp_AdjustColorRefForGDI(drawMode->TextColor);
 		drawMode->LbkColor = npdisp_AdjustColorRefForGDI(drawMode->bkColor);
 	}
+	else if (npdisp.bpp == 15) {
+		// RGB555が展開された実際の色を設定
+		drawMode->LTextColor = npdisp_AdjustRGB555(drawMode->TextColor, use24buf);
+		drawMode->LbkColor = npdisp_AdjustRGB555(drawMode->bkColor, use24buf);
+	}
+	else if (npdisp.bpp == 16) {
+		// RGB565が展開された実際の色を設定
+		drawMode->LTextColor = npdisp_AdjustRGB565(drawMode->TextColor, use24buf);
+		drawMode->LbkColor = npdisp_AdjustRGB565(drawMode->bkColor, use24buf);
+	}
 }
-void npdisp_AdjustSrcMonoPaletteByDrawMode(NPDISP_WINDOWS_BMPHDC *bmpHdcSrc, NPDISP_WINDOWS_BMPHDC *bmpHdcDst, NPDISP_DRAWMODE* drawMode) {
+void npdisp_AdjustSrcMonoPaletteByDrawMode(NPDISP_WINDOWS_BMPHDC* bmpHdcSrc, NPDISP_WINDOWS_BMPHDC* bmpHdcDst, NPDISP_DRAWMODE* drawMode) {
 	if (bmpHdcSrc->lpbi->bmiHeader.biBitCount == 1 && (bmpHdcDst && bmpHdcDst->lpbi->bmiHeader.biBitCount != 1 || !bmpHdcDst && npdisp.bpp != 1)) {
 		RGBQUAD pal[2];
 		pal[0].rgbRed = drawMode->LTextColor & 0xff;
@@ -409,7 +466,7 @@ static double MixFactor(const NPDISP_RGB3& c0, const NPDISP_RGB3& c1, BYTE tr, B
 	return Clamp01(t);
 }
 
-void MakePaletteDitherBrushColor(UINT32 target, UINT32 *actual1, UINT32 *actual2, double *bestTValue)
+void MakePaletteDitherBrushColor(UINT32 target, UINT32* actual1, UINT32* actual2, double* bestTValue)
 {
 	NPDISP_RGB3* colors = NULL;
 	int n = 0;
@@ -443,49 +500,80 @@ void MakePaletteDitherBrushColor(UINT32 target, UINT32 *actual1, UINT32 *actual2
 	double bestT = 0.0;
 
 	// 2色が離れすぎる組を避けるための重み
-	const double pairPenaltyWeight = 0.01;
+	const double pairPenaltyWeight = 0.005;
 
-	for (int i = 1; i < n; ++i) {
-		double d = Dist2(colors[i], tr, tg, tb);
-		if (d < bestErr) {
-			bestErr = d;
-			i0 = i;
-			i1 = i;
-			bestT = 0.0;
-		}
-	}
+	if (npdisp.bpp == 8) {
+		if (tr == tg && tg == tb) {
+			// 特例　グレーの範囲の色だけを探す
+			for (int a = 0; a < n; ++a) {
+				if (a == 10) a += n - 20;
+				for (int b = 0; b < n; ++b) {
+					if (b == 10) b += n - 20;
+					if (a == b) continue;
 
-	if (npdisp.bpp == 8 && tr == tg && tg == tb) {
-		// 特例　グレーの範囲の色だけを探す
-		for (int a = 0; a < n; ++a) {
-			for (int b = 0; b < n; ++b) {
-				if (a == b) continue;
+					if (colors[a].r != colors[a].g || colors[a].g != colors[a].b) continue;
+					if (colors[b].r != colors[b].g || colors[b].g != colors[b].b) continue;
 
-				if (colors[a].r != colors[a].g || colors[a].g != colors[a].b) continue;
-				if (colors[b].r != colors[b].g || colors[b].g != colors[b].b) continue;
+					double t = MixFactor(colors[a], colors[b], tr, tg, tb);
 
-				double t = MixFactor(colors[a], colors[b], tr, tg, tb);
+					double mr = colors[a].r + t * (colors[b].r - colors[a].r);
+					double mg = colors[a].g + t * (colors[b].g - colors[a].g);
+					double mb = colors[a].b + t * (colors[b].b - colors[a].b);
 
-				double mr = colors[a].r + t * (colors[b].r - colors[a].r);
-				double mg = colors[a].g + t * (colors[b].g - colors[a].g);
-				double mb = colors[a].b + t * (colors[b].b - colors[a].b);
+					double er = mr - tr;
+					double eg = mg - tg;
+					double eb = mb - tb;
+					double err = er * er + eg * eg + eb * eb;
 
-				double er = mr - tr;
-				double eg = mg - tg;
-				double eb = mb - tb;
-				double err = er * er + eg * eg + eb * eb;
+					// 離れすぎた2色の組にペナルティ
+					err += pairPenaltyWeight * Dist2Color(colors[a], colors[b]);
 
-				// 離れすぎた2色の組にペナルティ
-				err += pairPenaltyWeight * Dist2Color(colors[a], colors[b]);
-
-				if (err < bestErr) {
-					bestErr = err;
-					i0 = a;
-					i1 = b;
-					bestT = t;
+					if (err < bestErr) {
+						bestErr = err;
+						i0 = a;
+						i1 = b;
+						bestT = t;
+					}
 				}
 			}
 		}
+		else {
+			// 全組み合わせを探索
+			for (int a = 0; a < n; ++a) {
+				if (a == 10) a += n - 20;
+				for (int b = 0; b < n; ++b) {
+					if (b == 10) b += n - 20;
+					if (a == b) continue;
+
+					double t = MixFactor(colors[a], colors[b], tr, tg, tb);
+
+					double mr = colors[a].r + t * (colors[b].r - colors[a].r);
+					double mg = colors[a].g + t * (colors[b].g - colors[a].g);
+					double mb = colors[a].b + t * (colors[b].b - colors[a].b);
+
+					double er = mr - tr;
+					double eg = mg - tg;
+					double eb = mb - tb;
+					double err = er * er + eg * eg + eb * eb;
+
+					// 離れすぎた2色の組にペナルティ
+					err += pairPenaltyWeight * Dist2Color(colors[a], colors[b]);
+
+					if (err < bestErr) {
+						bestErr = err;
+						i0 = a;
+						i1 = b;
+						bestT = t;
+					}
+				}
+			}
+		}
+	}
+	else if (npdisp.bpp == 1) {
+		// 選択の余地無し
+		i0 = 0;
+		i1 = 1;
+		bestT = MixFactor(colors[0], colors[1], tr, tg, tb);
 	}
 	else {
 		// 全組み合わせを探索
@@ -547,16 +635,12 @@ HBRUSH CreatePaletteDitherBrush(UINT32 actual1, UINT32 actual2, double bestTValu
 	int i1 = actual2;
 	double bestT = bestTValue;
 
-	// 8x8 Bayer matrix
-	static const BYTE bayer8[8][8] = {
-		{ 0,48,12,60, 3,51,15,63 },
-		{32,16,44,28,35,19,47,31 },
-		{ 8,56, 4,52,11,59, 7,55 },
-		{40,24,36,20,43,27,39,23 },
-		{ 2,50,14,62, 1,49,13,61 },
-		{34,18,46,30,33,17,45,29 },
-		{10,58, 6,54, 9,57, 5,53 },
-		{42,26,38,22,41,25,37,21 }
+	// 4x4 Bayer matrix
+	static BYTE bayer4[4][4] = {
+		{ 15, 7,13, 5 },
+		{  0, 8, 2,10 },
+		{ 12, 4,14, 6 },
+		{  3,11, 1, 9 },
 	};
 
 	// 8bpp BI_RGB DIB:
@@ -595,12 +679,12 @@ HBRUSH CreatePaletteDitherBrush(UINT32 actual1, UINT32 actual2, double bestTValu
 
 	BYTE* bits = dib.data() + sizeof(BITMAPINFOHEADER) + sizeof(RGBQUAD) * paletteSize;
 
-	int threshold = int(bestT * 64.0 + 0.5);
+	int threshold = int(bestT * 16.0 + 0.5);
 
 	for (int y = 0; y < H; ++y) {
 		BYTE* row = bits + (H - 1 - y) * stride; // bottom-up
 		for (int x = 0; x < W; ++x) {
-			row[x] = (bayer8[y][x] < threshold) ? (BYTE)i1 : (BYTE)i0;
+			row[x] = (bayer4[y % 4][x % 4] < threshold) ? (BYTE)i1 : (BYTE)i0;
 		}
 	}
 

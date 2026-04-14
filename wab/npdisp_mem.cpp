@@ -516,56 +516,55 @@ void npdisp_PreloadBitmapFromPBITMAP(NPDISP_PBITMAP* srcPBmp, int dcIdx, int beg
 		beginX = 0;
 		copyWidth = 0;
 	}
-	int endLine = beginLine + numLines;
-	int endX = beginX + copyWidth;
-	int beginXbyte = beginX * bpp / 8;
-	int endXbyte = (endX * bpp + 7) / 8;
-	TRACEOUTF(("preload beginX=%d, endX=%d", beginXbyte, endXbyte));
-	//lastPreload_imgsize = srcstride * numLines;
-	// 先に読み取り
-	if (srcPBmp->bmSegmentIndex != 0) {
-		// 64KB超え転送
-		UINT16 seg = (srcPBmp->bmBitsAddr >> 16) & 0xffff;
-		UINT16 ofs = srcPBmp->bmBitsAddr & 0xffff;
-		int remain = srcPBmp->bmHeight;
-		int segBeginLine = beginLine / srcPBmp->bmScanSegment * srcPBmp->bmScanSegment;
-		int segEndLine = (endLine + srcPBmp->bmScanSegment - 1) / srcPBmp->bmScanSegment * srcPBmp->bmScanSegment;
-		seg += srcPBmp->bmSegmentIndex * (segBeginLine / srcPBmp->bmScanSegment);
-		remain -= segBeginLine;
-		// 1ラインずつ転送
-		for (j = segBeginLine; j < segEndLine; j += srcPBmp->bmScanSegment) {
-			UINT16 srcOfs = ofs;
-			int looplen = srcPBmp->bmScanSegment < remain ? srcPBmp->bmScanSegment : remain;
-			for (i = 0; i < looplen; i++) {
-				npdisp_preloadMemoryWith32Offset(seg, srcOfs + beginXbyte, (endXbyte - beginXbyte));
-				srcOfs += srcstride;
+	if (numLines > 0) {
+		int endLine = beginLine + numLines;
+		int endX = beginX + copyWidth;
+		int beginXbyte = beginX * bpp / 8;
+		int endXbyte = (endX * bpp + 7) / 8;
+		TRACEOUTF(("preload beginX=%d, endX=%d", beginXbyte, endXbyte));
+		//lastPreload_imgsize = srcstride * numLines;
+		// 先に読み取り
+		if (srcPBmp->bmSegmentIndex != 0) {
+			// 64KB超え転送
+			UINT16 seg = (srcPBmp->bmBitsAddr >> 16) & 0xffff;
+			UINT16 ofs = srcPBmp->bmBitsAddr & 0xffff;
+			int remain = srcPBmp->bmHeight;
+			int segBeginLine = beginLine / srcPBmp->bmScanSegment * srcPBmp->bmScanSegment;
+			int segEndLine = (endLine + srcPBmp->bmScanSegment - 1) / srcPBmp->bmScanSegment * srcPBmp->bmScanSegment;
+			seg += srcPBmp->bmSegmentIndex * (segBeginLine / srcPBmp->bmScanSegment);
+			remain -= segBeginLine;
+			// 1ラインずつ転送
+			for (j = segBeginLine; j < segEndLine; j += srcPBmp->bmScanSegment) {
+				UINT16 srcOfs = ofs;
+				int looplen = srcPBmp->bmScanSegment < remain ? srcPBmp->bmScanSegment : remain;
+				for (i = 0; i < looplen; i++) {
+					npdisp_preloadMemoryWith32Offset(seg, srcOfs + beginXbyte, (endXbyte - beginXbyte));
+					srcOfs += srcstride;
+				}
+				seg += srcPBmp->bmSegmentIndex;
+				remain -= looplen;
 			}
-			seg += srcPBmp->bmSegmentIndex;
-			remain -= looplen;
-		}
-	}
-	else {
-		// 64KB未満転送
-		UINT16 seg = (srcPBmp->bmBitsAddr >> 16) & 0xffff;
-		UINT16 ofs = srcPBmp->bmBitsAddr & 0xffff;
-		if (dststride == srcstride) {
-			// アライメントが一致しているので一括転送可能
-			UINT16 srcOfs = ofs + srcstride * beginLine;
-			npdisp_preloadMemoryWith32Offset(seg, srcOfs, srcstride * numLines);
 		}
 		else {
-			// アライメント合わせのために1ラインずつ転送
-			UINT16 srcOfs = ofs;
-			srcOfs += srcstride * beginLine;
-			for (i = beginLine; i < endLine; i++) {
-				npdisp_preloadMemoryWith32Offset(seg, srcOfs + beginXbyte, (endXbyte - beginXbyte));
-				srcOfs += srcstride;
+			// 64KB未満転送
+			UINT16 seg = (srcPBmp->bmBitsAddr >> 16) & 0xffff;
+			UINT16 ofs = srcPBmp->bmBitsAddr & 0xffff;
+			if (dststride == srcstride) {
+				// アライメントが一致しているので一括転送可能
+				UINT16 srcOfs = ofs + srcstride * beginLine;
+				npdisp_preloadMemoryWith32Offset(seg, srcOfs, srcstride * numLines);
+			}
+			else {
+				// アライメント合わせのために1ラインずつ転送
+				UINT16 srcOfs = ofs;
+				srcOfs += srcstride * beginLine;
+				for (i = beginLine; i < endLine; i++) {
+					npdisp_preloadMemoryWith32Offset(seg, srcOfs + beginXbyte, (endXbyte - beginXbyte));
+					srcOfs += srcstride;
+				}
 			}
 		}
 	}
-	//lastPreload = npdisp_memread_preloadcount;
-	//lastPreload_memread_curpos2 = npdisp_memread_curpos;
-	//lastPreload_memread_size2 = npdisp_memread_buf.size();
 }
 
 int npdisp_MakeBitmapFromPBITMAP(NPDISP_PBITMAP* srcPBmp, NPDISP_WINDOWS_BMPHDC* bmpHDC, int dcIdx, int beginLine, int numLines, int beginX, int copyWidth, UINT16* transTable) {
@@ -630,6 +629,25 @@ int npdisp_MakeBitmapFromPBITMAP(NPDISP_PBITMAP* srcPBmp, NPDISP_WINDOWS_BMPHDC*
 			}
 		}
 	}
+	else if (bpp == 15 || bpp == 16) {
+		lpbi = (BITMAPINFO*)malloc(sizeof(BITMAPINFO) + sizeof(RGBQUAD) * 3);
+		if (bpp == 16) {
+			// ビットフィールド 565
+			lpbi->bmiHeader.biCompression = BI_BITFIELDS;
+			*((DWORD*)(lpbi->bmiColors + 0)) = 0x0000F800;
+			*((DWORD*)(lpbi->bmiColors + 1)) = 0x000007E0;
+			*((DWORD*)(lpbi->bmiColors + 2)) = 0x0000001F;
+		}
+		else if (bpp == 15) {
+			// ビットフィールド 555
+			lpbi->bmiHeader.biCompression = BI_BITFIELDS;
+			*((DWORD*)(lpbi->bmiColors + 0)) = 0x00007C00;
+			*((DWORD*)(lpbi->bmiColors + 1)) = 0x000003E0;
+			*((DWORD*)(lpbi->bmiColors + 2)) = 0x0000001F;
+			lpbi->bmiHeader.biBitCount = 16;
+		}
+		bpp = 16; // 後続処理では16扱いにする
+	}
 	else {
 		lpbi = (BITMAPINFO*)malloc(sizeof(BITMAPINFO));
 	}
@@ -664,69 +682,66 @@ int npdisp_MakeBitmapFromPBITMAP(NPDISP_PBITMAP* srcPBmp, NPDISP_WINDOWS_BMPHDC*
 					beginX = 0;
 					copyWidth = 0;
 				}
-				int endLine = beginLine + numLines;
-				int endX = beginX + copyWidth;
-				int beginXbyte = beginX * bpp / 8;
-				int endXbyte = (endX * bpp + 7) / 8;
-				TRACEOUTF(("read beginX=%d, endX=%d", beginXbyte, endXbyte));
-				if (srcPBmp->bmSegmentIndex != 0) {
-					// 64KB超え転送
-					UINT16 seg = (srcPBmp->bmBitsAddr >> 16) & 0xffff;
-					UINT16 ofs = srcPBmp->bmBitsAddr & 0xffff;
-					int remain = srcPBmp->bmHeight;
-					int segBeginLine = beginLine / srcPBmp->bmScanSegment * srcPBmp->bmScanSegment;
-					int segEndLine = (endLine + srcPBmp->bmScanSegment - 1) / srcPBmp->bmScanSegment * srcPBmp->bmScanSegment;
-					seg += srcPBmp->bmSegmentIndex * (segBeginLine / srcPBmp->bmScanSegment);
-					remain -= segBeginLine;
-					char* dstPtr = (char*)(bmpHDC->pBits) + bmpHDC->stride * segBeginLine;
-					// 1ラインずつ転送
-					for (j = segBeginLine; j < segEndLine; j += srcPBmp->bmScanSegment) {
-						UINT16 srcOfs = ofs;
-						int looplen = srcPBmp->bmScanSegment < remain ? srcPBmp->bmScanSegment : remain;
-						for (i = 0; i < looplen; i++) {
-							npdisp_readMemoryWith32Offset(dstPtr + beginXbyte, seg, srcOfs + beginXbyte, (endXbyte - beginXbyte));
-							srcOfs += srcstride;
-							dstPtr += bmpHDC->stride;
+				if (numLines > 0) {
+					int endLine = beginLine + numLines;
+					int endX = beginX + copyWidth;
+					int beginXbyte = beginX * bpp / 8;
+					int endXbyte = (endX * bpp + 7) / 8;
+					TRACEOUTF(("read beginX=%d, endX=%d", beginXbyte, endXbyte));
+					if (srcPBmp->bmSegmentIndex != 0) {
+						// 64KB超え転送
+						UINT16 seg = (srcPBmp->bmBitsAddr >> 16) & 0xffff;
+						UINT16 ofs = srcPBmp->bmBitsAddr & 0xffff;
+						int remain = srcPBmp->bmHeight;
+						int segBeginLine = beginLine / srcPBmp->bmScanSegment * srcPBmp->bmScanSegment;
+						int segEndLine = (endLine + srcPBmp->bmScanSegment - 1) / srcPBmp->bmScanSegment * srcPBmp->bmScanSegment;
+						seg += srcPBmp->bmSegmentIndex * (segBeginLine / srcPBmp->bmScanSegment);
+						remain -= segBeginLine;
+						char* dstPtr = (char*)(bmpHDC->pBits) + bmpHDC->stride * segBeginLine;
+						// 1ラインずつ転送
+						for (j = segBeginLine; j < segEndLine; j += srcPBmp->bmScanSegment) {
+							UINT16 srcOfs = ofs;
+							int looplen = srcPBmp->bmScanSegment < remain ? srcPBmp->bmScanSegment : remain;
+							for (i = 0; i < looplen; i++) {
+								npdisp_readMemoryWith32Offset(dstPtr + beginXbyte, seg, srcOfs + beginXbyte, (endXbyte - beginXbyte));
+								srcOfs += srcstride;
+								dstPtr += bmpHDC->stride;
+							}
+							seg += srcPBmp->bmSegmentIndex;
+							remain -= looplen;
 						}
-						seg += srcPBmp->bmSegmentIndex;
-						remain -= looplen;
-					}
-				}
-				else {
-					// 64KB未満転送
-					UINT16 seg = (srcPBmp->bmBitsAddr >> 16) & 0xffff;
-					UINT16 ofs = srcPBmp->bmBitsAddr & 0xffff;
-					if (bmpHDC->stride == srcstride) {
-						// アライメントが一致しているので一括転送可能
-						char* dstPtr = (char*)(bmpHDC->pBits);
-						UINT16 srcOfs = ofs + srcstride * beginLine;
-						dstPtr += bmpHDC->stride * beginLine;
-						npdisp_readMemoryWith32Offset(dstPtr, seg, srcOfs, srcstride * numLines);
 					}
 					else {
-						// アライメント合わせのために1ラインずつ転送
-						char* dstPtr = (char*)(bmpHDC->pBits);
-						UINT16 srcOfs = ofs;
-						srcOfs += srcstride * beginLine;
-						dstPtr += bmpHDC->stride * beginLine;
-						for (i = beginLine; i < endLine; i++) {
-							npdisp_readMemoryWith32Offset(dstPtr + beginXbyte, seg, srcOfs + beginXbyte, (endXbyte - beginXbyte));
-							srcOfs += srcstride;
-							dstPtr += bmpHDC->stride;
+						// 64KB未満転送
+						UINT16 seg = (srcPBmp->bmBitsAddr >> 16) & 0xffff;
+						UINT16 ofs = srcPBmp->bmBitsAddr & 0xffff;
+						if (bmpHDC->stride == srcstride) {
+							// アライメントが一致しているので一括転送可能
+							char* dstPtr = (char*)(bmpHDC->pBits);
+							UINT16 srcOfs = ofs + srcstride * beginLine;
+							dstPtr += bmpHDC->stride * beginLine;
+							npdisp_readMemoryWith32Offset(dstPtr, seg, srcOfs, srcstride * numLines);
+						}
+						else {
+							// アライメント合わせのために1ラインずつ転送
+							char* dstPtr = (char*)(bmpHDC->pBits);
+							UINT16 srcOfs = ofs;
+							srcOfs += srcstride * beginLine;
+							dstPtr += bmpHDC->stride * beginLine;
+							for (i = beginLine; i < endLine; i++) {
+								npdisp_readMemoryWith32Offset(dstPtr + beginXbyte, seg, srcOfs + beginXbyte, (endXbyte - beginXbyte));
+								srcOfs += srcstride;
+								dstPtr += bmpHDC->stride;
+							}
 						}
 					}
 				}
-				//char* dstPtr2 = (char*)(bmpHDC->pBits);
-				//for (i = beginLine; i < beginLine+2; i++) {
-				//	for (int x = 0; x < bmpHDC->stride; x++) {
-				//		dstPtr2[x] = x;
-				//	}
-				//	dstPtr2 += bmpHDC->stride;
-				//}
-
 				if (npdisp.longjmpnum == 0) {
 					bmpHDC->hOldBmp = SelectObject(bmpHDC->hdc, bmpHDC->hBmp);
 					bmpHDC->lpbi = lpbi;
+					bmpHDC->hBmpDDB = NULL;
+					SetBkColor(bmpHDC->hdc, 0xffffff);
+					SetTextColor(bmpHDC->hdc, 0x000000);
 					//BitBlt(np2wabwnd.hDCBuf, npdisp.width / 2, 0, npdisp.width / 2, npdisp.height, bmpHDC->hdc, 0, 0, SRCCOPY);
 				}
 				else {
@@ -758,8 +773,23 @@ void npdisp_WriteBitmapToPBITMAP(NPDISP_PBITMAP* dstPBmp, NPDISP_WINDOWS_BMPHDC*
 	if (npdisp.longjmpnum != 0) return;
 
 	if (bmpHDC->pBits && bmpHDC->lpbi) {
+		if (bmpHDC->hBmpDDB) {
+			// DDB書き戻し
+			const int ddbWidth = bmpHDC->lpbi->bmiHeader.biWidth;
+			const int ddbHeight = (bmpHDC->lpbi->bmiHeader.biHeight >= 0) ? bmpHDC->lpbi->bmiHeader.biHeight : -bmpHDC->lpbi->bmiHeader.biHeight;
+			HDC hdcTemp = npdispwin.hdcCache[2];
+			HGDIOBJ hOldBmp = SelectObject(hdcTemp, bmpHDC->hBmp);
+			SetTextColor(hdcTemp, 0);
+			SetBkColor(hdcTemp, 0xffffff);
+			BitBlt(hdcTemp, 0, 0, ddbWidth, ddbHeight, bmpHDC->hdc, 0, 0, SRCCOPY);
+			SelectObject(hdcTemp, hOldBmp);
+		}
+
 		int i, j;
 		int bpp = dstPBmp->bmPlanes * dstPBmp->bmBitsPixel;
+		if (bpp == 15) {
+			bpp = 16; // 後続処理では16扱いにする
+		}
 		int	dststride = dstPBmp->bmWidthBytes;
 		if (numLines == -1 || numLines > dstPBmp->bmHeight) numLines = dstPBmp->bmHeight;
 		if (beginLine + numLines > dstPBmp->bmHeight) numLines = dstPBmp->bmHeight - beginLine;
@@ -772,6 +802,9 @@ void npdisp_WriteBitmapToPBITMAP(NPDISP_PBITMAP* dstPBmp, NPDISP_WINDOWS_BMPHDC*
 		if (beginX >= dstPBmp->bmWidth) {
 			beginX = 0;
 			copyWidth = 0;
+		}
+		if (numLines < 1) {
+			return; // 書くものなし
 		}
 		int endLine = beginLine + numLines;
 		int endX = beginX + copyWidth;
@@ -828,9 +861,35 @@ void npdisp_WriteBitmapToPBITMAP(NPDISP_PBITMAP* dstPBmp, NPDISP_WINDOWS_BMPHDC*
 		//}
 	}
 }
+// DIBモノクロビットマップからDDBモノクロビットマップを生成する　以降の操作はDDBに対して行われ、pBitsによるビットの操作は無効になる（無視される）
+void npdisp_ConvertToDDBMonoBitmap(NPDISP_WINDOWS_BMPHDC* bmpHDC)
+{
+	if (npdisp.bpp == 1) return; // モノクロは特殊処理なので抜ける
+	if (bmpHDC->lpbi->bmiHeader.biBitCount != 1) return;
+	if (bmpHDC->hBmpDDB) return;
+
+	HDC hdcTemp = npdispwin.hdcCache[2];
+	const int ddbWidth = bmpHDC->lpbi->bmiHeader.biWidth;
+	const int ddbHeight = (bmpHDC->lpbi->bmiHeader.biHeight >= 0) ? bmpHDC->lpbi->bmiHeader.biHeight : -bmpHDC->lpbi->bmiHeader.biHeight;
+	bmpHDC->hBmpDDB = CreateBitmap(ddbWidth, ddbHeight, 1, 1, NULL);
+	HGDIOBJ hOldBmp = SelectObject(hdcTemp, bmpHDC->hBmpDDB);
+	SetTextColor(hdcTemp, 0);
+	SetBkColor(hdcTemp, 0xffffff);
+	BitBlt(hdcTemp, 0, 0, ddbWidth, ddbHeight, bmpHDC->hdc, 0, 0, SRCCOPY);
+	SelectObject(hdcTemp, hOldBmp);
+	SelectObject(bmpHDC->hdc, bmpHDC->hBmpDDB);
+}
 void npdisp_FreeBitmap(NPDISP_WINDOWS_BMPHDC* bmpHDC) {
 	if (!bmpHDC) return;
 
+	if (bmpHDC->hBmpDDB) {
+		// DDB削除
+		if (bmpHDC->hdc) {
+			SelectObject(bmpHDC->hdc, bmpHDC->hOldBmp);
+		}
+		DeleteObject(bmpHDC->hBmpDDB);
+		bmpHDC->hBmpDDB = NULL;
+	}
 	if (bmpHDC->hdc) {
 		if (bmpHDC->lpbi) {
 			free(bmpHDC->lpbi);

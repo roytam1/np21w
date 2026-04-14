@@ -38,6 +38,7 @@ extern "C" {
 	void npdisp_PreloadBitmapFromPBITMAP(NPDISP_PBITMAP* srcPBmp, int dcIdx, int beginLine = 0, int numLines = -1, int beginX = 0, int copyWidth = -1);
 	int npdisp_MakeBitmapFromPBITMAP(NPDISP_PBITMAP* srcPBmp, NPDISP_WINDOWS_BMPHDC* bmpHDC, int dcIdx, int beginLine = 0, int numLines = -1, int beginX = 0, int copyWidth = -1, UINT16 *transTable = NULL);
 	void npdisp_WriteBitmapToPBITMAP(NPDISP_PBITMAP* dstPBmp, NPDISP_WINDOWS_BMPHDC* bmpHDC, int beginLine = 0, int numLines = -1, int beginX = 0, int copyWidth = -1);
+	void npdisp_ConvertToDDBMonoBitmap(NPDISP_WINDOWS_BMPHDC* bmpHDC);
 	void npdisp_FreeBitmap(NPDISP_WINDOWS_BMPHDC* bmpHDC);
 #ifdef __cplusplus
 }

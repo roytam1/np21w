@@ -576,7 +576,7 @@ extern "C" {
 
 	typedef struct {
 		BITMAPINFOHEADER biHeader;
-		UINT32 pal[256];
+		RGBQUAD pal[256];
 		char bmBits[4 * 8 * 8]; // Win3.1ÇÕ8x8pxè„å¿
 	} NPDISP_HOSTPATTERNBITMAP;
 
@@ -630,6 +630,10 @@ extern "C" {
 		HBITMAP hBmpBltBuf;
 		HGDIOBJ hOldBmpBltBuf;
 
+		HDC hdc16BltBuf;
+		HBITMAP hBmp16BltBuf;
+		HGDIOBJ hOldBmp16BltBuf;
+
 		HDC hdcCursor;
 		HBITMAP hBmpCursor;
 		HBITMAP hOldBmpCursor;
@@ -639,7 +643,7 @@ extern "C" {
 		HBITMAP hOldBmpCursorMask;
 		void* pBitsCursorMask;
 
-		HDC hdcCache[2];
+		HDC hdcCache[3];
 
 		UINT32 pensIdx;
 		std::map<UINT32, NPDISP_HOSTPEN> pens;
@@ -654,6 +658,8 @@ extern "C" {
 		HGDIOBJ hOldBmp;
 		UINT32 stride;
 		BITMAPINFO* lpbi;
+
+		HBITMAP hBmpDDB;
 	} NPDISP_WINDOWS_BMPHDC;
 
 #pragma pack(pop)

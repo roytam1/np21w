@@ -68,7 +68,7 @@ extern "C" {
 	/// NPDISP_DRAWMODEの前景色と背景色をデバイス描画向けカラーへ変換（256色→カラーパレット番号、他→RGB）
 	/// </summary>
 	/// <param name="drawMode"></param>
-	void npdisp_AdjustDrawModeColor(NPDISP_DRAWMODE *drawMode);
+	void npdisp_AdjustDrawModeColor(NPDISP_DRAWMODE *drawMode, bool use24buf = false);
 	/// <summary>
 	/// DrawModeの値に基づいてソース2値ビットマップの色を修正する
 	/// </summary>
@@ -77,6 +77,7 @@ extern "C" {
 	/// <param name="drawMode"></param>
 	void npdisp_AdjustSrcMonoPaletteByDrawMode(NPDISP_WINDOWS_BMPHDC* bmpHdcSrc, NPDISP_WINDOWS_BMPHDC* bmpHdcDst, NPDISP_DRAWMODE* drawMode);
 
+	void npdisp_palette_clearCache(int indexbegin, int indexEnd);
 	void MakePaletteDitherBrushColor(UINT32 target, UINT32* actual1, UINT32* actual2, double* bestTValue);
 	HBRUSH CreatePaletteDitherBrush(UINT32 actual1, UINT32 actual2, double bestTValue);
 #ifdef __cplusplus

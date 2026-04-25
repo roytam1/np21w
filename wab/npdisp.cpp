@@ -93,9 +93,39 @@ static void trace_fmt_exF(const char* fmt, ...)
 #else
 #define	TRACEOUTP(s)	(void)s
 #endif	/* 1 */
+#if 0
+static void trace_fmt_exF(const char* fmt, ...)
+{
+	char stmp[2048];
+	va_list ap;
+	va_start(ap, fmt);
+	vsprintf(stmp, fmt, ap);
+	strcat(stmp, "\n");
+	va_end(ap);
+	OutputDebugStringA(stmp);
+}
+#define	TRACEOUT9(s)	trace_fmt_exF s
+#else
+#define	TRACEOUT9(s)	(void)s
+#endif	/* 1 */
+#if 0
+static void trace_fmt_exF(const char* fmt, ...)
+{
+	char stmp[2048];
+	va_list ap;
+	va_start(ap, fmt);
+	vsprintf(stmp, fmt, ap);
+	strcat(stmp, "\n");
+	va_end(ap);
+	OutputDebugStringA(stmp);
+}
+#define	TRACEOUT10(s)	trace_fmt_exF s
+#else
+#define	TRACEOUT10(s)	(void)s
+#endif	/* 1 */
 
-static void npdisp_releaseScreen(void);
-static void npdisp_createScreen(void);
+static void npdisp_releaseScreen(bool resize = false);
+static void npdisp_createScreen(bool resize = false);
 
 NPDISP npdisp = { 0 };
 NPDISP_WINDOWS npdispwin = { 0 };
@@ -160,12 +190,16 @@ void npdispcs_shutdown(void)
 
 static void npdisp_func_NP2Initialize(UINT16 dpiX, UINT16 dpiY, UINT16 width, UINT16 height, UINT16 bpp)
 {
-	// 初期化
-	npdisp.enabled = 0;
-	npdisp.active = 0;
-	np2wab.relaystateext = 0;
+	bool resize = npdisp.enabled && npdisp.active;
+
+	if (!resize) {
+		// 初期化
+		npdisp.enabled = 0;
+		npdisp.active = 0;
+		np2wab.relaystateext = 0;
+	}
 	np2wab_setRelayState(np2wab.relaystateint | np2wab.relaystateext);
-	npdisp_releaseScreen();
+	npdisp_releaseScreen(resize);
 
 	if (width) npdisp.width = width;
 	if (height) npdisp.height = height;
@@ -195,11 +229,31 @@ static UINT16 npdisp_func_Enable_PDEVICE(NPDISP_PDEVICE *lpDevInfo, UINT16 wStyl
 {
 	memset(lpDevInfo, 0, sizeof(NPDISP_PDEVICE));
 
-	lpDevInfo->bmp.bmType = 0x1003;
+	lpDevInfo->bmp.bmType = NPDISP_DEVTYPE;
 	lpDevInfo->bmp.bmWidth = npdisp.width;
 	lpDevInfo->bmp.bmHeight = npdisp.height;
 	lpDevInfo->bmp.bmBitsPixel = 1;
 	lpDevInfo->bmp.bmPlanes = 4;
+
+	// DIB Engine互換
+	//lpDevInfo->dibe.deType = NPDISP_DEVTYPE;
+	//lpDevInfo->dibe.deWidth = npdisp.width;
+	//lpDevInfo->dibe.deHeight = npdisp.height;
+	//lpDevInfo->dibe.deWidthBytes = ((npdisp.width * npdisp.bpp + 31) / 32) * 4;
+	//lpDevInfo->dibe.dePlanes = 1;
+	//lpDevInfo->dibe.deBitsPixel = npdisp.bpp;
+	//lpDevInfo->dibe.deReserved1 = 0;
+	//lpDevInfo->dibe.deDeltaScan = lpDevInfo->dibe.deWidthBytes;
+	//lpDevInfo->dibe.delpPDeviceAddr = 0;
+	//lpDevInfo->dibe.deBitsOffset = 0;
+	//lpDevInfo->dibe.deBitsSelector = 0;
+	//lpDevInfo->dibe.deFlags = 0;
+	//lpDevInfo->dibe.deVersion = 0x0400;
+	//lpDevInfo->dibe.deBitmapInfoAddr = 0;
+	//lpDevInfo->dibe.deBeginAccessFuncAddr = 0;
+	//lpDevInfo->dibe.deEndAccessFuncAddr = 0;
+	//lpDevInfo->dibe.deDriverReserved = 0;
+
 	npdisp.devType = lpDevInfo->bmp.bmType;
 	return 1;
 }
@@ -232,7 +286,7 @@ static UINT16 npdisp_func_Enable_GDIINFO(NPDISP_GDIINFO *lpDevInfo, UINT16 wStyl
 	lpDevInfo->dpPolygonals = PC_SCANLINE | PC_RECTANGLE | PC_POLYGON | PC_WINDPOLYGON | PC_WIDE | PC_STYLED | PC_WIDESTYLED | PC_INTERIORS;
 	lpDevInfo->dpText = TC_RA_ABLE;// 0x0004 | 0x2000;
 	lpDevInfo->dpClip = CP_RECTANGLE;
-	lpDevInfo->dpRaster = RC_BITBLT | RC_BITMAP64 | RC_DI_BITMAP | RC_BIGFONT | RC_SAVEBITMAP | RC_DIBTODEV | RC_GDI20_OUTPUT | RC_OP_DX_OUTPUT | RC_STRETCHBLT; // 0x4699; // RC_BITBLT | RC_BITMAP64 | RC_SAVEBITMAP | RC_GDI20_OUTPUT | RC_DI_BITMAP;
+	lpDevInfo->dpRaster = RC_BITBLT | RC_BITMAP64 | RC_DI_BITMAP | RC_BIGFONT | RC_SAVEBITMAP | RC_DIBTODEV | RC_GDI20_OUTPUT | RC_OP_DX_OUTPUT | RC_SCALING | RC_STRETCHBLT | RC_FLOODFILL; // 0x4699; // RC_BITBLT | RC_BITMAP64 | RC_SAVEBITMAP | RC_GDI20_OUTPUT | RC_DI_BITMAP;
 	lpDevInfo->dpAspectX = 71;
 	lpDevInfo->dpAspectY = 71;
 	lpDevInfo->dpAspectXY = 100;
@@ -240,6 +294,12 @@ static UINT16 npdisp_func_Enable_GDIINFO(NPDISP_GDIINFO *lpDevInfo, UINT16 wStyl
 	lpDevInfo->dpLogPixelsX = 96; // ここのDPIはアイコンの文字サイズ等が変わる　変えない方がよさそう？
 	lpDevInfo->dpLogPixelsY = 96; // ここのDPIはアイコンの文字サイズ等が変わる　変えない方がよさそう？
 	lpDevInfo->dpDCManage = 0x0004;
+#define NPDISP_C1_TRANSPARENT	0x0001
+#define NPDISP_C1_REINIT_ABLE	0x0080
+#define NPDISP_C1_COLORCURSOR	0x0800
+	lpDevInfo->dpCaps1 = NPDISP_C1_TRANSPARENT | NPDISP_C1_REINIT_ABLE | NPDISP_C1_COLORCURSOR;
+	lpDevInfo->dpSpotSizeX = 0;
+	lpDevInfo->dpSpotSizeY = 0;
 	lpDevInfo->dpMLoWin.x = lpDevInfo->dpHorzSize * 10;
 	lpDevInfo->dpMLoWin.y = lpDevInfo->dpVertSize * 10;
 	lpDevInfo->dpMLoVpt.x = (int)virtualWidth;
@@ -332,7 +392,7 @@ static UINT16 npdisp_func_Enable(UINT32 lpDevInfoAddr, UINT16 wStyle, UINT32 lpD
 			NPDISP_PDEVICE devInfo;
 			npdisp_readMemory(&devInfo, lpDevInfoAddr, sizeof(devInfo));
 			retValue = npdisp_func_Enable_PDEVICE(&devInfo, wStyle, lpDestDevType, lpOutputFile, lpDataAddr ? &data : NULL);
-			npdisp_writeMemory(&devInfo, lpDevInfoAddr, 2);
+			npdisp_writeMemory(&devInfo, lpDevInfoAddr, sizeof(devInfo));
 			npdisp_createScreen();
 			npdisp.enabled = 1;
 			npdisp.active = 1;
@@ -359,12 +419,35 @@ static UINT16 npdisp_func_Enable(UINT32 lpDevInfoAddr, UINT16 wStyle, UINT32 lpD
 	}
 	return retValue;
 }
+static UINT16 npdisp_func_ReEnable(UINT32 lpPDeviceAddr, UINT32 lpGDIInfoAddr)
+{
+	if (lpGDIInfoAddr) {
+		NPDISP_GDIINFO gdiInfo;
+		npdisp_readMemory(&gdiInfo, lpGDIInfoAddr, sizeof(gdiInfo));
+		npdisp_func_Enable_GDIINFO(&gdiInfo, 1, NULL, NULL, NULL);
+		npdisp_writeMemory(&gdiInfo, lpGDIInfoAddr, sizeof(gdiInfo));
+	}
+	if (lpPDeviceAddr) {
+		NPDISP_PDEVICE devInfo;
+		npdisp_readMemory(&devInfo, lpPDeviceAddr, 2);
+		if (*((UINT16*)&devInfo) == NPDISP_DEVTYPE) npdisp_readMemory(&devInfo, lpPDeviceAddr, sizeof(devInfo));
+		npdisp_func_Enable_PDEVICE(&devInfo, 0, NULL, NULL, NULL);
+		npdisp_writeMemory(&devInfo, lpPDeviceAddr, sizeof(devInfo));
+		npdisp_createScreen(npdisp.enabled && npdisp.active);
+		npdisp.enabled = 1;
+		npdisp.active = 1;
+		np2wab.realWidth = npdisp.width;
+		np2wab.realHeight = npdisp.height;
+		np2wab.relaystateext = 3;
+		np2wab_setRelayState(np2wab.relaystateint | np2wab.relaystateext);
+		npdisp.updated = 1;
+	}
+	return 1;
+}
 
 static void npdisp_func_Disable(UINT32 lpDestDevAddr)
 {
 	if (lpDestDevAddr) {
-		NPDISP_PDEVICE destDev;
-		npdisp_readMemory(&destDev, lpDestDevAddr, sizeof(destDev));
 		npdisp.enabled = 0;
 		npdisp.active = 0;
 		np2wab.relaystateext = 0;
@@ -664,7 +747,7 @@ static void npdisp_createBrush(NPDISP_HOSTBRUSH* lpHostBrush)
 		lpHostBrush->brs = NULL;
 	}
 }
-static UINT32 npdisp_func_RealizeObject_CreateBrush(UINT32 lpInObjAddr, UINT32 lpOutObjAddr, UINT32 lpTextXFormAddr)
+static UINT32 npdisp_func_RealizeObject_CreateBrush(UINT32 lpInObjAddr, UINT32 lpOutObjAddr, UINT32 lpTextXFormAddr, UINT32 tgtBpp)
 {
 	NPDISP_POINT ptOrigin = { 0 };
 	TRACEOUT(("RealizeObject Create OBJ_BRUSH"));
@@ -682,6 +765,9 @@ static UINT32 npdisp_func_RealizeObject_CreateBrush(UINT32 lpInObjAddr, UINT32 l
 			// 指定した設定で作る
 			npdisp_readMemory(&(brush.lbrush), lpInObjAddr, sizeof(NPDISP_LBRUSH));
 		}
+		//if (tgtBpp == 1 && (brush.lbrush.lbStyle == NPDISP_BRUSH_STYLE_SOLID || brush.lbrush.lbStyle == NPDISP_BRUSH_STYLE_HATCHED)) {
+		//	brush.lbrush.lbColor = (brush.lbrush.lbColor & 0x1) ? 0xffffff : 0x000000;
+		//}
 		int key = 0;
 		if (brush.lbrush.lbStyle != NPDISP_BRUSH_STYLE_PATTERN) {
 			for (auto it = npdispwin.brushes.begin(); it != npdispwin.brushes.end(); ++it) {
@@ -786,6 +872,8 @@ static UINT32 npdisp_func_RealizeObject_CreateBrush(UINT32 lpInObjAddr, UINT32 l
 		}
 		// 書き込み
 		npdisp_writeMemory(&brush, lpOutObjAddr, sizeof(NPDISP_BRUSH));
+		// 色に応じて返す？
+		return brush.lbrush.lbStyle == NPDISP_BRUSH_STYLE_SOLID ? 0x8002 : 0x8000;
 	}
 	// サイズを返す
 	return sizeof(NPDISP_BRUSH);
@@ -793,8 +881,16 @@ static UINT32 npdisp_func_RealizeObject_CreateBrush(UINT32 lpInObjAddr, UINT32 l
 static UINT32 npdisp_func_RealizeObject(UINT32 lpDestDevAddr, UINT16 wStyle, UINT32 lpInObjAddr, UINT32 lpOutObjAddr, UINT32 lpTextXFormAddr)
 {
 	UINT32 retValue = 0;
+	UINT32 tgtBpp = npdisp.bpp;
 	NPDISP_PDEVICE destDev;
-	npdisp_readMemory(&destDev, lpDestDevAddr, sizeof(destDev));
+	npdisp_readMemory(&destDev, lpDestDevAddr, 2);
+	if (*((UINT16*)&destDev) == NPDISP_DEVTYPE) npdisp_readMemory(&destDev, lpDestDevAddr, sizeof(destDev));
+	if (*((UINT16*)&destDev) == 0) {
+		NPDISP_PBITMAP destBmpDev;
+		npdisp_readMemory(&destBmpDev, lpDestDevAddr, sizeof(NPDISP_PBITMAP));
+		TRACEOUT10(("w=%d, h=%d, bpp=%d", destBmpDev.bmWidth, destBmpDev.bmHeight, destBmpDev.bmBitsPixel));
+		tgtBpp = destBmpDev.bmBitsPixel;
+	}
 	if ((SINT16)wStyle < 0) {
 		// 削除
 		retValue = 1; // 常に成功したことにする
@@ -839,7 +935,7 @@ static UINT32 npdisp_func_RealizeObject(UINT32 lpDestDevAddr, UINT16 wStyle, UIN
 		}
 		case 2: // OBJ_BRUSH
 		{
-			retValue = npdisp_func_RealizeObject_CreateBrush(lpInObjAddr, lpOutObjAddr, lpTextXFormAddr);
+			retValue = npdisp_func_RealizeObject_CreateBrush(lpInObjAddr, lpOutObjAddr, lpTextXFormAddr, tgtBpp);
 			break;
 		}
 		case 3: // OBJ_FONT
@@ -1744,123 +1840,168 @@ static UINT16 npdisp_func_SetDIBitsToDevice(UINT32 lpDestDevAddr, SINT16 X, SINT
 				else {
 					lpbiReadLen = lpbiLen = sizeof(BITMAPINFO);
 				}
-				BITMAPINFO* lpbi;
-				lpbi = (BITMAPINFO*)malloc(lpbiLen);
-				if (lpbi) {
-					npdisp_readMemory(lpbi, lpBitmapInfoAddr, lpbiReadLen);
-					UINT8* pBits = (UINT8*)malloc(stride * height);
-					if (pBits) {
-						npdisp_readMemory(pBits, lpDIBitsAddr, stride * height);
-						if (npdisp.longjmpnum == 0) {
-							HDC tgtDC = npdispwin.hdc;
-							if (height > iScan) {
-								int i;
-								if (npdisp.usePalette) {
-									if (lpbi->bmiHeader.biBitCount <= 8) {
-										int colors = (1 << lpbi->bmiHeader.biBitCount);
-										UINT16 palTrans[256];
-										memcpy(palTrans, lpbi->bmiColors, colors * sizeof(UINT16));
-										for (i = 0; i < colors; i++) {
-											lpbi->bmiColors[i].rgbRed = palTrans[i] & 0xff;
-											lpbi->bmiColors[i].rgbGreen = palTrans[i] & 0xff;
-											lpbi->bmiColors[i].rgbBlue = palTrans[i] & 0xff;
-											lpbi->bmiColors[i].rgbReserved = 0;
-											lpbi->bmiColors[i].rgbReserved = 0;
-										}
-									}
-								}
-								else {
-									if (lpbi->bmiHeader.biBitCount == 1) {
-										// 2色パレットセット
-										for (i = 0; i < NELEMENTS(npdisp_palette_rgb2); i++) {
-											lpbi->bmiColors[i].rgbRed = npdisp_palette_rgb2[i].r;
-											lpbi->bmiColors[i].rgbGreen = npdisp_palette_rgb2[i].g;
-											lpbi->bmiColors[i].rgbBlue = npdisp_palette_rgb2[i].b;
-											lpbi->bmiColors[i].rgbReserved = 0;
-										}
-									}
-									else if (lpbi->bmiHeader.biBitCount == 4) {
-										// 有効なパレットでなければ16色パレットセット
-										if (lpbi->bmiColors[0].rgbRed != 0 || lpbi->bmiColors[0].rgbGreen != 0 || lpbi->bmiColors[0].rgbBlue != 0 || lpbi->bmiColors[0].rgbReserved != 0 ||
-											lpbi->bmiColors[15].rgbRed != 0xff || lpbi->bmiColors[15].rgbGreen != 0xff || lpbi->bmiColors[15].rgbBlue != 0xff || lpbi->bmiColors[15].rgbReserved != 0) {
-											for (i = 0; i < NELEMENTS(npdisp_palette_rgb16); i++) {
-												lpbi->bmiColors[i].rgbRed = npdisp_palette_rgb16[i].r;
-												lpbi->bmiColors[i].rgbGreen = npdisp_palette_rgb16[i].g;
-												lpbi->bmiColors[i].rgbBlue = npdisp_palette_rgb16[i].b;
+				int iScanHost = (int)iScan;
+				int cScansHost = (int)cScans;
+				RECT cliprect = { 0, 0, npdisp.width, npdisp.height };
+				if (lpClipRectAddr) {
+					NPDISP_RECT rectTmp = { 0 };
+					npdisp_readMemory(&rectTmp, lpClipRectAddr, sizeof(NPDISP_RECT));
+					cliprect.top = rectTmp.top;
+					cliprect.left = rectTmp.left;
+					cliprect.bottom = rectTmp.bottom;
+					cliprect.right = rectTmp.right;
+					if (cliprect.top > cliprect.bottom) {
+						int tmp = cliprect.top;
+						cliprect.top = cliprect.bottom;
+						cliprect.bottom = tmp;
+					}
+				}
+
+				// クリップ領域だけ転送
+				const int clipYBegin = cliprect.top - Y;
+				const int clipYEnd = cliprect.bottom - Y;
+				int iScanTmp = (int)iScanHost;
+				int cScansTmp = (int)cScansHost;
+				if (biHeader.biHeight >= 0) {
+					// bottom-up -> top-down
+					iScanTmp = biHeader.biHeight - (int)iScanHost - (int)cScansHost;
+					cScansTmp = (int)cScansHost;
+				}
+				if (iScanTmp < clipYBegin) {
+					cScansTmp -= clipYBegin - (int)iScanTmp;
+					iScanTmp = clipYBegin;
+				}
+				if (clipYEnd <= iScanTmp) {
+					cScansTmp = 0;
+				}
+				else {
+					if (clipYEnd < iScanTmp + cScansTmp) {
+						cScansTmp = clipYEnd - iScanTmp;
+					}
+				}
+				if (biHeader.biHeight >= 0) {
+					// top-down -> bottom-up
+					iScanHost = (UINT16)(biHeader.biHeight - iScanTmp - cScansTmp);
+					cScansHost = (UINT16)cScansTmp;
+				}
+
+				if (cScansHost <= 0) {
+					retValue = cScans;
+				}
+				else if (iScanHost < height && cScansHost > 0) {
+					BITMAPINFO* lpbi;
+					lpbi = (BITMAPINFO*)malloc(lpbiLen);
+					if (lpbi) {
+						npdisp_readMemory(lpbi, lpBitmapInfoAddr, lpbiReadLen);
+						UINT8* pBitsBase = (UINT8*)malloc(cScansHost * stride);
+						if (pBitsBase) {
+							npdisp_readMemoryWith32Offset(pBitsBase, lpDIBitsAddr >> 16, (lpDIBitsAddr & 0xffff) + (iScanHost - (int)iScan) * stride, cScansHost * stride);
+							UINT8* pBits = pBitsBase;// -((int)iScanHost - iScanHost) * stride; // 開始アドレス分をずらす
+							if (npdisp.longjmpnum == 0) {
+								HDC tgtDC = npdispwin.hdc;
+								if (height > iScanHost) {
+									int i;
+									if (npdisp.usePalette) {
+										if (lpbi->bmiHeader.biBitCount <= 8) {
+											int colors = (1 << lpbi->bmiHeader.biBitCount);
+											UINT16 palTrans[256];
+											memcpy(palTrans, lpbi->bmiColors, colors * sizeof(UINT16));
+											for (i = 0; i < colors; i++) {
+												lpbi->bmiColors[i].rgbRed = palTrans[i] & 0xff;
+												lpbi->bmiColors[i].rgbGreen = palTrans[i] & 0xff;
+												lpbi->bmiColors[i].rgbBlue = palTrans[i] & 0xff;
+												lpbi->bmiColors[i].rgbReserved = 0;
 												lpbi->bmiColors[i].rgbReserved = 0;
 											}
 										}
 									}
-								}
-								NPDISP_DRAWMODE drawMode = { 0 };
-								if (npdisp_readMemory(&drawMode, lpDrawModeAddr, sizeof(NPDISP_DRAWMODE))) {
-									npdisp_AdjustDrawModeColor(&drawMode);
-									SetBkColor(tgtDC, drawMode.LbkColor);
-									SetTextColor(tgtDC, drawMode.LTextColor);
-									SetBkMode(tgtDC, drawMode.bkMode);
-									SetROP2(tgtDC, drawMode.Rop2);
-								}
-								HRGN hRgn = NULL;
-								if (lpClipRectAddr) {
-									RECT cliprect = { 0 };
-									NPDISP_RECT rectTmp = { 0 };
-									npdisp_readMemory(&rectTmp, lpClipRectAddr, sizeof(NPDISP_RECT));
-									cliprect.top = rectTmp.top;
-									cliprect.left = rectTmp.left;
-									cliprect.bottom = rectTmp.bottom;
-									cliprect.right = rectTmp.right;
-									hRgn = CreateRectRgn(cliprect.left, cliprect.top, cliprect.right, cliprect.bottom);
-									SelectClipRgn(tgtDC, hRgn);
-								}
-
-								if (iScan + cScans > height) {
-									cScans = height - iScan;
-								}
-
-								bool palChanged = false;
-								if (npdisp.usePalette) {
-									if (lpbi->bmiHeader.biBitCount > 8) {
-										// グレースケールから実際のデバイス色へ置き換え
-										if (npdisp.bpp == 8) {
-											RGBQUAD pal[256];
-											for (int i = 0; i < 256; i++) {
-												pal[i].rgbRed = npdisp_palette_rgb256[i].r;
-												pal[i].rgbGreen = npdisp_palette_rgb256[i].g;
-												pal[i].rgbBlue = npdisp_palette_rgb256[i].b;
-												pal[i].rgbReserved = 0;
+									else {
+										if (lpbi->bmiHeader.biBitCount == 1) {
+											// 2色パレットセット
+											for (i = 0; i < NELEMENTS(npdisp_palette_rgb2); i++) {
+												lpbi->bmiColors[i].rgbRed = npdisp_palette_rgb2[i].r;
+												lpbi->bmiColors[i].rgbGreen = npdisp_palette_rgb2[i].g;
+												lpbi->bmiColors[i].rgbBlue = npdisp_palette_rgb2[i].b;
+												lpbi->bmiColors[i].rgbReserved = 0;
 											}
-											SetDIBColorTable(tgtDC, 0, 256, pal);
-											palChanged = true;
+										}
+										else if (lpbi->bmiHeader.biBitCount == 4) {
+											if (lpbi->bmiHeader.biClrUsed == 0 || lpbi->bmiHeader.biClrImportant == 0) {
+												// 有効なパレットでなければ16色パレットセット
+												if (lpbi->bmiColors[0].rgbReserved != 0 || lpbi->bmiColors[15].rgbReserved != 0) {
+													for (i = 0; i < NELEMENTS(npdisp_palette_rgb16); i++) {
+														lpbi->bmiColors[i].rgbRed = npdisp_palette_rgb16[i].r;
+														lpbi->bmiColors[i].rgbGreen = npdisp_palette_rgb16[i].g;
+														lpbi->bmiColors[i].rgbBlue = npdisp_palette_rgb16[i].b;
+														lpbi->bmiColors[i].rgbReserved = 0;
+													}
+												}
+											}
 										}
 									}
-								}
+									NPDISP_DRAWMODE drawMode = { 0 };
+									if (npdisp_readMemory(&drawMode, lpDrawModeAddr, sizeof(NPDISP_DRAWMODE))) {
+										npdisp_AdjustDrawModeColor(&drawMode);
+										SetBkColor(tgtDC, drawMode.LbkColor);
+										SetTextColor(tgtDC, drawMode.LTextColor);
+										SetBkMode(tgtDC, drawMode.bkMode);
+										SetROP2(tgtDC, drawMode.Rop2);
+									}
+									HRGN hRgn = NULL;
+									if (lpClipRectAddr) {
+										hRgn = CreateRectRgn(cliprect.left, cliprect.top, cliprect.right, cliprect.bottom);
+										SelectClipRgn(tgtDC, hRgn);
+									}
 
-								if (SetDIBitsToDevice(tgtDC, X, Y, biHeader.biWidth, height, 0, 0,
-									iScan, cScans, pBits, lpbi, DIB_RGB_COLORS) == 0) {
-									TRACEOUTF(("ERROR"));
+									//if (iScanHost + cScansHost > height) {
+									//	cScansHost = height - iScanHost;
+									//}
 
-								}
+									bool palChanged = false;
+									if (npdisp.usePalette) {
+										if (lpbi->bmiHeader.biBitCount > 8) {
+											// グレースケールから実際のデバイス色へ置き換え
+											if (npdisp.bpp == 8) {
+												RGBQUAD pal[256];
+												for (int i = 0; i < 256; i++) {
+													pal[i].rgbRed = npdisp_palette_rgb256[i].r;
+													pal[i].rgbGreen = npdisp_palette_rgb256[i].g;
+													pal[i].rgbBlue = npdisp_palette_rgb256[i].b;
+													pal[i].rgbReserved = 0;
+												}
+												SetDIBColorTable(tgtDC, 0, 256, pal);
+												palChanged = true;
+											}
+										}
+									}
 
-								if (hRgn) {
-									SelectClipRgn(tgtDC, NULL);
-									DeleteObject(hRgn);
-								}
+									if (SetDIBitsToDevice(tgtDC, X, Y, biHeader.biWidth, height, 0, 0,
+										iScanHost, cScansHost, pBits, lpbi, DIB_RGB_COLORS) == 0) {
+										TRACEOUTF(("ERROR"));
 
-								if (palChanged) {
-									// 色を戻す
-									SetDIBColorTable(tgtDC, 0, 256, (RGBQUAD*)npdisp_palette_gray256);
-								}
+									}
 
-								npdisp.updated = 1;
-								retValue = cScans;
-								if (cScans == 24 && iScan == 0) {
-									TRACEOUTF(("OK"));
+									if (hRgn) {
+										SelectClipRgn(tgtDC, NULL);
+										DeleteObject(hRgn);
+									}
+
+									if (palChanged) {
+										// 色を戻す
+										SetDIBColorTable(tgtDC, 0, 256, (RGBQUAD*)npdisp_palette_gray256);
+									}
+
+									npdisp.updated = 1;
+									retValue = cScans;
+									if (cScans == 24 && iScan == 0) {
+										TRACEOUTF(("OK"));
+									}
 								}
 							}
+							free(pBitsBase);
 						}
-						free(pBits);
+						free(lpbi);
 					}
-					free(lpbi);
 				}
 			}
 		}
@@ -1906,94 +2047,177 @@ static UINT16 npdisp_func_SaveScreenBitmap(UINT32 lpRect, UINT16 wCommand)
 	return retValue;
 }
 
+static void npdisp_func_SetCursor_Make(void** ppBitsCursor, HBITMAP* phBmpCursor, HBITMAP* phOldBmpCursor, HDC hdcCursor, UINT32 pixelBufAddr, int width, int height, int srcStride, int dstStride, int srcBpp, int dstBpp) {
+	HBITMAP hBmp = NULL;
+	void* pBitsCursor = NULL;
+	if (npdisp.cursorStride == dstStride && *ppBitsCursor && *phBmpCursor) {
+		// 既存の流用
+		pBitsCursor = *ppBitsCursor;
+		hBmp = *phBmpCursor;
+	}
+	else {
+		// 新規作成
+		if (dstBpp > 1) {
+			// モノクロ以外はDIBSectionで
+			BITMAPINFO_8BPP bi;
+			bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+			bi.bmiHeader.biWidth = width;
+			bi.bmiHeader.biHeight = -height;
+			bi.bmiHeader.biPlanes = 1;
+			bi.bmiHeader.biBitCount = dstBpp;
+			bi.bmiHeader.biCompression = BI_RGB;
+			bi.bmiHeader.biSizeImage = 0;
+			bi.bmiHeader.biXPelsPerMeter = 0;
+			bi.bmiHeader.biYPelsPerMeter = 0;
+			bi.bmiHeader.biClrUsed = 0;
+			bi.bmiHeader.biClrImportant = 0;
+			if (dstBpp == 8) {
+				bi.bmiHeader.biClrUsed = 256;
+				memcpy(bi.bmiColors, npdisp_palette_rgb256, sizeof(npdisp_palette_rgb256));
+			}
+			else if (dstBpp == 4) {
+				bi.bmiHeader.biClrUsed = 256;
+				memcpy(bi.bmiColors, npdisp_palette_rgb16, sizeof(npdisp_palette_rgb16));
+			}
+			hBmp = CreateDIBSection(hdcCursor, (BITMAPINFO*)(&bi), DIB_RGB_COLORS, &pBitsCursor, NULL, 0);
+			if (!hBmp) return;
+		}
+		else {
+			// モノクロはDDBで（後で作成）
+			pBitsCursor = (char*)malloc(dstStride * height);
+			if (!pBitsCursor) return;
+		}
+	}
+	int x, y;
+	if (srcBpp == dstBpp) {
+		// bpp同じ
+		UINT8* pBits8 = (UINT8*)pBitsCursor;
+		for (y = 0; y < height; y++) {
+			for (x = 0; x < srcStride; x++) {
+				UINT8 value = npdisp_readMemory8(pixelBufAddr);
+				*pBits8 = value;
+				pixelBufAddr++;
+				pBits8++;
+			}
+		}
+		if (dstBpp == 1) {
+			// 1bppはここで作成 それ以外はDIBSectionで反映済み
+			hBmp = CreateBitmap(width, height, 1, 1, pBitsCursor);
+		}
+	}
+	else if (srcBpp == 1 && dstBpp == 4) {
+		// bpp変更 1bpp -> 4bpp
+		UINT8* pBits8 = (UINT8*)pBitsCursor;
+		for (y = 0; y < height; y++) {
+			for (x = 0; x < srcStride; x++) {
+				UINT8 value = npdisp_readMemory8(pixelBufAddr);
+				for (int xx = 0; xx < 4; xx++) {
+					*pBits8 = value & 0x80 ? 0xf0 : 0x00;
+					*pBits8 |= value & 0x40 ? 0x0f : 0x00;
+					pBits8++;
+					value <<= 2;
+				}
+				pixelBufAddr++;
+			}
+		}
+	}
+	else if (srcBpp == 1 && dstBpp == 8) {
+		// bpp変更 1bpp -> 8bpp
+		UINT8* pBits8 = (UINT8*)pBitsCursor;
+		for (y = 0; y < height; y++) {
+			for (x = 0; x < srcStride; x++) {
+				UINT8 value = npdisp_readMemory8(pixelBufAddr);
+				for (int xx = 0; xx < 8; xx++) {
+					*pBits8 = value & 0x80 ? 0xff : 0x00;
+					pBits8++;
+					value <<= 1;
+				}
+				pixelBufAddr++;
+			}
+		}
+	}
+	else if (srcBpp == 1 && dstBpp == 16) {
+		// bpp変更 1bpp -> 16bpp
+		UINT16* pBits16 = (UINT16*)pBitsCursor;
+		for (y = 0; y < height; y++) {
+			for (x = 0; x < srcStride; x++) {
+				UINT8 value = npdisp_readMemory8(pixelBufAddr);
+				for (int xx = 0; xx < 8; xx++) {
+					*pBits16 = value & 0x80 ? 0xffff : 0x0000;
+					pBits16++;
+					value <<= 1;
+				}
+				pixelBufAddr++;
+			}
+		}
+	}
+	else if (srcBpp == 1 && dstBpp == 24) {
+		// bpp変更 1bpp -> 24bpp
+		UINT8* pBits8 = (UINT8*)pBitsCursor;
+		for (y = 0; y < height; y++) {
+			for (x = 0; x < srcStride; x++) {
+				UINT8 value = npdisp_readMemory8(pixelBufAddr);
+				for (int xx = 0; xx < 8; xx++) {
+					if (value & 0x80) {
+						pBits8[0] = pBits8[1] = pBits8[2] = 0xff;
+					}
+					else {
+						pBits8[0] = pBits8[1] = pBits8[2] = 0x00;
+					}
+					pBits8 += 3;
+					value <<= 1;
+				}
+				pixelBufAddr++;
+			}
+		}
+	}
+	if (hBmp) {
+		if (*phBmpCursor && *phBmpCursor != hBmp) {
+			// 新規作成されていたら既存の物は捨てる
+			SelectObject(hdcCursor, *phOldBmpCursor);
+			DeleteObject(*phBmpCursor);
+		}
+		*phOldBmpCursor = (HBITMAP)SelectObject(hdcCursor, hBmp);
+		*phBmpCursor = hBmp;
+	}
+
+	void* oldpBitsCursor = *ppBitsCursor;
+	*ppBitsCursor = pBitsCursor;
+	if (npdisp.cursorBpp <= 1 && oldpBitsCursor && oldpBitsCursor != pBitsCursor) {
+		// モノクロの場合ビットデータはfreeで捨てる
+		free(oldpBitsCursor);
+	}
+}
+
 static void npdisp_func_SetCursor(UINT32 lpCursorShapeAddr)
 {
 	NPDISP_CURSORSHAPE cursorShape = { 0 };
 	if (npdisp_readMemory(&cursorShape, lpCursorShapeAddr, sizeof(cursorShape)) && npdisp.longjmpnum == 0) {
-		int cursorDataStride = cursorShape.csWidthBytes;
-		int stride = ((cursorShape.csWidth + 7) / 8 + 1) / 2 * 2;
+		//int cursorDataStride = cursorShape.csWidthBytes;
+		int cursorMaskBpp = cursorShape.csColor & 0xff;
+		int cursorXORBpp = (cursorShape.csColor) >> 8 & 0xff;
+		int cursorBpp = max(cursorMaskBpp, cursorXORBpp);
+		int strideMask = cursorMaskBpp == 1 ? ((cursorShape.csWidth + 15) / 16 * 16 / 8) : ((cursorShape.csWidth * cursorMaskBpp + 31) / 32 * 32 / 8);
+		int strideXOR = cursorXORBpp == 1 ? ((cursorShape.csWidth + 15) / 16 * 16 / 8) : ((cursorShape.csWidth * cursorXORBpp + 31) / 32 * 32 / 8);
+		int stride = max(strideMask, strideXOR);
 		if (cursorShape.csWidth > 0 && cursorShape.csHeight > 0) {
-			void* pBitsCursorMask = (char*)malloc(stride * cursorShape.csHeight);
-			if (pBitsCursorMask) {
-				void* pBitsCursor = (char*)malloc(stride * cursorShape.csHeight);
-				if (pBitsCursor) {
-					int x, y;
-					HBITMAP hBmp;
-					UINT8* pBits8 = (UINT8*)pBitsCursorMask;
-					UINT32 pixelBufAddr = lpCursorShapeAddr + sizeof(cursorShape);
-					int minStride = cursorDataStride < stride ? cursorDataStride : stride;
-					for (y = 0; y < cursorShape.csHeight; y++) {
-						for (x = 0; x < minStride; x++) {
-							UINT8 value = npdisp_readMemory8(pixelBufAddr);
-							*pBits8 = value;
-							pixelBufAddr++;
-							pBits8++;
-						}
-						if (stride > cursorDataStride) {
-							pBits8 += stride - cursorDataStride;
-						}
-						else if (stride < cursorDataStride) {
-							pixelBufAddr += cursorDataStride - stride;
-						}
-					}
-					hBmp = CreateBitmap(cursorShape.csWidth, cursorShape.csHeight, 1, 1, pBitsCursorMask);
-					if (hBmp) {
-						if (npdispwin.hBmpCursorMask) {
-							SelectObject(npdispwin.hdcCursorMask, npdispwin.hOldBmpCursorMask);
-							DeleteObject(npdispwin.hBmpCursorMask);
-							npdispwin.hBmpCursorMask = NULL;
-						}
-						npdispwin.hOldBmpCursorMask = (HBITMAP)SelectObject(npdispwin.hdcCursorMask, hBmp);
-						npdispwin.hBmpCursorMask = hBmp;
-					}
+			// AND画像
+			UINT32 pixelBufAddr = lpCursorShapeAddr + sizeof(cursorShape);
+			npdisp_func_SetCursor_Make(&npdispwin.pBitsCursorMask, &npdispwin.hBmpCursorMask, &npdispwin.hOldBmpCursorMask, npdispwin.hdcCursorMask, 
+				pixelBufAddr, cursorShape.csWidth, cursorShape.csHeight, strideMask, stride, cursorMaskBpp, cursorBpp);
 
-					pBits8 = (UINT8*)pBitsCursor;
-					for (y = 0; y < cursorShape.csHeight; y++) {
-						for (x = 0; x < minStride; x++) {
-							UINT8 value = npdisp_readMemory8(pixelBufAddr);
-							*pBits8 = value;
-							pixelBufAddr++;
-							pBits8++;
-						}
-						if (stride > cursorDataStride) {
-							pBits8 += stride - cursorDataStride;
-						}
-						else if (stride < cursorDataStride) {
-							pixelBufAddr += cursorDataStride - stride;
-						}
-					}
-					hBmp = CreateBitmap(cursorShape.csWidth, cursorShape.csHeight, 1, 1, pBitsCursor);
-					if (hBmp) {
-						if (npdispwin.hBmpCursor) {
-							SelectObject(npdispwin.hdcCursor, npdispwin.hOldBmpCursor);
-							DeleteObject(npdispwin.hBmpCursor);
-							npdispwin.hBmpCursor = NULL;
-						}
-						npdispwin.hOldBmpCursor = (HBITMAP)SelectObject(npdispwin.hdcCursor, hBmp);
-						npdispwin.hBmpCursor = hBmp;
-					}
+			// XOR画像
+			pixelBufAddr += strideMask * cursorShape.csHeight;
+			npdisp_func_SetCursor_Make(&npdispwin.pBitsCursor, &npdispwin.hBmpCursor, &npdispwin.hOldBmpCursor, npdispwin.hdcCursor,
+				pixelBufAddr, cursorShape.csWidth, cursorShape.csHeight, strideXOR, stride, cursorXORBpp, cursorBpp);
 
-					npdisp.cursorHotSpotX = cursorShape.csHotX;
-					npdisp.cursorHotSpotY = cursorShape.csHotY;
-					npdisp.cursorWidth = cursorShape.csWidth;
-					npdisp.cursorHeight = cursorShape.csHeight;
-
-					npdisp.cursorStride = stride;
-
-					void* oldpBitsCursor = npdispwin.pBitsCursor;
-					void* oldpBitsCursorMask = npdispwin.pBitsCursorMask;
-					npdispwin.pBitsCursor = pBitsCursor;
-					npdispwin.pBitsCursorMask = pBitsCursorMask;
-					if (oldpBitsCursor) free(oldpBitsCursor);
-					if (oldpBitsCursorMask) free(oldpBitsCursorMask);
-
-					npdisp.updated = 1;
-
-				}
-				else {
-					free(pBitsCursorMask);
-				}
-			}
+			npdisp.cursorHotSpotX = cursorShape.csHotX;
+			npdisp.cursorHotSpotY = cursorShape.csHotY;
+			npdisp.cursorWidth = cursorShape.csWidth;
+			npdisp.cursorHeight = cursorShape.csHeight;
+			npdisp.cursorBpp = cursorBpp;
+			npdisp.cursorStride = stride;
+			npdisp.updated = 1;
 		}
 		else {
 			// 破棄
@@ -2761,6 +2985,8 @@ void npdisp_exec(void) {
 			UINT32 pcolor;
 			npdisp_readMemory(&retValue, req.parameters.ColorInfo.lpRetValueAddr, 4);
 			npdisp_readMemory(&devInfo, req.parameters.ColorInfo.lpDestDevAddr, sizeof(devInfo));
+			npdisp_readMemory(&devInfo, req.parameters.ColorInfo.lpDestDevAddr, 2);
+			if (*((UINT16*)&devInfo) == NPDISP_DEVTYPE) npdisp_readMemory(&devInfo, req.parameters.ColorInfo.lpDestDevAddr, sizeof(devInfo));
 			if (req.parameters.ColorInfo.lpPColorAddr) {
 				npdisp_readMemory(&pcolor, req.parameters.ColorInfo.lpPColorAddr, sizeof(pcolor));
 				retValue = npdisp_func_ColorInfo(&devInfo, req.parameters.ColorInfo.dwColorin, &pcolor);
@@ -2940,6 +3166,19 @@ void npdisp_exec(void) {
 			npdisp_func_WEP();
 			break;
 		}
+		case NPDISP_FUNCORDER_ReEnable:
+		{
+			TRACEOUT9(("ReEnable"));
+			const UINT16 retValue = npdisp_func_ReEnable(req.parameters.reEnable.lpPDeviceAddr, req.parameters.reEnable.lpGDIInfoAddr);
+			npdisp_writeMemory16(retValue, req.parameters.reEnable.lpRetValueAddr);
+			break;
+		}
+		case NPDISP_FUNCORDER_ValidateMode:
+		{
+			TRACEOUT9(("ValidateMode"));
+			retCode = NPDISP_RETCODE_FAILED;
+			break;
+		}
 		default:
 			TRACEOUT(("Function %d", req.funcOrder));
 			retCode = NPDISP_RETCODE_FAILED;
@@ -2961,7 +3200,7 @@ void npdisp_exec(void) {
 	}
 
 	// 例外発生せずに全部送れたらCPUクロックを進め、読み書きバッファはクリアする
-	CPU_REMCLOCK -= 2 * (npdisp_memory_getTotalReadSize() + npdisp_memory_getTotalWriteSize()); // メモリアクセスあたり2clock
+	CPU_REMCLOCK -= (npdisp_memory_getTotalReadSize() + npdisp_memory_getTotalWriteSize()) / 4; // 4byteメモリアクセスあたり1clock
 	npdisp_memory_clearpreload();
 }
 
@@ -3053,7 +3292,8 @@ void npdisp_exec_fast(void) {
 		UINT32 retValue = 0;
 		NPDISP_PDEVICE devInfo;
 		UINT32 pcolor;
-		npdisp_readMemory(&devInfo, req.parameters.ColorInfo.lpDestDevAddr, sizeof(devInfo));
+		npdisp_readMemory(&devInfo, req.parameters.ColorInfo.lpDestDevAddr, 2);
+		if (*((UINT16*)&devInfo) == NPDISP_DEVTYPE) npdisp_readMemory(&devInfo, req.parameters.ColorInfo.lpDestDevAddr, sizeof(devInfo));
 		if (req.parameters.ColorInfo.lpPColorAddr) {
 			npdisp_readMemory(&pcolor, req.parameters.ColorInfo.lpPColorAddr, sizeof(pcolor));
 			retValue = npdisp_func_ColorInfo(&devInfo, req.parameters.ColorInfo.dwColorin, &pcolor);
@@ -3504,6 +3744,7 @@ void npdisp_exec_fast(void) {
 		if (npdisp_memory_hasNewCacheData()) {
 			CPU_STAT_EXCEPTION_COUNTER_CLEAR(); // 読み書きが進んでいたら例外繰り返しではない
 		}
+		TRACEOUTF(("EXCEPTION!!!!!!"));
 
 		// 戻れるようにレジスタセット
 		CPU_AX = lastAX;
@@ -3515,7 +3756,7 @@ void npdisp_exec_fast(void) {
 	}
 
 	// 例外発生せずに全部送れたらCPUクロックを進め、読み書きバッファはクリアする
-	CPU_REMCLOCK -= 2 * (npdisp_memory_getTotalReadSize() + npdisp_memory_getTotalWriteSize()); // メモリアクセスあたり2clock
+	CPU_REMCLOCK -= (npdisp_memory_getTotalReadSize() + npdisp_memory_getTotalWriteSize()) / 4; // 4byteメモリアクセスあたり1clock
 	npdisp_memory_clearpreload();
 }
 
@@ -3645,20 +3886,22 @@ int npdisp_drawGraphic(void)
 	return 1;
 }
 
-static void npdisp_releaseScreen(void) {
+static void npdisp_releaseScreen(bool resize) {
 	if (npdispwin.hdc) {
 		SelectObject(npdispwin.hdc, npdispwin.hOldPen);
 		SelectObject(npdispwin.hdc, npdispwin.hOldBrush);
-		for (auto it = npdispwin.pens.begin(); it != npdispwin.pens.end(); ++it) {
-			if (it->second.pen) DeleteObject(it->second.pen);
+		if (!resize) {
+			for (auto it = npdispwin.pens.begin(); it != npdispwin.pens.end(); ++it) {
+				if (it->second.pen) DeleteObject(it->second.pen);
+			}
+			npdispwin.pens.clear();
+			npdispwin.pensIdx = 1;
+			for (auto it = npdispwin.brushes.begin(); it != npdispwin.brushes.end(); ++it) {
+				if (it->second.brs) DeleteObject(it->second.brs);
+			}
+			npdispwin.brushes.clear();
+			npdispwin.brushesIdx = 1;
 		}
-		npdispwin.pens.clear();
-		npdispwin.pensIdx = 1;
-		for (auto it = npdispwin.brushes.begin(); it != npdispwin.brushes.end(); ++it) {
-			if (it->second.brs) DeleteObject(it->second.brs);
-		}
-		npdispwin.brushes.clear();
-		npdispwin.brushesIdx = 1;
 		SelectObject(npdispwin.hdc, npdispwin.hOldBmp);
 		DeleteObject(npdispwin.hBmp);
 		SelectObject(npdispwin.hdcShadow, npdispwin.hOldBmpShadow);
@@ -3686,14 +3929,17 @@ static void npdisp_releaseScreen(void) {
 		npdispwin.hBmp16BltBuf = NULL;
 		npdispwin.hOldBmp16BltBuf = NULL;
 
-		if (npdispwin.pBitsCursor) {
-			free(npdispwin.pBitsCursor);
-			npdispwin.pBitsCursor = NULL;
+		if (npdisp.cursorBpp <= 1) {
+			// 1bppは自前mallocなのでfreeする
+			if (npdispwin.pBitsCursor) {
+				free(npdispwin.pBitsCursor);
+			}
+			if (npdispwin.pBitsCursorMask) {
+				free(npdispwin.pBitsCursorMask);
+			}
 		}
-		if (npdispwin.pBitsCursorMask) {
-			free(npdispwin.pBitsCursorMask);
-			npdispwin.pBitsCursorMask = NULL;
-		}
+		npdispwin.pBitsCursor = NULL;
+		npdispwin.pBitsCursorMask = NULL;
 
 		for (int i = 0; i < NELEMENTS(npdispwin.hdcCache); i++) {
 			if (npdispwin.hdcCache[i]) {
@@ -3726,12 +3972,12 @@ static void npdisp_releaseScreen(void) {
 		npdisp.cursorHeight = 0;
 	}
 }
-static void npdisp_createScreen(void) {
+static void npdisp_createScreen(bool resize) {
 	const int width = npdisp.width;
 	const int height = npdisp.height;
 	int i;
 
-	npdisp_releaseScreen();
+	npdisp_releaseScreen(resize);
 
 	HDC hdcScreen = GetDC(NULL);
 	npdispwin.hdc = CreateCompatibleDC(hdcScreen);
@@ -3875,6 +4121,8 @@ void npdisp_reset(const NP2CFG* pConfig)
 	npdisp.cursorHotSpotY = 0;
 	npdisp.cursorWidth = 0;
 	npdisp.cursorHeight = 0;
+	npdisp.cursorBpp = 0;
+	npdisp.cursorStride = 0;
 
 	npdisp_memory_clearpreload();
 }
@@ -3936,7 +4184,8 @@ int npdisp_sfsave(STFLAGH sfh, const SFENTRY* tbl)
 			buffer.insert(buffer.end(), (UINT8*)(&screenBufSize), (UINT8*)(&screenBufSize + 1));
 		}
 		// カーソル
-		UINT32 cursorBufSize = npdisp.cursorStride * npdisp.cursorHeight;
+		UINT32 cursorBufSize = 0;
+		cursorBufSize = npdisp.cursorStride * npdisp.cursorHeight;
 		if (npdispwin.pBitsCursorMask && npdispwin.pBitsCursor) {
 			buffer.insert(buffer.end(), (UINT8*)(&cursorBufSize), (UINT8*)(&cursorBufSize + 1));
 			buffer.insert(buffer.end(), (UINT8*)npdispwin.pBitsCursorMask, (UINT8*)npdispwin.pBitsCursorMask + cursorBufSize);
@@ -4004,6 +4253,9 @@ int npdisp_sfload(STFLAGH sfh, const SFENTRY* tbl)
 
 	int readBufLen = 0;
 
+	int oldCursorBpp = npdisp.cursorBpp;
+	int oldCursorStride = npdisp.cursorStride;
+
 	// 共通
 	if (sfVersion == 1) {
 		// ステートセーブ ver.1
@@ -4054,12 +4306,50 @@ int npdisp_sfload(STFLAGH sfh, const SFENTRY* tbl)
 			readBufLen += sizeof(cursorBufSize);
 			if (cursorBufSize) {
 				// 読み取りと再生成
-				void* pBitsCursorMask = (char*)malloc(cursorBufSize);
-				if (!pBitsCursorMask) goto error;
-				void* pBitsCursor = (char*)malloc(cursorBufSize);
-				if (!pBitsCursor) {
-					free(pBitsCursorMask);
-					goto error;
+				HBITMAP hBmpCursorMask = NULL;
+				HBITMAP hBmpCursor = NULL;
+
+				void* pBitsCursorMask = NULL;
+				void* pBitsCursor = NULL;
+				if (npdisp.cursorBpp > 1) {
+					// モノクロ以外はDIBSectionで
+					BITMAPINFO_8BPP bi;
+					bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+					bi.bmiHeader.biWidth = npdisp.cursorWidth;
+					bi.bmiHeader.biHeight = -npdisp.cursorHeight;
+					bi.bmiHeader.biPlanes = 1;
+					bi.bmiHeader.biBitCount = npdisp.cursorBpp;
+					bi.bmiHeader.biCompression = BI_RGB;
+					bi.bmiHeader.biSizeImage = 0;
+					bi.bmiHeader.biXPelsPerMeter = 0;
+					bi.bmiHeader.biYPelsPerMeter = 0;
+					bi.bmiHeader.biClrUsed = 0;
+					bi.bmiHeader.biClrImportant = 0;
+					if (npdisp.cursorBpp == 8) {
+						bi.bmiHeader.biClrUsed = 256;
+						memcpy(bi.bmiColors, npdisp_palette_rgb256, sizeof(npdisp_palette_rgb256));
+					}
+					else if (npdisp.cursorBpp == 4) {
+						bi.bmiHeader.biClrUsed = 256;
+						memcpy(bi.bmiColors, npdisp_palette_rgb16, sizeof(npdisp_palette_rgb16));
+					}
+					hBmpCursorMask = CreateDIBSection(npdispwin.hdcCursorMask, (BITMAPINFO*)(&bi), DIB_RGB_COLORS, &pBitsCursorMask, NULL, 0);
+					if (!hBmpCursorMask) goto error;
+					hBmpCursor = CreateDIBSection(npdispwin.hdcCursor, (BITMAPINFO*)(&bi), DIB_RGB_COLORS, &pBitsCursor, NULL, 0);
+					if (!hBmpCursor) {
+						DeleteObject(hBmpCursor);
+						goto error;
+					}
+				}
+				else {
+					// モノクロはDDBで（後で作成）
+					pBitsCursorMask = (char*)malloc(cursorBufSize);
+					if (!pBitsCursorMask) goto error;
+					pBitsCursor = (char*)malloc(cursorBufSize);
+					if (!pBitsCursor) {
+						free(pBitsCursorMask);
+						goto error;
+					}
 				}
 
 				ret = statflag_read(sfh, pBitsCursorMask, cursorBufSize);
@@ -4069,7 +4359,13 @@ int npdisp_sfload(STFLAGH sfh, const SFENTRY* tbl)
 				if (ret != STATFLAG_SUCCESS) goto error;
 				readBufLen += cursorBufSize;
 
-				HBITMAP hBmpCursorMask = CreateBitmap(npdisp.cursorWidth, npdisp.cursorHeight, 1, 1, pBitsCursorMask);
+				if (npdisp.cursorBpp <= 1) {
+					// モノクロはDDBで（後作成）
+					hBmpCursorMask = CreateBitmap(npdisp.cursorWidth, npdisp.cursorHeight, 1, 1, pBitsCursorMask);
+					hBmpCursor = CreateBitmap(npdisp.cursorWidth, npdisp.cursorHeight, 1, 1, pBitsCursor);
+				}
+
+				// ビットマップ置き換え
 				if (hBmpCursorMask) {
 					if (npdispwin.hBmpCursorMask) {
 						SelectObject(npdispwin.hdcCursorMask, npdispwin.hOldBmpCursorMask);
@@ -4079,7 +4375,6 @@ int npdisp_sfload(STFLAGH sfh, const SFENTRY* tbl)
 					npdispwin.hOldBmpCursorMask = (HBITMAP)SelectObject(npdispwin.hdcCursorMask, hBmpCursorMask);
 					npdispwin.hBmpCursorMask = hBmpCursorMask;
 				}
-				HBITMAP hBmpCursor = CreateBitmap(npdisp.cursorWidth, npdisp.cursorHeight, 1, 1, pBitsCursor);
 				if (hBmpCursor) {
 					if (npdispwin.hBmpCursor) {
 						SelectObject(npdispwin.hdcCursor, npdispwin.hOldBmpCursor);
@@ -4090,12 +4385,16 @@ int npdisp_sfload(STFLAGH sfh, const SFENTRY* tbl)
 					npdispwin.hBmpCursor = hBmpCursor;
 				}
 
+				// ピクセルバッファを置き換え
 				void* oldpBitsCursor = npdispwin.pBitsCursor;
 				void* oldpBitsCursorMask = npdispwin.pBitsCursorMask;
 				npdispwin.pBitsCursor = pBitsCursor;
 				npdispwin.pBitsCursorMask = pBitsCursorMask;
-				if (oldpBitsCursor) free(oldpBitsCursor);
-				if (oldpBitsCursorMask) free(oldpBitsCursorMask);
+				if (oldCursorBpp <= 1) {
+					// 1bppは自前mallocなのでfreeする
+					if (oldpBitsCursor) free(oldpBitsCursor);
+					if (oldpBitsCursorMask) free(oldpBitsCursorMask);
+				}
 			}
 			// パレット
 			if (npdisp.bpp == 1) {

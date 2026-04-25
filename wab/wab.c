@@ -646,6 +646,7 @@ void np2wab_reset(const NP2CFG *pConfig)
 	np2wab.realWidth = 0;
 	np2wab.realHeight = 0;
 	np2wab.relaystateint = 0;
+	np2wab.relaystateext = 0;
 	np2wab_setRelayState(np2wab.relaystateint|np2wab.relaystateext);
 
 	if (np2wabwnd.curWidth != WAB_RESERVED_WIDTH && np2wabwnd.curHeight != WAB_RESERVED_HEIGHT) {

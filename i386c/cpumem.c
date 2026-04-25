@@ -1547,6 +1547,19 @@ void MEMCALL memp_reads(UINT32 address, void *dat, UINT leng) {
 		address += diff;
 	}
 
+	/* XXX: Cirrus‚ð–³Ž‹‚µ‚Ä‚¢‚é‚ªCirrus‚Ímemp_reads‚ðŒÄ‚Î‚È‚¢‚Ì‚ÅOK */
+	if ((address >= 0x01000000) && (address < CPU_EXTLIMIT)) {
+		diff = CPU_EXTLIMIT - address;
+		if (diff >= leng) {
+			CopyMemory(dat, CPU_EXTMEMBASE + address, leng);
+			return;
+		}
+		CopyMemory(dat, CPU_EXTMEMBASE + address, diff);
+		out += diff;
+		leng -= diff;
+		address += diff;
+	}
+
 	/* slow memory access */
 	while (leng-- > 0) {
 		*out++ = memp_read8(address++);
@@ -1566,6 +1579,19 @@ void MEMCALL memp_writes(UINT32 address, const void *dat, UINT leng) {
 	address = address & CPU_ADRSMASK;
 	if ((address >= USE_HIMEM) && (address < CPU_EXTLIMIT16)) {
 		diff = CPU_EXTLIMIT16 - address;
+		if (diff >= leng) {
+			CopyMemory(CPU_EXTMEMBASE + address, dat, leng);
+			return;
+		}
+		CopyMemory(CPU_EXTMEMBASE + address, dat, diff);
+		out += diff;
+		leng -= diff;
+		address += diff;
+	}
+
+	/* XXX: Cirrus‚ð–³Ž‹‚µ‚Ä‚¢‚é‚ªCirrus‚Ímemp_writes‚ðŒÄ‚Î‚È‚¢‚Ì‚ÅOK */
+	if ((address >= 0x01000000) && (address < CPU_EXTLIMIT)) {
+		diff = CPU_EXTLIMIT - address;
 		if (diff >= leng) {
 			CopyMemory(CPU_EXTMEMBASE + address, dat, leng);
 			return;

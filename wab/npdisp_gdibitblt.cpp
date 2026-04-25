@@ -19,6 +19,8 @@
 #include	"npdisp_palette.h"
 #include	"npdisp_gdibitblt.h"
 
+#pragma comment(lib, "Msimg32.lib")
+
 //#define IMAGEDEBUG
 //#define IMAGEDEBUG_SIZE	32
 //#define IMAGEDEBUG_X	0
@@ -133,7 +135,11 @@ UINT16 npdisp_func_StretchBlt_VRAMtoVRAM(int hasDstDev, int hasSrcDev, UINT32 lp
 	if (!(srcx + srcw < destx || destx + srcw < srcx || srcy + srch < desty || desty + desth < srcy)) {
 		// 重なっているのでバッファ経由
 		BitBlt(npdispwin.hdcBltBuf, wSrcX, wSrcY, wSrcXext, wSrcYext, npdispwin.hdc, wSrcX, wSrcY, SRCCOPY);
-		if (isStretch) {
+		if (hasDrawMode && drawMode.bkMode == 4) { // TRANSPARENT1
+			SetStretchBltMode(npdispwin.hdc, COLORONCOLOR);
+			TransparentBlt(npdispwin.hdc, wDestX, wDestY, wDestXext, wDestYext, npdispwin.hdcBltBuf, wSrcX, wSrcY, wSrcXext, wSrcYext, drawMode.LbkColor);
+		}
+		else if (isStretch) {
 			SetStretchBltMode(npdispwin.hdc, COLORONCOLOR);
 			StretchBlt(npdispwin.hdc, wDestX, wDestY, wDestXext, wDestYext, npdispwin.hdcBltBuf, wSrcX, wSrcY, wSrcXext, wSrcYext, Rop3);
 		}
@@ -143,7 +149,11 @@ UINT16 npdisp_func_StretchBlt_VRAMtoVRAM(int hasDstDev, int hasSrcDev, UINT32 lp
 	}
 	else {
 		// 重なっていないので直接転送
-		if (isStretch) {
+		if (hasDrawMode && drawMode.bkMode == 4) { // TRANSPARENT1
+			SetStretchBltMode(npdispwin.hdc, COLORONCOLOR);
+			TransparentBlt(npdispwin.hdc, wDestX, wDestY, wDestXext, wDestYext, npdispwin.hdc, wSrcX, wSrcY, wSrcXext, wSrcYext, drawMode.LbkColor);
+		}
+		else if (isStretch) {
 			SetStretchBltMode(npdispwin.hdc, COLORONCOLOR);
 			StretchBlt(npdispwin.hdc, wDestX, wDestY, wDestXext, wDestYext, npdispwin.hdc, wSrcX, wSrcY, wSrcXext, wSrcYext, Rop3);
 		}
@@ -270,7 +280,11 @@ UINT16 npdisp_func_StretchBlt_MEMtoVRAM(int hasDstDev, int hasSrcDev, UINT32 lpD
 					BitBlt(npdispwin.hdc16BltBuf, wSrcX, wSrcY, wDestXext, wDestYext, srcHDC, wSrcX, wSrcY, SRCCOPY);
 					srcHDC = npdispwin.hdc16BltBuf;
 				}
-				if (isStretch) {
+				if (hasDrawMode && drawMode.bkMode == 4) { // TRANSPARENT1
+					SetStretchBltMode(npdispwin.hdc, COLORONCOLOR);
+					TransparentBlt(npdispwin.hdc, wDestX, wDestY, wDestXext, wDestYext, srcHDC, wSrcX, wSrcY, wSrcXext, wSrcYext, drawMode.LbkColor);
+				}
+				else if (isStretch) {
 					SetStretchBltMode(npdispwin.hdc, COLORONCOLOR);
 					StretchBlt(npdispwin.hdc, wDestX, wDestY, wDestXext, wDestYext, srcHDC, wSrcX, wSrcY, wSrcXext, wSrcYext, Rop3);
 				}
@@ -319,7 +333,13 @@ UINT16 npdisp_func_StretchBlt_MEMtoVRAM(int hasDstDev, int hasSrcDev, UINT32 lpD
 							SetBkColor(npdispwin.hdc, npdisp_AdjustColorRefForGDI(brush.lbrush.lbBkColor));
 						}
 						if (hRgn) SelectClipRgn(npdispwin.hdc, hRgn);
-						PatBlt(npdispwin.hdc, wDestX, wDestY, wDestXext, wDestYext, Rop3);
+						if (hasDrawMode && drawMode.bkMode == 4) { // TRANSPARENT1
+							SetStretchBltMode(npdispwin.hdc, COLORONCOLOR);
+							TransparentBlt(npdispwin.hdc, wDestX, wDestY, wDestXext, wDestYext, npdispwin.hdc, wSrcX, wSrcY, wSrcXext, wSrcYext, drawMode.LbkColor);
+						}
+						else {
+							PatBlt(npdispwin.hdc, wDestX, wDestY, wDestXext, wDestYext, Rop3);
+						}
 						//BitBlt(npdispwin.hdc, wDestX, wDestY, wDestXext, wDestYext, npdispwin.hdc, wDestX, wDestY, Rop3);
 						if (hRgn) SelectClipRgn(npdispwin.hdc, NULL);
 						npdisp.updated = 1;
@@ -468,7 +488,11 @@ UINT16 npdisp_func_StretchBlt_VRAMtoMEM(int hasDstDev, int hasSrcDev, UINT32 lpD
 			//	BitBlt(npdispwin.hdc16BltBuf, wSrcX, wSrcY, wDestXext, wDestYext, srcHDC, wSrcX, wSrcY, SRCCOPY);
 			//	srcHDC = npdispwin.hdc16BltBuf;
 			//}
-			if (isStretch) {
+			if (hasDrawMode && drawMode.bkMode == 4) { // TRANSPARENT1
+				SetStretchBltMode(npdispwin.hdc, COLORONCOLOR);
+				TransparentBlt(bmphdc.hdc, wDestX, wDestY, wDestXext, wDestYext, srcHDC, wSrcX, wSrcY, wSrcXext, wSrcYext, drawMode.LbkColor);
+			}
+			else if (isStretch) {
 				SetStretchBltMode(bmphdc.hdc, COLORONCOLOR);
 				StretchBlt(bmphdc.hdc, wDestX, wDestY, wDestXext, wDestYext, srcHDC, wSrcX, wSrcY, wSrcXext, wSrcYext, Rop3);
 			}
@@ -639,7 +663,11 @@ UINT16 npdisp_func_StretchBlt_MEMtoMEM(int hasDstDev, int hasSrcDev, UINT32 lpDe
 							}
 
 							if (hRgn) SelectClipRgn(dstbmphdc.hdc, hRgn);
-							if (isStretch) {
+							if (hasDrawMode && drawMode.bkMode == 4) { // TRANSPARENT1
+								SetStretchBltMode(npdispwin.hdc, COLORONCOLOR);
+								TransparentBlt(dstbmphdc.hdc, wDestX, wDestY, wDestXext, wDestYext, srcHDC, wSrcX, wSrcY, wSrcXext, wSrcYext, drawMode.LbkColor);
+							}
+							else if (isStretch) {
 								SetStretchBltMode(dstbmphdc.hdc, COLORONCOLOR);
 								StretchBlt(dstbmphdc.hdc, wDestX, wDestY, wDestXext, wDestYext, srcHDC, wSrcX, wSrcY, wSrcXext, wSrcYext, Rop3);
 							}
@@ -745,7 +773,13 @@ UINT16 npdisp_func_StretchBlt_MEMtoMEM(int hasDstDev, int hasSrcDev, UINT32 lpDe
 								//if (lpDestDevAddr == 701956096) {
 								//	TRACEOUT2(("  CHECK:%d", lpDestDevAddr));
 								//}
-								PatBlt(dstbmphdc.hdc, wDestX, wDestY, wDestXext, wDestYext, Rop3);
+								if (hasDrawMode && drawMode.bkMode == 4) { // TRANSPARENT1
+									SetStretchBltMode(npdispwin.hdc, COLORONCOLOR);
+									TransparentBlt(dstbmphdc.hdc, wDestX, wDestY, wDestXext, wDestYext, dstbmphdc.hdc, wSrcX, wSrcY, wSrcXext, wSrcYext, drawMode.LbkColor);
+								}
+								else {
+									PatBlt(dstbmphdc.hdc, wDestX, wDestY, wDestXext, wDestYext, Rop3);
+								}
 								if (hRgn) SelectClipRgn(dstbmphdc.hdc, NULL);
 								SelectObject(dstbmphdc.hdc, oldBrush);
 

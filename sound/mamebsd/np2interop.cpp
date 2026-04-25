@@ -36,7 +36,7 @@ void* YMF262Init(int clock, int rate)
 	return chipbsd;
 }
 
-//__declspec(noinline)
+__declspec(noinline)
 void YMF262Shutdown(void* chipptr)
 {
 	if (!chipptr) return;

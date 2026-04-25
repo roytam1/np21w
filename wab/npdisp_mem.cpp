@@ -165,10 +165,11 @@ int npdisp_preloadLMemory(UINT32 vaddr, UINT32 size)
 	npdisp.longjmpnum = sigsetjmp(exec_1step_jmpbuf, 1); // 新しい位置にセット
 	if (npdisp.longjmpnum == 0) {
 		// 既に読み取り済みの範囲ならそれを返す
-		while (readsize > 0 && npdisp_memread_curpos + npdisp_memread_preloadcount < npdisp_memread_buf.size()) {
-			readsize--;
-			readaddr++;
-			npdisp_memread_preloadcount++;
+		if (npdisp_memread_curpos + npdisp_memread_preloadcount < npdisp_memread_buf.size()) {
+			UINT32 mrsize = min(readsize, npdisp_memread_buf.size() - (npdisp_memread_curpos + npdisp_memread_preloadcount));
+			readsize -= mrsize;
+			readaddr += mrsize;
+			npdisp_memread_preloadcount += mrsize;
 		}
 
 		// ページ単位で読みとり
@@ -206,13 +207,20 @@ int npdisp_readLMemory(UINT32 vaddr, void* buffer, UINT32 size)
 	npdisp.longjmpnum = sigsetjmp(exec_1step_jmpbuf, 1); // 新しい位置にセット
 	if (npdisp.longjmpnum == 0) {
 		// 既に読み取り済みの範囲ならそれを返す
-		while (readsize > 0 && npdisp_memread_curpos < npdisp_memread_buf.size()) {
+		if (npdisp_memread_curpos < npdisp_memread_buf.size()) {
+			UINT32 mrsize = min(readsize, npdisp_memread_buf.size() - npdisp_memread_curpos);
 			*readptr = npdisp_memread_buf[npdisp_memread_curpos];
-			readsize--;
-			readptr++;
-			readaddr++;
-			npdisp_memread_curpos++;
-			if (npdisp_memread_preloadcount > 0) npdisp_memread_preloadcount--;
+			memcpy(readptr, &npdisp_memread_buf[npdisp_memread_curpos], mrsize);
+			readsize -= mrsize;
+			readptr += mrsize;
+			readaddr += mrsize;
+			npdisp_memread_curpos += mrsize;
+			if (npdisp_memread_preloadcount >= mrsize) {
+				npdisp_memread_preloadcount -= mrsize;
+			}
+			else {
+				npdisp_memread_preloadcount = 0;
+			}
 		}
 
 		// ページ単位で読みとり
@@ -549,7 +557,7 @@ void npdisp_PreloadBitmapFromPBITMAP(NPDISP_PBITMAP* srcPBmp, int dcIdx, int beg
 			// 64KB未満転送
 			UINT16 seg = (srcPBmp->bmBitsAddr >> 16) & 0xffff;
 			UINT16 ofs = srcPBmp->bmBitsAddr & 0xffff;
-			if (dststride == srcstride) {
+			if (dststride == srcstride && beginX == 0 && copyWidth == srcPBmp->bmWidth) {
 				// アライメントが一致しているので一括転送可能
 				UINT16 srcOfs = ofs + srcstride * beginLine;
 				npdisp_preloadMemoryWith32Offset(seg, srcOfs, srcstride * numLines);
@@ -715,7 +723,7 @@ int npdisp_MakeBitmapFromPBITMAP(NPDISP_PBITMAP* srcPBmp, NPDISP_WINDOWS_BMPHDC*
 						// 64KB未満転送
 						UINT16 seg = (srcPBmp->bmBitsAddr >> 16) & 0xffff;
 						UINT16 ofs = srcPBmp->bmBitsAddr & 0xffff;
-						if (bmpHDC->stride == srcstride) {
+						if (bmpHDC->stride == srcstride && beginX == 0 && copyWidth == srcPBmp->bmWidth) {
 							// アライメントが一致しているので一括転送可能
 							char* dstPtr = (char*)(bmpHDC->pBits);
 							UINT16 srcOfs = ofs + srcstride * beginLine;
@@ -839,7 +847,7 @@ void npdisp_WriteBitmapToPBITMAP(NPDISP_PBITMAP* dstPBmp, NPDISP_WINDOWS_BMPHDC*
 			// 64KB未満転送
 			UINT16 seg = (dstPBmp->bmBitsAddr >> 16) & 0xffff;
 			UINT16 ofs = dstPBmp->bmBitsAddr & 0xffff;
-			if (bmpHDC->stride == dststride) {
+			if (bmpHDC->stride == dststride && beginX == 0 && copyWidth == dstPBmp->bmWidth) {
 				char* srcPtr = (char*)(bmpHDC->pBits);
 				UINT16 dstOfs = ofs + dststride * beginLine;
 				srcPtr += bmpHDC->stride * beginLine;

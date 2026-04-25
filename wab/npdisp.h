@@ -41,6 +41,8 @@ extern "C" {
 		int longjmpnum;
 
 		UINT8	active;
+
+		UINT32  cursorBpp; // カーソルbpp (0の場合はモノクロ1bpp扱い)
 	} NPDISP;
 
 	extern NPDISP		npdisp;

@@ -7,6 +7,8 @@
 
 #if defined(SUPPORT_WAB_NPDISP)
 
+#define NPDISP_DEVTYPE_DIBENG	0x5250
+#define NPDISP_DEVTYPE		0x1003
 #define NPDISP_EXEC_MAGIC	0x3132504e
 
 #define NPDISP_RETCODE_NONE		0
@@ -55,6 +57,10 @@
 #define NPDISP_FUNCORDER_UserRepaintDisable		500 // DDK HELPにないがこれがないとプログラム終了時に例外 
 #define NPDISP_FUNCORDER_INT2Fh					0xff2f // 序数がないので0xff2fとしておく
 #define NPDISP_FUNCORDER_WEP					0xffff // 序数がないので0xffffとしておく
+// 以降 Win9x用
+#define NPDISP_FUNCORDER_ReEnable				31
+#define NPDISP_FUNCORDER_ValidateMode			700
+
 
 #define NPDISP_PEN_STYLE_SOLID			0
 #define NPDISP_PEN_STYLE_DASHED			1
@@ -343,6 +349,33 @@ extern "C" {
 			} WEP;
 			struct
 			{
+				UINT32 lpRetValueAddr;
+				UINT32 lpPDeviceAddr;
+				UINT32 lpGDIInfoAddr;
+			} reEnable;
+			struct
+			{
+				UINT32 lpRetValueAddr;
+				UINT32 lpValModeAddr;
+			} validateMode;
+			struct
+			{
+				UINT32 lpRetValueAddr;
+				UINT32 lpDeviceAddr;
+				UINT32 lpPrevBitmapAddr;
+				UINT32 lpBitmapAddr;
+				UINT32 fFlags;
+			} selectBitmap;
+			struct
+			{
+				UINT32 lpRetValueAddr;
+				UINT32 lpDeviceAddr;
+				UINT32 fFlags;
+				UINT32 dwCount;
+				UINT32 lpBitsAddr;
+			} bitmapBits;
+			struct
+			{
 				UINT16 arguments[20];
 			} others;
 		} parameters;
@@ -499,6 +532,26 @@ extern "C" {
 	} NPDISP_PBITMAP;
 
 	typedef struct {
+		UINT16 deType;
+		UINT16 deWidth;
+		UINT16 deHeight;
+		UINT16 deWidthBytes;
+		UINT8 dePlanes;
+		UINT8 deBitsPixel;
+		UINT32 deReserved1;
+		UINT32 deDeltaScan;
+		UINT32 delpPDeviceAddr;
+		UINT32 deBitsOffset;
+		UINT16 deBitsSelector;
+		UINT16 deFlags;
+		UINT16 deVersion;
+		UINT32 deBitmapInfoAddr;
+		UINT32 deBeginAccessFuncAddr;
+		UINT32 deEndAccessFuncAddr;
+		UINT32 deDriverReserved;
+	} NPDISP_DIBENGINE;
+
+	typedef struct {
 		UINT16 Rop2;
 		UINT16 bkMode;
 		UINT32 bkColor;    
@@ -514,8 +567,10 @@ extern "C" {
 	} NPDISP_DRAWMODE;
 
 	typedef struct {
-		NPDISP_PBITMAP bmp;
-		char dummy[4];
+		union {
+			NPDISP_PBITMAP bmp;
+			NPDISP_DIBENGINE dibe;
+		};
 	} NPDISP_PDEVICE;
 
 	typedef struct {
@@ -526,6 +581,27 @@ extern "C" {
 		UINT16 csWidthBytes;
 		UINT16 csColor;
 	} NPDISP_CURSORSHAPE;
+
+	typedef struct {
+		UINT16 diHdrSize;
+		UINT16 diInfoFlags;
+		UINT32 diDevNodeHandle;
+		UINT8 diDriverName[16];
+		UINT16 diXRes;
+		UINT16 diYRes;
+		UINT16 diDPI;
+		UINT8 diPlanes;
+		UINT8 diBpp;
+		UINT16 diRefreshRateMax;
+		UINT16 diRefreshRateMin;
+		UINT16 diLowHorz;
+		UINT16 diHighHorz;
+		UINT16 diLowVert;
+		UINT16 diHighVert;
+		UINT32 diMonitorDevNodeHandle;
+		UINT8 diHorzSyncPolarity;
+		UINT8 diVertSyncPolarity;
+	} NPDISP_DISPLAYINFO;
 #pragma pack(pop)
 
 #pragma pack(push, 1)

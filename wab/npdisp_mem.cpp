@@ -668,7 +668,9 @@ int npdisp_MakeBitmapFromPBITMAP(NPDISP_PBITMAP* srcPBmp, NPDISP_WINDOWS_BMPHDC*
 			lpbi->bmiHeader.biHeight = -srcPBmp->bmHeight;
 			lpbi->bmiHeader.biPlanes = srcPBmp->bmPlanes;
 			lpbi->bmiHeader.biBitCount = srcPBmp->bmBitsPixel;
-			lpbi->bmiHeader.biCompression = BI_RGB;
+			if (bpp != 15 && bpp != 16) {
+				lpbi->bmiHeader.biCompression = BI_RGB;
+			}
 			lpbi->bmiHeader.biSizeImage = 0;
 			lpbi->bmiHeader.biXPelsPerMeter = 0;
 			lpbi->bmiHeader.biYPelsPerMeter = 0;
@@ -810,6 +812,9 @@ void npdisp_WriteBitmapToPBITMAP(NPDISP_PBITMAP* dstPBmp, NPDISP_WINDOWS_BMPHDC*
 		if (beginX >= dstPBmp->bmWidth) {
 			beginX = 0;
 			copyWidth = 0;
+		}
+		if (copyWidth < 1) {
+			return; // ‘‚­‚à‚Ì‚È‚µ
 		}
 		if (numLines < 1) {
 			return; // ‘‚­‚à‚Ì‚È‚µ

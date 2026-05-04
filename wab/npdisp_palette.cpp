@@ -314,13 +314,13 @@ static UINT32 npdisp_AdjustRGB555(UINT32 rgb, bool use24buf) {
 	UINT8 b = (rgb >> 16) & 0xff;
 	UINT16* pBits = (UINT16*)npdispwin.pBitsBltBuf;
 	*pBits = (b >> 3) | ((g >> 3) << 5) | ((r >> 3) << 10);
-	if (use24buf) {
-		BitBlt(npdispwin.hdc16BltBuf, 0, 0, 1, 1, npdispwin.hdcBltBuf, 0, 0, SRCCOPY);
-		return GetPixel(npdispwin.hdc16BltBuf, 0, 0);
-	}
-	else {
+	//if (use24buf) {
+	//	BitBlt(npdispwin.hdc16BltBuf, 0, 0, 1, 1, npdispwin.hdcBltBuf, 0, 0, SRCCOPY);
+	//	return GetPixel(npdispwin.hdc16BltBuf, 0, 0);
+	//}
+	//else {
 		return GetPixel(npdispwin.hdcBltBuf, 0, 0);
-	}
+	//}
 }
 static UINT32 npdisp_AdjustRGB565(UINT32 rgb, bool use24buf) {
 	UINT8 r = rgb & 0xff;
@@ -328,13 +328,13 @@ static UINT32 npdisp_AdjustRGB565(UINT32 rgb, bool use24buf) {
 	UINT8 b = (rgb >> 16) & 0xff;
 	UINT16* pBits = (UINT16*)npdispwin.pBitsBltBuf;
 	*pBits = (b >> 3) | ((g >> 2) << 5) | ((r >> 3) << 11);
-	if (use24buf) {
-		BitBlt(npdispwin.hdc16BltBuf, 0, 0, 1, 1, npdispwin.hdcBltBuf, 0, 0, SRCCOPY);
-		return GetPixel(npdispwin.hdc16BltBuf, 0, 0);
-	}
-	else {
+	//if (use24buf) {
+	//	BitBlt(npdispwin.hdc16BltBuf, 0, 0, 1, 1, npdispwin.hdcBltBuf, 0, 0, SRCCOPY);
+	//	return GetPixel(npdispwin.hdc16BltBuf, 0, 0);
+	//}
+	//else {
 		return GetPixel(npdispwin.hdcBltBuf, 0, 0);
-	}
+	//}
 }
 
 UINT32 npdisp_AdjustColorRefForGDI(UINT32 color, bool* preferDither)

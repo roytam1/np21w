@@ -276,10 +276,10 @@ UINT16 npdisp_func_StretchBlt_MEMtoVRAM(int hasDstDev, int hasSrcDev, UINT32 lpD
 				}
 				if (hRgn) SelectClipRgn(npdispwin.hdc, hRgn);
 				HDC srcHDC = bmphdc.hdc;
-				if ((bmphdc.lpbi->bmiHeader.biBitCount == 16 || bmphdc.lpbi->bmiHeader.biBitCount == 15) && npdisp.bpp == 1 && npdispwin.hdc16BltBuf) {
-					BitBlt(npdispwin.hdc16BltBuf, wSrcX, wSrcY, wDestXext, wDestYext, srcHDC, wSrcX, wSrcY, SRCCOPY);
-					srcHDC = npdispwin.hdc16BltBuf;
-				}
+				//if ((bmphdc.lpbi->bmiHeader.biBitCount == 16 || bmphdc.lpbi->bmiHeader.biBitCount == 15) && npdisp.bpp == 1 && npdispwin.hdc16BltBuf) {
+				//	BitBlt(npdispwin.hdc16BltBuf, wSrcX, wSrcY, wDestXext, wDestYext, srcHDC, wSrcX, wSrcY, SRCCOPY);
+				//	srcHDC = npdispwin.hdc16BltBuf;
+				//}
 				if (hasDrawMode && drawMode.bkMode == 4) { // TRANSPARENT1
 					SetStretchBltMode(npdispwin.hdc, COLORONCOLOR);
 					TransparentBlt(npdispwin.hdc, wDestX, wDestY, wDestXext, wDestYext, srcHDC, wSrcX, wSrcY, wSrcXext, wSrcYext, drawMode.LbkColor);
@@ -588,11 +588,11 @@ UINT16 npdisp_func_StretchBlt_MEMtoMEM(int hasDstDev, int hasSrcDev, UINT32 lpDe
 							int hasDrawMode = npdisp_readMemory(&drawMode, lpDrawModeAddr, sizeof(NPDISP_DRAWMODE));
 							if (hasDrawMode) {
 								bool use24buf = false;
-								if ((srcbmphdc.lpbi->bmiHeader.biBitCount == 16 || srcbmphdc.lpbi->bmiHeader.biBitCount == 15) && dstbmphdc.lpbi->bmiHeader.biBitCount == 1 && npdispwin.hdc16BltBuf && drawMode.LbkColor == 0xffffff) {
-									// XXX: ペイントブラシの色指定消しゴム専用
-									use24buf = true;
-									srcHDC = npdispwin.hdc16BltBuf;
-								}
+								//if ((srcbmphdc.lpbi->bmiHeader.biBitCount == 16 || srcbmphdc.lpbi->bmiHeader.biBitCount == 15) && dstbmphdc.lpbi->bmiHeader.biBitCount == 1 && npdispwin.hdc16BltBuf && drawMode.LbkColor == 0xffffff) {
+								//	// XXX: ペイントブラシの色指定消しゴム専用
+								//	use24buf = true;
+								//	srcHDC = npdispwin.hdc16BltBuf;
+								//}
 								npdisp_AdjustDrawModeColor(&drawMode, use24buf);
 								if (use24buf) {
 									BitBlt(srcHDC, wSrcX, wSrcY, wDestXext, wDestYext, srcbmphdc.hdc, wSrcX, wSrcY, SRCCOPY);

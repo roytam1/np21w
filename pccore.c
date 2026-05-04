@@ -169,7 +169,7 @@ const OEMCHAR np2version[] = OEMTEXT(NP2VER_CORE);
 				0, 0x5B, 0, CIRRUS_MELCOWAB_OFS_DEFAULT, 0, 
 #endif
 #if defined(SUPPORT_WAB_NPDISP)
-				1,
+				0,
 #endif
 #if defined(SUPPORT_VGA_MODEX)
 				0,

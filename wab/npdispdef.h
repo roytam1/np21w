@@ -82,6 +82,30 @@
 #define NPDISP_BRUSH_HATCH_CROSS		4
 #define NPDISP_BRUSH_HATCH_DIAGCROSS	5
 
+#define NPDISP_C1_TRANSPARENT	0x0001
+#define NPDISP_C1_REINIT_ABLE	0x0080
+#define NPDISP_C1_COLORCURSOR	0x0800
+#define NPDISP_C1_DIBENGINE 	0x0010
+
+#define NPDISP_QDI_SETDIBITS                1
+#define NPDISP_QDI_GETDIBITS                2
+#define NPDISP_QDI_DIBTOSCREEN              4
+#define NPDISP_QDI_STRETCHDIB               8
+
+#define NPDISP_CONTROL_QUERYESCSUPPORT		8
+#define NPDISP_CONTROL_QUERYDIBSUPPORT		3073
+#define NPDISP_CONTROL_DCICOMMAND			3075
+
+#define NPDISP_CONTROL_DCI_DCICREATEPRIMARYSURFACE		1
+#define NPDISP_CONTROL_DCI_DCICREATEOFFSCREENSURFACE	2
+#define NPDISP_CONTROL_DCI_DCICREATEOVERLAYSURFACE		3
+#define NPDISP_CONTROL_DCI_DCIENUMSURFACE				4
+#define NPDISP_CONTROL_DCI_DCIESCAPE					5
+
+#define NPDISP_CONTROL_DCI_DDCREATEDRIVEROBJECT	10
+#define NPDISP_CONTROL_DCI_DDGET32BITDRIVERNAME	11
+#define NPDISP_CONTROL_DCI_DDNEWCALLBACKFNS		12
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -376,6 +400,27 @@ extern "C" {
 			} bitmapBits;
 			struct
 			{
+				UINT32 lpRetValueAddr;
+				UINT32 lpPDevice;
+				UINT16 fGet;
+				SINT16 DestX;
+				SINT16 DestY;
+				SINT16 DestXE;
+				SINT16 DestYE;
+				UINT16 SrcX;
+				UINT16 SrcY;
+				UINT16 SrcXE;
+				UINT16 SrcYE;
+				UINT32 lpBitsAddr;
+				UINT32 lpBitmapInfoAddr;
+				UINT32 lpTranslateAddr;
+				UINT32 dwROP;
+				UINT32 lpPBrushAddr;
+				UINT32 lpDrawModeAddr;
+				UINT32 lpClipRecAddr;
+			} stretchDIBits;
+			struct
+			{
 				UINT16 arguments[20];
 			} others;
 		} parameters;
@@ -602,6 +647,226 @@ extern "C" {
 		UINT8 diHorzSyncPolarity;
 		UINT8 diVertSyncPolarity;
 	} NPDISP_DISPLAYINFO;
+
+
+	// ***** DirectDraw Support
+
+	typedef struct {
+		UINT32 dwCommand;
+		UINT32 dwParam1;
+		UINT32 dwParam2;
+		UINT32 dwVersion;
+		UINT32 dwReserved;
+	} NPDISP_DCICMD;
+
+	typedef struct {
+		NPDISP_DCICMD  cmd;
+		UINT32 dwCompression;
+		UINT32 dwMask[3];
+		UINT32 dwWidth;
+		UINT32 dwHeight;
+		UINT32 dwDCICaps;
+		UINT32 dwBitCount;
+		UINT32 lpSurfaceAddr;
+	} NPDISP_DCICREATEINPUT;
+
+	typedef struct {
+		UINT32 dwSize;
+		UINT32 dwDCICaps;
+		UINT32 dwCompression;
+		UINT32 dwMask[3];
+
+		UINT32 dwWidth;
+		UINT32 dwHeight;
+		SINT32 lStride;
+
+		UINT32 dwBitCount;
+		UINT32 dwOffSurface;
+		UINT16 wSelSurface;
+		UINT16 wReserved;
+
+		UINT32 dwReserved1;
+		UINT32 dwReserved2;
+		UINT32 dwReserved3;
+
+		UINT32 BeginAccessAddr;
+		UINT32 EndAccessAddr;
+		UINT32 DestroySurfaceAddr;
+	} NPDISP_DCISURFACEINFO;
+
+	typedef struct {
+		NPDISP_DCICMD cmd;
+		RECT rSrc;
+		RECT rDst;
+		UINT32 EnumCallbackAddr;
+		UINT32 lpContextAddr;
+	} NPDISP_DCIENUMINPUT;
+
+	typedef struct {
+		NPDISP_DCISURFACEINFO  dciInfo;
+		UINT32 DrawAddr;
+		UINT32 SetClipListAddr;
+		UINT32 SetDestinationAddr;
+	} NPDISP_DCIOFFSCREEN;
+
+	typedef struct {
+		NPDISP_DCISURFACEINFO  dciInfo;
+		UINT32   dwChromakeyValue;
+		UINT32   dwChromakeyMask;
+	} NPDISP_DCIOVERLAY;
+
+	typedef struct {
+		UINT32 dwSize;
+		UINT32 dwFlags;
+		UINT32 dwFourCC;
+		union
+		{
+			UINT32 dwRGBBitCount;
+			UINT32 dwYUVBitCount;
+			UINT32 dwZBufferBitDepth;
+			UINT32 dwAlphaBitDepth;
+		};
+		union
+		{
+			UINT32 dwRBitMask;
+			UINT32 dwYBitMask;
+		};
+		union
+		{
+			UINT32 dwGBitMask;
+			UINT32 dwUBitMask;
+		};
+		union
+		{
+			UINT32 dwBBitMask;
+			UINT32 dwVBitMask;
+		};
+		union
+		{
+			UINT32 dwRGBAlphaBitMask;
+			UINT32 dwYUVAlphaBitMask;
+			UINT32 dwRGBZBitMask;
+			UINT32 dwYUVZBitMask;
+		};
+	} NPDISP_DDPIXELFORMAT;
+
+
+	typedef struct
+	{
+		UINT32 fpPrimary;
+		UINT32 dwFlags;
+		UINT32 dwDisplayWidth;
+		UINT32 dwDisplayHeight;
+		SINT32 lDisplayPitch;
+		NPDISP_DDPIXELFORMAT ddpfDisplay;
+		UINT32 dwOffscreenAlign;
+		UINT32 dwOverlayAlign;
+		UINT32 dwTextureAlign;
+		UINT32 dwZBufferAlign;
+		UINT32 dwAlphaAlign;
+		UINT32 dwNumHeaps;
+		UINT32 pvmList;
+	} NPDISP_VIDMEMINFO;
+
+	typedef struct {
+		UINT32 dwCaps;
+	} NPDISP_DDSCAPS;
+
+#define NPDISP_DD_ROP_SPACE	(256 / 32)
+
+	typedef struct
+	{
+		UINT32 dwWidth;
+		UINT32 dwHeight;
+		SINT32 lPitch;
+		UINT32 dwBPP;
+		UINT16 wFlags;
+		UINT16 wRefreshRate;
+		UINT32 dwRBitMask;
+		UINT32 dwGBitMask;
+		UINT32 dwBBitMask;
+		UINT32 dwAlphaBitMask;
+	} NPDISP_DDHALMODEINFO;
+
+
+	typedef struct
+	{
+		UINT32 dwSize;
+		UINT32 dwCaps;
+		UINT32 dwCaps2;
+		UINT32 dwCKeyCaps;
+		UINT32 dwFXCaps;
+		UINT32 dwFXAlphaCaps;
+		UINT32 dwPalCaps;
+		UINT32 dwSVCaps;
+		UINT32 dwAlphaBltConstBitDepths;
+		UINT32 dwAlphaBltPixelBitDepths;
+		UINT32 dwAlphaBltSurfaceBitDepths;
+		UINT32 dwAlphaOverlayConstBitDepths;
+		UINT32 dwAlphaOverlayPixelBitDepths;
+		UINT32 dwAlphaOverlaySurfaceBitDepths;
+		UINT32 dwZBufferBitDepths;
+		UINT32 dwVidMemTotal;
+		UINT32 dwVidMemFree;
+		UINT32 dwMaxVisibleOverlays;
+		UINT32 dwCurrVisibleOverlays;
+		UINT32 dwNumFourCCCodes;
+		UINT32 dwAlignBoundarySrc;
+		UINT32 dwAlignSizeSrc;
+		UINT32 dwAlignBoundaryDest;
+		UINT32 dwAlignSizeDest;
+		UINT32 dwAlignStrideAlign;
+		UINT32 dwRops[NPDISP_DD_ROP_SPACE];
+		NPDISP_DDSCAPS ddsCaps;
+		UINT32 dwMinOverlayStretch;
+		UINT32 dwMaxOverlayStretch;
+		UINT32 dwMinLiveVideoStretch;
+		UINT32 dwMaxLiveVideoStretch;
+		UINT32 dwMinHwCodecStretch;
+		UINT32 dwMaxHwCodecStretch;
+		UINT32 dwReserved1;
+		UINT32 dwReserved2;
+		UINT32 dwReserved3;
+		UINT32 dwSVBCaps;
+		UINT32 dwSVBCKeyCaps;
+		UINT32 dwSVBFXCaps;
+		UINT32 dwSVBRops[NPDISP_DD_ROP_SPACE];
+		UINT32 dwVSBCaps;
+		UINT32 dwVSBCKeyCaps;
+		UINT32 dwVSBFXCaps;
+		UINT32 dwVSBRops[NPDISP_DD_ROP_SPACE];
+		UINT32 dwSSBCaps;
+		UINT32 dwSSBCKeyCaps;
+		UINT32 dwSSBFXCaps;
+		UINT32 dwSSBRops[NPDISP_DD_ROP_SPACE];
+		UINT32 dwMaxVideoPorts;
+		UINT32 dwCurrVideoPorts;
+		UINT32 dwSVBCaps2;
+	} NPDISP_DDCORECAPS;
+
+	typedef struct
+	{
+		UINT32 dwSize;
+		UINT32 lpDDCallbacksAddr;
+		UINT32 lpDDSurfaceCallbacksAddr;
+		UINT32 lpDDPaletteCallbacksAddr;
+		NPDISP_VIDMEMINFO vmiData;
+		NPDISP_DDCORECAPS ddCaps;
+		UINT32 dwMonitorFrequency;
+		UINT32 GetDriverInfoAddr;
+		UINT32 dwModeIndex;
+		UINT32 lpdwFourCC;
+		UINT32 dwNumModes;
+		NPDISP_DDHALMODEINFO lpModeInfo;
+		UINT32 dwFlags;
+		UINT32 lpPDevice;
+		UINT32 hInstance;
+		UINT32 lpD3DGlobalDriverData;
+		UINT32 lpD3DHALCallbacks;
+		UINT32 lpDDExeBufCallbacksAddr;
+	} NPDISP_DDHALINFO;
+
+
 #pragma pack(pop)
 
 #pragma pack(push, 1)
@@ -706,9 +971,9 @@ extern "C" {
 		HBITMAP hBmpBltBuf;
 		HGDIOBJ hOldBmpBltBuf;
 
-		HDC hdc16BltBuf;
-		HBITMAP hBmp16BltBuf;
-		HGDIOBJ hOldBmp16BltBuf;
+		//HDC hdc16BltBuf;
+		//HBITMAP hBmp16BltBuf;
+		//HGDIOBJ hOldBmp16BltBuf;
 
 		HDC hdcCursor;
 		HBITMAP hBmpCursor;

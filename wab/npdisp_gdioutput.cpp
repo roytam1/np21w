@@ -480,5 +480,58 @@ bool npdisp_func_Output_GetYRange_ROUNDRECT(int* lineBegin, int* numLines, HPEN 
 	*numLines = 0;
 	return false;
 }
+bool npdisp_func_Output_POLYBEZIER(HDC tgtDC, NPDISP_WINDOWS_BMPHDC* bmphdc, NPDISP_PBITMAP* dstPBmp, HPEN curPen, HBRUSH curBrush, UINT16 wCount, UINT32 lpPointsAddr)
+{
+	TRACEOUT2(("npdisp_func_Output_POLYBEZIER %d", wCount));
+	POINT* gdiPoints = (POINT*)malloc(wCount * sizeof(POINT));
+	if (gdiPoints) {
+		for (int i = 0; i < wCount; i++) {
+			NPDISP_POINT pt;
+			if (npdisp_readMemory(&pt, lpPointsAddr, sizeof(NPDISP_POINT))) {
+				gdiPoints[i].x = pt.x;
+				gdiPoints[i].y = pt.y;
+			}
+			else {
+				break;
+			}
+			lpPointsAddr += sizeof(NPDISP_POINT);
+		}
+		PolyBezier(tgtDC, gdiPoints, wCount);
+		free(gdiPoints);
+		return true;
+	}
+	return false;
+}
+bool npdisp_func_Output_GetYRange_POLYBEZIER(int* lineBegin, int* numLines, HPEN curPen, HBRUSH curBrush, UINT16 wCount, UINT32 lpPointsAddr)
+{
+	TRACEOUT2(("npdisp_func_Output_GetYRange_POLYBEZIER %d", wCount));
+	int penWidthOffset = 0;
+	if (curPen) {
+		LOGPEN lp;
+		GetObject(curPen, sizeof(LOGPEN), &lp);
+		penWidthOffset = (lp.lopnWidth.x + 1) / 2;
+	}
+	int minY = SHRT_MAX;
+	int maxY = 0;
+	for (int i = 0; i < wCount; i++) {
+		NPDISP_POINT pt;
+		if (npdisp_readMemory(&pt, lpPointsAddr, sizeof(NPDISP_POINT))) {
+			if (pt.y < minY) minY = pt.y;
+			if (pt.y > maxY) maxY = pt.y;
+		}
+		else {
+			break;
+		}
+		lpPointsAddr += sizeof(NPDISP_POINT);
+	}
+	if (minY <= maxY) {
+		*lineBegin = minY - penWidthOffset;
+		*numLines = maxY - minY + 1 + penWidthOffset * 2;
+		return true;
+	}
+	*lineBegin = 0;
+	*numLines = 0;
+	return false;
+}
 
 #endif

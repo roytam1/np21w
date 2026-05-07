@@ -61,6 +61,21 @@ static void trace_fmt_ex2(const char* fmt, ...)
 #else
 #define	TRACEOUT2(s)	(void)s
 #endif	/* 1 */
+#if 0
+static void trace_fmt_ex3(const char* fmt, ...)
+{
+	char stmp[2048];
+	va_list ap;
+	va_start(ap, fmt);
+	vsprintf(stmp, fmt, ap);
+	strcat(stmp, "\n");
+	va_end(ap);
+	OutputDebugStringA(stmp);
+}
+#define	TRACEOUT3(s)	trace_fmt_ex3 s
+#else
+#define	TRACEOUT3(s)	(void)s
+#endif	/* 1 */
 
 extern NPDISP_WINDOWS	npdispwin;
 
@@ -224,10 +239,13 @@ UINT16 npdisp_func_StretchBlt_MEMtoVRAM(int hasDstDev, int hasSrcDev, UINT32 lpD
 		cliprect.right = rectTmp.right;
 		hRgn = CreateRectRgn(cliprect.left, cliprect.top, cliprect.right, cliprect.bottom);
 	}
-	NPDISP_PBITMAP srcPBmp;
-	if (lpSrcDevAddr && npdisp_readMemory(&srcPBmp, lpSrcDevAddr, sizeof(NPDISP_PBITMAP))) {
+	NPDISP_PBITMAP_EXT srcPBmp;
+	if (lpSrcDevAddr && npdisp_readPBitmap(&srcPBmp, lpSrcDevAddr)) {
 		if (!isStretch || srcPBmp.bmBitsPixel != 1) {
 			NPDISP_WINDOWS_BMPHDC bmphdc = { 0 };
+			if (wDestYext == 18 && wDestXext < 32) {
+				wDestYext = wDestYext;
+			}
 			npdisp_PreloadBitmapFromPBITMAP(&srcPBmp, 0, srcBeginLine, srcNumLines, srcBeginX, srcCopyWidth);
 			if (npdisp.longjmpnum == 0 && npdisp_MakeBitmapFromPBITMAP(&srcPBmp, &bmphdc, 0, srcBeginLine, srcNumLines, srcBeginX, srcCopyWidth, npdisp_palette_transTbl)) {
 				npdisp_ConvertToDDBMonoBitmap(&bmphdc);
@@ -274,6 +292,23 @@ UINT16 npdisp_func_StretchBlt_MEMtoVRAM(int hasDstDev, int hasSrcDev, UINT32 lpD
 						}
 					}
 				}
+
+				bool useActualColor = false;
+				if (npdisp.bpp == 8 && npdisp.usePalette) {
+					if ((srcPBmp.bmType == NPDISP_DEVTYPE_DIBENG || srcPBmp.bmType == NPDISP_DEVTYPE_DDB) && srcPBmp.bmBitsPixel != 8 && srcPBmp.bmBitsPixel != 1) {
+						// パレット番号（グレースケール）から実際のデバイス色へ置き換え
+						RGBQUAD pal[256];
+						for (int i = 0; i < 256; i++) {
+							pal[i].rgbRed = npdisp_palette_rgb256[i].r;
+							pal[i].rgbGreen = npdisp_palette_rgb256[i].g;
+							pal[i].rgbBlue = npdisp_palette_rgb256[i].b;
+							pal[i].rgbReserved = 0;
+						}
+						SetDIBColorTable(npdispwin.hdc, 0, 256, pal);
+						useActualColor = true;
+					}
+				}
+
 				if (hRgn) SelectClipRgn(npdispwin.hdc, hRgn);
 				HDC srcHDC = bmphdc.hdc;
 				//if ((bmphdc.lpbi->bmiHeader.biBitCount == 16 || bmphdc.lpbi->bmiHeader.biBitCount == 15) && npdisp.bpp == 1 && npdispwin.hdc16BltBuf) {
@@ -289,9 +324,62 @@ UINT16 npdisp_func_StretchBlt_MEMtoVRAM(int hasDstDev, int hasSrcDev, UINT32 lpD
 					StretchBlt(npdispwin.hdc, wDestX, wDestY, wDestXext, wDestYext, srcHDC, wSrcX, wSrcY, wSrcXext, wSrcYext, Rop3);
 				}
 				else {
+					//if (wDestXext == 413 && wDestYext == 146) {
+					//	int dstDevType = 0;
+					//	if (lpDestDevAddr) {
+					//		if (npdisp_readMemory(&dstDevType, lpDestDevAddr, 2)) {
+					//			if (dstDevType == NPDISP_DEVTYPE) {
+					//				NPDISP_PDEVICE pdev;
+					//				npdisp_readMemory(&pdev, lpDestDevAddr, sizeof(NPDISP_PDEVICE));
+					//				pdev.bmp.bmType = pdev.bmp.bmType;
+					//			}
+					//			else if (dstDevType == NPDISP_DEVTYPE_DDB) {
+					//				NPDISP_PBITMAP_EXT pbmp;
+					//				npdisp_readMemory(&pbmp, lpDestDevAddr, sizeof(NPDISP_PBITMAP_EXT));
+					//				pbmp.bmType = pbmp.bmType;
+					//			}
+					//			else {
+					//				NPDISP_PBITMAP pbmp;
+					//				npdisp_readMemory(&pbmp, lpDestDevAddr, sizeof(NPDISP_PBITMAP));
+					//				pbmp.bmType = pbmp.bmType;
+					//			}
+					//		}
+					//	}
+					//	BitBlt(npdispwin.hdc, wDestX, wDestY, wDestXext, wDestYext, srcHDC, wSrcX, wSrcY, SRCCOPY);
+					//}
 					BitBlt(npdispwin.hdc, wDestX, wDestY, wDestXext, wDestYext, srcHDC, wSrcX, wSrcY, Rop3);
+					//if (srcPBmp.bmHeight <= 16 /* && srcPBmp.bmType == NPDISP_DEVTYPE_DDB */ ) {
+					//	//HGDIOBJ oldbmp = GetCurrentObject(npdispwin.hdcCache[2], OBJ_BITMAP);
+					//	//int ypos = 0;
+					//	//for (auto it = npdispwin.bitmaps.begin(); it != npdispwin.bitmaps.end(); ++it) {
+					//	//	SelectObject(npdispwin.hdcCache[2], it->second.bmphdc.hBmp);
+					//	//	int h = it->second.bmphdc.lpbi->bmiHeader.biHeight >= 0 ? it->second.bmphdc.lpbi->bmiHeader.biHeight : -it->second.bmphdc.lpbi->bmiHeader.biHeight;
+					//	//	if (h <= 256) {
+					//	//		BitBlt(npdispwin.hdc, 0, ypos, it->second.bmphdc.lpbi->bmiHeader.biWidth, h, npdispwin.hdcCache[2], 0, 0, SRCCOPY);
+					//	//		ypos += h;
+					//	//	}
+					//	//}
+					//	//SelectObject(npdispwin.hdcCache[2], oldbmp);
+					//	BitBlt(npdispwin.hdc, 0, 0, srcPBmp.bmWidth, srcPBmp.bmHeight, srcHDC, 0, 0, SRCCOPY);
+					//}
 				}
 				if (hRgn) SelectClipRgn(npdispwin.hdc, NULL);
+
+				if (useActualColor) {
+					// デバイス色をパレット番号（グレースケール）へ戻す
+					RGBQUAD pal[256];
+					for (int i = 0; i < 256; i++) {
+						pal[i].rgbRed = npdisp_palette_gray256[i].r;
+						pal[i].rgbGreen = npdisp_palette_gray256[i].g;
+						pal[i].rgbBlue = npdisp_palette_gray256[i].b;
+						pal[i].rgbReserved = 0;
+					}
+					SetDIBColorTable(npdispwin.hdc, 0, 256, pal);
+				}
+
+				//if (wDestXext == 20 && wDestYext == 18) {
+				//	BitBlt(npdispwin.hdc, 0, 0, wDestXext, wDestYext, srcHDC, srcPBmp.bmWidth, srcPBmp.bmHeight, Rop3);
+				//}
 
 				SelectObject(npdispwin.hdc, npdispwin.hOldBrush);
 				npdisp.updated = 1;
@@ -312,6 +400,9 @@ UINT16 npdisp_func_StretchBlt_MEMtoVRAM(int hasDstDev, int hasSrcDev, UINT32 lpD
 				if (it != npdispwin.brushes.end()) {
 					NPDISP_HOSTBRUSH value = it->second;
 					if (value.brs) {
+						if (value.lbrush.lbColor == 0x0000ff) {
+							value.lbrush.lbColor = 0x0000ff;
+						}
 						TRACEOUT_BITBLT(("-> style=%d, hatch=%d, color=%08x", value.lbrush.lbStyle, value.lbrush.lbHatch, value.lbrush.lbColor));
 						NPDISP_DRAWMODE drawMode = { 0 };
 						int hasDrawMode = npdisp_readMemory(&drawMode, lpDrawModeAddr, sizeof(NPDISP_DRAWMODE));
@@ -413,8 +504,8 @@ UINT16 npdisp_func_StretchBlt_VRAMtoMEM(int hasDstDev, int hasSrcDev, UINT32 lpD
 		cliprect.right = rectTmp.right;
 		hRgn = CreateRectRgn(cliprect.left, cliprect.top, cliprect.right, cliprect.bottom);
 	}
-	NPDISP_PBITMAP dstPBmp;
-	if (lpDestDevAddr && npdisp_readMemory(&dstPBmp, lpDestDevAddr, sizeof(NPDISP_PBITMAP))) {
+	NPDISP_PBITMAP_EXT dstPBmp;
+	if (lpDestDevAddr && npdisp_readPBitmap(&dstPBmp, lpDestDevAddr)) {
 		NPDISP_WINDOWS_BMPHDC bmphdc = { 0 };
 		npdisp_PreloadBitmapFromPBITMAP(&dstPBmp, 0, dstBeginLine, dstNumLines, dstBeginX, dstCopyWidth);
 		if (npdisp.longjmpnum == 0 && npdisp_MakeBitmapFromPBITMAP(&dstPBmp, &bmphdc, 0, dstBeginLine, dstNumLines, dstBeginX, dstCopyWidth)) {
@@ -482,6 +573,22 @@ UINT16 npdisp_func_StretchBlt_VRAMtoMEM(int hasDstDev, int hasSrcDev, UINT32 lpD
 				}
 			}
 
+			bool useActualColor = false;
+			if (npdisp.bpp == 8 && npdisp.usePalette) {
+				if ((dstPBmp.bmType == NPDISP_DEVTYPE_DIBENG || dstPBmp.bmType == NPDISP_DEVTYPE_DDB) && dstPBmp.bmBitsPixel != 8 && dstPBmp.bmBitsPixel != 1) {
+					// パレット番号（グレースケール）から実際のデバイス色へ置き換え
+					RGBQUAD pal[256];
+					for (int i = 0; i < 256; i++) {
+						pal[i].rgbRed = npdisp_palette_rgb256[i].r;
+						pal[i].rgbGreen = npdisp_palette_rgb256[i].g;
+						pal[i].rgbBlue = npdisp_palette_rgb256[i].b;
+						pal[i].rgbReserved = 0;
+					}
+					SetDIBColorTable(npdispwin.hdc, 0, 256, pal);
+					useActualColor = true;
+				}
+			}
+
 			if (hRgn) SelectClipRgn(bmphdc.hdc, hRgn);
 			HDC srcHDC = npdispwin.hdc;
 			//if ((npdisp.bpp == 16 || npdisp.bpp == 15) && bmphdc.lpbi->bmiHeader.biBitCount == 1 && npdispwin.hdc16BltBuf) {
@@ -500,6 +607,18 @@ UINT16 npdisp_func_StretchBlt_VRAMtoMEM(int hasDstDev, int hasSrcDev, UINT32 lpD
 				BitBlt(bmphdc.hdc, wDestX, wDestY, wDestXext, wDestYext, srcHDC, wSrcX, wSrcY, Rop3);
 			}
 			if (hRgn) SelectClipRgn(bmphdc.hdc, NULL);
+
+			if (useActualColor) {
+				// デバイス色をパレット番号（グレースケール）へ戻す
+				RGBQUAD pal[256];
+				for (int i = 0; i < 256; i++) {
+					pal[i].rgbRed = npdisp_palette_gray256[i].r;
+					pal[i].rgbGreen = npdisp_palette_gray256[i].g;
+					pal[i].rgbBlue = npdisp_palette_gray256[i].b;
+					pal[i].rgbReserved = 0;
+				}
+				SetDIBColorTable(npdispwin.hdc, 0, 256, pal);
+			}
 
 			SelectObject(npdispwin.hdc, npdispwin.hOldBrush);
 
@@ -568,12 +687,12 @@ UINT16 npdisp_func_StretchBlt_MEMtoMEM(int hasDstDev, int hasSrcDev, UINT32 lpDe
 		cliprect.right = rectTmp.right;
 		hRgn = CreateRectRgn(cliprect.left, cliprect.top, cliprect.right, cliprect.bottom);
 	}
-	NPDISP_PBITMAP dstPBmp;
+	NPDISP_PBITMAP_EXT dstPBmp;
 	retValue = 1;
-	if (lpDestDevAddr && npdisp_readMemory(&dstPBmp, lpDestDevAddr, sizeof(NPDISP_PBITMAP))) {
+	if (lpDestDevAddr && npdisp_readPBitmap(&dstPBmp, lpDestDevAddr)) {
 		if (lpSrcDevAddr) {
-			NPDISP_PBITMAP srcPBmp;
-			if (npdisp_readMemory(&srcPBmp, lpSrcDevAddr, sizeof(NPDISP_PBITMAP))) {
+			NPDISP_PBITMAP_EXT srcPBmp;
+			if (npdisp_readPBitmap(&srcPBmp, lpSrcDevAddr)) {
 				if (!isStretch || srcPBmp.bmBitsPixel != 1) {
 					npdisp_PreloadBitmapFromPBITMAP(&srcPBmp, 0, srcBeginLine, srcNumLines, srcBeginX, srcCopyWidth);
 					npdisp_PreloadBitmapFromPBITMAP(&dstPBmp, 1, dstBeginLine, dstNumLines, dstBeginX, dstCopyWidth);
@@ -662,6 +781,35 @@ UINT16 npdisp_func_StretchBlt_MEMtoMEM(int hasDstDev, int hasSrcDev, UINT32 lpDe
 								}
 							}
 
+							bool useActualColorSrc = false;
+							bool useActualColorDst = false;
+							if (npdisp.bpp == 8 && npdisp.usePalette) {
+								if (((dstPBmp.bmType == NPDISP_DEVTYPE_DIBENG || dstPBmp.bmType == NPDISP_DEVTYPE_DDB) && dstPBmp.bmBitsPixel != 8 && dstPBmp.bmBitsPixel != 1) && srcPBmp.bmBitsPixel == 8) {
+									// パレット番号（グレースケール）から実際のデバイス色へ置き換え
+									RGBQUAD pal[256];
+									for (int i = 0; i < 256; i++) {
+										pal[i].rgbRed = npdisp_palette_rgb256[i].r;
+										pal[i].rgbGreen = npdisp_palette_rgb256[i].g;
+										pal[i].rgbBlue = npdisp_palette_rgb256[i].b;
+										pal[i].rgbReserved = 0;
+									}
+									SetDIBColorTable(srcbmphdc.hdc, 0, 256, pal);
+									useActualColorSrc = true;
+								}
+								else if (((srcPBmp.bmType == NPDISP_DEVTYPE_DIBENG || srcPBmp.bmType == NPDISP_DEVTYPE_DDB) && srcPBmp.bmBitsPixel != 8 && srcPBmp.bmBitsPixel != 1) && dstPBmp.bmBitsPixel == 8) {
+									// パレット番号（グレースケール）から実際のデバイス色へ置き換え
+									RGBQUAD pal[256];
+									for (int i = 0; i < 256; i++) {
+										pal[i].rgbRed = npdisp_palette_rgb256[i].r;
+										pal[i].rgbGreen = npdisp_palette_rgb256[i].g;
+										pal[i].rgbBlue = npdisp_palette_rgb256[i].b;
+										pal[i].rgbReserved = 0;
+									}
+									SetDIBColorTable(dstbmphdc.hdc, 0, 256, pal);
+									useActualColorDst = true;
+								}
+							}
+
 							if (hRgn) SelectClipRgn(dstbmphdc.hdc, hRgn);
 							if (hasDrawMode && drawMode.bkMode == 4) { // TRANSPARENT1
 								SetStretchBltMode(npdispwin.hdc, COLORONCOLOR);
@@ -689,9 +837,39 @@ UINT16 npdisp_func_StretchBlt_MEMtoMEM(int hasDstDev, int hasSrcDev, UINT32 lpDe
 #endif
 								{
 									BitBlt(dstbmphdc.hdc, wDestX, wDestY, wDestXext, wDestYext, srcHDC, wSrcX, wSrcY, Rop3);
+									//if (wDestXext == 8 && wDestXext == 8 && srcPBmp.bmBitsPixel == 1) {
+									//	//SetBkColor(npdispwin.hdc, drawMode.LbkColor);
+									//	//SetTextColor(npdispwin.hdc, drawMode.LTextColor);
+									//	//SetBkMode(npdispwin.hdc, drawMode.bkMode);
+									//	//SetROP2(npdispwin.hdc, drawMode.Rop2);
+									//	BitBlt(npdispwin.hdc, 0, 0, wDestXext, wDestYext, dstbmphdc.hdc, wDestX, wDestY, Rop3);
+									//}
 								}
 							}
 							if (hRgn) SelectClipRgn(dstbmphdc.hdc, NULL);
+
+							if (useActualColorSrc) {
+								// デバイス色をパレット番号（グレースケール）へ戻す
+								RGBQUAD pal[256];
+								for (int i = 0; i < 256; i++) {
+									pal[i].rgbRed = npdisp_palette_gray256[i].r;
+									pal[i].rgbGreen = npdisp_palette_gray256[i].g;
+									pal[i].rgbBlue = npdisp_palette_gray256[i].b;
+									pal[i].rgbReserved = 0;
+								}
+								SetDIBColorTable(srcbmphdc.hdc, 0, 256, pal);
+							}
+							else if (useActualColorDst) {
+								// デバイス色をパレット番号（グレースケール）へ戻す
+								RGBQUAD pal[256];
+								for (int i = 0; i < 256; i++) {
+									pal[i].rgbRed = npdisp_palette_gray256[i].r;
+									pal[i].rgbGreen = npdisp_palette_gray256[i].g;
+									pal[i].rgbBlue = npdisp_palette_gray256[i].b;
+									pal[i].rgbReserved = 0;
+								}
+								SetDIBColorTable(dstbmphdc.hdc, 0, 256, pal);
+							}
 
 							SelectObject(npdispwin.hdc, npdispwin.hOldBrush);
 							retValue = 1; // 成功

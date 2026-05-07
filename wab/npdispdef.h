@@ -8,7 +8,8 @@
 #if defined(SUPPORT_WAB_NPDISP)
 
 #define NPDISP_DEVTYPE_DIBENG	0x5250
-#define NPDISP_DEVTYPE		0x1003
+#define NPDISP_DEVTYPE			NPDISP_DEVTYPE_DIBENG
+#define NPDISP_DEVTYPE_DDB		0x2222
 #define NPDISP_EXEC_MAGIC	0x3132504e
 
 #define NPDISP_RETCODE_NONE		0
@@ -60,7 +61,80 @@
 // 以降 Win9x用
 #define NPDISP_FUNCORDER_ReEnable				31
 #define NPDISP_FUNCORDER_ValidateMode			700
+#define NPDISP_FUNCORDER_SelectBitmap			29
+#define NPDISP_FUNCORDER_BitmapBits				30
 
+#define NPDISP_DT_RASDISPLAY	1
+
+#define NPDISP_CC_CIRCLES		1
+#define NPDISP_CC_PIE			2
+#define NPDISP_CC_CHORD			4
+#define NPDISP_CC_ELLIPSES		8
+#define NPDISP_CC_WIDE			16
+#define NPDISP_CC_STYLED		32
+#define NPDISP_CC_WIDESTYLED	64
+#define NPDISP_CC_INTERIORS		128
+#define NPDISP_CC_ROUNDRECT		256
+#define NPDISP_CC_POLYBEZIER	512
+
+#define NPDISP_LC_POLYLINE		2
+#define NPDISP_LC_MARKER		4
+#define NPDISP_LC_POLYMARKER	8
+#define NPDISP_LC_WIDE			16
+#define NPDISP_LC_STYLED		32
+#define NPDISP_LC_WIDESTYLED	64
+#define NPDISP_LC_INTERIORS		128
+
+#define NPDISP_PC_POLYGON		1
+#define NPDISP_PC_RECTANGLE		2
+#define NPDISP_PC_WINDPOLYGON	4
+#define NPDISP_PC_SCANLINE		8
+#define NPDISP_PC_WIDE			16
+#define NPDISP_PC_STYLED		32
+#define NPDISP_PC_WIDESTYLED	64
+#define NPDISP_PC_INTERIORS		128
+#define NPDISP_PC_POLYPOLYGON	256
+#define NPDISP_PC_PATHS			512
+
+#define NPDISP_CP_RECTANGLE		1
+
+#define NPDISP_TC_OP_CHARACTER	0x0001
+#define NPDISP_TC_OP_STROKE		0x0002
+#define NPDISP_TC_CP_STROKE		0x0004
+#define NPDISP_TC_CR_90			0x0008
+#define NPDISP_TC_CR_ANY		0x0010
+#define NPDISP_TC_SF_X_YINDEP	0x0020
+#define NPDISP_TC_SA_DOUBLE		0x0040
+#define NPDISP_TC_SA_INTEGER	0x0080
+#define NPDISP_TC_SA_CONTIN		0x0100
+#define NPDISP_TC_EA_DOUBLE		0x0200
+#define NPDISP_TC_IA_ABLE		0x0400
+#define NPDISP_TC_UA_ABLE		0x0800
+#define NPDISP_TC_SO_ABLE		0x1000
+#define NPDISP_TC_RA_ABLE		0x2000
+#define NPDISP_TC_VA_ABLE		0x4000
+
+#define NPDISP_RC_BITBLT		0x0001
+#define NPDISP_RC_BANDING		0x0002
+#define NPDISP_RC_SCALING		0x0004
+#define NPDISP_RC_BITMAP64		0x0008
+#define NPDISP_RC_GDI20_OUTPUT	0x0010
+#define NPDISP_RC_GDI20_STATE	0x0020
+#define NPDISP_RC_SAVEBITMAP	0x0040
+#define NPDISP_RC_DI_BITMAP		0x0080
+#define NPDISP_RC_PALETTE		0x0100
+#define NPDISP_RC_DIBTODEV		0x0200
+#define NPDISP_RC_BIGFONT		0x0400
+#define NPDISP_RC_STRETCHBLT	0x0800
+#define NPDISP_RC_FLOODFILL		0x1000
+#define NPDISP_RC_STRETCHDIB	0x2000
+#define NPDISP_RC_OP_DX_OUTPUT	0x4000
+#define NPDISP_RC_DEVBITS		0x8000
+
+#define NPDISP_C1_TRANSPARENT	0x0001
+#define NPDISP_C1_DIBENGINE 	0x0010
+#define NPDISP_C1_REINIT_ABLE	0x0080
+#define NPDISP_C1_COLORCURSOR	0x0800
 
 #define NPDISP_PEN_STYLE_SOLID			0
 #define NPDISP_PEN_STYLE_DASHED			1
@@ -82,19 +156,27 @@
 #define NPDISP_BRUSH_HATCH_CROSS		4
 #define NPDISP_BRUSH_HATCH_DIAGCROSS	5
 
-#define NPDISP_C1_TRANSPARENT	0x0001
-#define NPDISP_C1_REINIT_ABLE	0x0080
-#define NPDISP_C1_COLORCURSOR	0x0800
-#define NPDISP_C1_DIBENGINE 	0x0010
+#define NPDISP_PBITMAPKEY_XOR		0xa659
+#define NPDISP_PBITMAPKEY_XOR_MASK	0x3fff
 
 #define NPDISP_QDI_SETDIBITS                1
 #define NPDISP_QDI_GETDIBITS                2
 #define NPDISP_QDI_DIBTOSCREEN              4
 #define NPDISP_QDI_STRETCHDIB               8
 
+#define NPDISP_VALMODE_YES			0
+#define NPDISP_VALMODE_NO_WRONGDRV	1
+#define NPDISP_VALMODE_NO_NOMEM		2
+#define NPDISP_VALMODE_NO_NODAC		3
+#define NPDISP_VALMODE_NO_UNKNOWN	4
+
 #define NPDISP_CONTROL_QUERYESCSUPPORT		8
 #define NPDISP_CONTROL_QUERYDIBSUPPORT		3073
 #define NPDISP_CONTROL_DCICOMMAND			3075
+
+#define NPDISP_CONTROL_OPENGL_CMD			4352
+#define NPDISP_CONTROL_OPENGL_GETINFO		4353
+#define NPDISP_CONTROL_WNDOBJ_SETUP			4354
 
 #define NPDISP_CONTROL_DCI_DCICREATEPRIMARYSURFACE		1
 #define NPDISP_CONTROL_DCI_DCICREATEOFFSCREENSURFACE	2
@@ -547,17 +629,20 @@ extern "C" {
 	} NPDISP_LFONT;
 
 	typedef struct {
-		NPDISP_LPEN lpen; // NPDISP_PENの先頭はLPENとする
-		int key; // np2側のキー 
-	} NPDISP_PEN;
-	typedef struct {
-		NPDISP_LBRUSH lbrush; // NPDISP_BRUSHの先頭はLBRUSHとする
-		int key; // np2側のキー 
-	} NPDISP_BRUSH;
-	typedef struct {
-		NPDISP_LFONT lfont; // NPDISP_FONTの先頭はNPDISP_LFONTとする
-		int key; // np2側のキー 
-	} NPDISP_FONT;
+		SINT16 bmType;
+		SINT16 bmWidth;
+		SINT16 bmHeight;
+		SINT16 bmWidthBytes;
+		UINT8 bmPlanes;
+		UINT8 bmBitsPixel;
+		UINT32 bmBitsAddr;
+		SINT32 bmWidthPlanes;
+		UINT32 bmlpPDeviceAddr;
+		UINT16 bmSegmentIndex;
+		UINT16 bmScanSegment;
+		UINT16 bmFillBytes;
+		UINT32 reserved;
+	} NPDISP_PBITMAP;
 
 	typedef struct {
 		SINT16 bmType;
@@ -571,10 +656,11 @@ extern "C" {
 		UINT32 bmlpPDeviceAddr;
 		UINT16 bmSegmentIndex;
 		UINT16 bmScanSegment;
-		UINT16 bmFillBytes;
-		SINT16 reserved1;
-		SINT16 reserved2;
-	} NPDISP_PBITMAP;
+		UINT16 bmFillBytes;    
+		UINT16 reserved1;
+		UINT16 reserved2;
+		UINT32 ddbmpKey; // np2側のキー 
+	} NPDISP_PBITMAP_EXT;
 
 	typedef struct {
 		UINT16 deType;
@@ -584,7 +670,7 @@ extern "C" {
 		UINT8 dePlanes;
 		UINT8 deBitsPixel;
 		UINT32 deReserved1;
-		UINT32 deDeltaScan;
+		SINT32 deDeltaScan;
 		UINT32 delpPDeviceAddr;
 		UINT32 deBitsOffset;
 		UINT16 deBitsSelector;
@@ -595,6 +681,26 @@ extern "C" {
 		UINT32 deEndAccessFuncAddr;
 		UINT32 deDriverReserved;
 	} NPDISP_DIBENGINE;
+
+	typedef struct {
+		union {
+			NPDISP_PBITMAP bmp;
+			NPDISP_DIBENGINE dibe;
+		};
+	} NPDISP_PDEVICE;
+
+	typedef struct {
+		NPDISP_LPEN lpen; // NPDISP_PENの先頭はLPENとする
+		int key; // np2側のキー 
+	} NPDISP_PEN;
+	typedef struct {
+		NPDISP_LBRUSH lbrush; // NPDISP_BRUSHの先頭はLBRUSHとする
+		int key; // np2側のキー 
+	} NPDISP_BRUSH;
+	typedef struct {
+		NPDISP_LFONT lfont; // NPDISP_FONTの先頭はNPDISP_LFONTとする
+		int key; // np2側のキー 
+	} NPDISP_FONT;
 
 	typedef struct {
 		UINT16 Rop2;
@@ -610,13 +716,6 @@ extern "C" {
 		UINT32 LbkColor;
 		UINT32 LTextColor;
 	} NPDISP_DRAWMODE;
-
-	typedef struct {
-		union {
-			NPDISP_PBITMAP bmp;
-			NPDISP_DIBENGINE dibe;
-		};
-	} NPDISP_PDEVICE;
 
 	typedef struct {
 		UINT16 csHotX;
@@ -647,6 +746,13 @@ extern "C" {
 		UINT8 diHorzSyncPolarity;
 		UINT8 diVertSyncPolarity;
 	} NPDISP_DISPLAYINFO;
+
+	typedef struct {
+		UINT16 dvmSize;
+		UINT16 dvmBpp;
+		SINT16 dvmXRes;
+		SINT16 dvmYRes;
+	} NPDISP_DISPVALMODE;
 
 
 	// ***** DirectDraw Support
@@ -916,6 +1022,11 @@ extern "C" {
 	// np2側で控えておく情報
 
 	typedef struct {
+		BITMAPINFOHEADER bmiHeader;
+		RGBQUAD          bmiColors[256];
+	} BITMAPINFO_8BPP;
+
+	typedef struct {
 		BITMAPINFOHEADER biHeader;
 		RGBQUAD pal[256];
 		char bmBits[4 * 8 * 8]; // Win3.1は8x8px上限
@@ -941,13 +1052,24 @@ extern "C" {
 	} NPDISP_HOSTPEN;
 
 
-
 	// Windows向けコード群
 
 	typedef struct {
-		BITMAPINFOHEADER bmiHeader;
-		RGBQUAD          bmiColors[256];
-	} BITMAPINFO_8BPP;
+		HDC hdc;
+		void* pBits;
+		HBITMAP hBmp;
+		HGDIOBJ hOldBmp;
+		UINT32 stride;
+		BITMAPINFO* lpbi;
+
+		HBITMAP hBmpDDB;
+
+		UINT8 isDevMemBmp;
+	} NPDISP_WINDOWS_BMPHDC;
+
+	typedef struct {
+		NPDISP_WINDOWS_BMPHDC bmphdc;
+	} NPDISP_HOSTBITMAP;
 
 	typedef struct {
 		BITMAPINFO_8BPP bi;
@@ -990,18 +1112,10 @@ extern "C" {
 		std::map<UINT32, NPDISP_HOSTPEN> pens;
 		UINT32 brushesIdx;
 		std::map<UINT32, NPDISP_HOSTBRUSH> brushes;
+		UINT32 bitmapsIdx;
+		std::map<UINT32, NPDISP_HOSTBITMAP> bitmaps;
+
 	} NPDISP_WINDOWS;
-
-	typedef struct {
-		HDC hdc;
-		void* pBits;
-		HBITMAP hBmp;
-		HGDIOBJ hOldBmp;
-		UINT32 stride;
-		BITMAPINFO* lpbi;
-
-		HBITMAP hBmpDDB;
-	} NPDISP_WINDOWS_BMPHDC;
 
 #pragma pack(pop)
 

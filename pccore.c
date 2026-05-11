@@ -188,7 +188,7 @@ const OEMCHAR np2version[] = OEMTEXT(NP2VER_CORE);
 #if defined(SUPPORT_FAST_MEMORYCHECK)
 				1,
 #endif
-				0, 0,
+				0, 1,
 				1, 0,
 #if defined(SUPPORT_GAMEPORT)
 				0, 0,

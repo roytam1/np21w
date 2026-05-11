@@ -84,10 +84,16 @@ extern NPDISP_WINDOWS	npdispwin;
 UINT16 npdisp_func_StretchBlt_VRAMtoVRAM(int hasDstDev, int hasSrcDev, UINT32 lpDestDevAddr, SINT16 wDestX, SINT16 wDestY, SINT16 wDestXext, SINT16 wDestYext, UINT32 lpSrcDevAddr, SINT16 wSrcX, SINT16 wSrcY, SINT16 wSrcXext, SINT16 wSrcYext, UINT32 Rop3, UINT32 lpPBrushAddr, UINT32 lpDrawModeAddr, UINT32 lpClipAddr)
 {
 	// VRAM -> VRAM
+	int stretchMode = COLORONCOLOR;
 	bool isStretch = wDestXext != wSrcXext || wDestYext != wSrcYext;
 	if (isStretch) {
 		TRACEOUT_BITBLT(("Stretchlt VRAM -> VRAM DEST X:%d Y:%d W:%d H:%d, rop:%08x", wDestX, wDestY, wDestXext, wDestYext, Rop3));
-		if (npdisp.bpp == 1) return 0xffff; //モノクロソースの時はCOLORONCOLOR以外だと致命的なのでGDIにやらせる
+		if (npdisp.version >= 4 && npdisp.isWin9x) {
+			if (lpDrawModeAddr) stretchMode = npdisp_readMemory16(lpDrawModeAddr + 36); // Win9x StretchBltModeを読む
+		}
+		else {
+			if (npdisp.bpp == 1) return 0xffff; //モノクロソースの時はCOLORONCOLOR以外だと致命的なのでGDIにやらせる
+		}
 	}
 	else {
 		TRACEOUT_BITBLT(("BitBlt VRAM -> VRAM DEST X:%d Y:%d W:%d H:%d, rop:%08x", wDestX, wDestY, wDestXext, wDestYext, Rop3));
@@ -151,11 +157,11 @@ UINT16 npdisp_func_StretchBlt_VRAMtoVRAM(int hasDstDev, int hasSrcDev, UINT32 lp
 		// 重なっているのでバッファ経由
 		BitBlt(npdispwin.hdcBltBuf, wSrcX, wSrcY, wSrcXext, wSrcYext, npdispwin.hdc, wSrcX, wSrcY, SRCCOPY);
 		if (hasDrawMode && drawMode.bkMode == 4) { // TRANSPARENT1
-			SetStretchBltMode(npdispwin.hdc, COLORONCOLOR);
+			SetStretchBltMode(npdispwin.hdc, stretchMode);
 			TransparentBlt(npdispwin.hdc, wDestX, wDestY, wDestXext, wDestYext, npdispwin.hdcBltBuf, wSrcX, wSrcY, wSrcXext, wSrcYext, drawMode.LbkColor);
 		}
 		else if (isStretch) {
-			SetStretchBltMode(npdispwin.hdc, COLORONCOLOR);
+			SetStretchBltMode(npdispwin.hdc, stretchMode);
 			StretchBlt(npdispwin.hdc, wDestX, wDestY, wDestXext, wDestYext, npdispwin.hdcBltBuf, wSrcX, wSrcY, wSrcXext, wSrcYext, Rop3);
 		}
 		else {
@@ -165,11 +171,11 @@ UINT16 npdisp_func_StretchBlt_VRAMtoVRAM(int hasDstDev, int hasSrcDev, UINT32 lp
 	else {
 		// 重なっていないので直接転送
 		if (hasDrawMode && drawMode.bkMode == 4) { // TRANSPARENT1
-			SetStretchBltMode(npdispwin.hdc, COLORONCOLOR);
+			SetStretchBltMode(npdispwin.hdc, stretchMode);
 			TransparentBlt(npdispwin.hdc, wDestX, wDestY, wDestXext, wDestYext, npdispwin.hdc, wSrcX, wSrcY, wSrcXext, wSrcYext, drawMode.LbkColor);
 		}
 		else if (isStretch) {
-			SetStretchBltMode(npdispwin.hdc, COLORONCOLOR);
+			SetStretchBltMode(npdispwin.hdc, stretchMode);
 			StretchBlt(npdispwin.hdc, wDestX, wDestY, wDestXext, wDestYext, npdispwin.hdc, wSrcX, wSrcY, wSrcXext, wSrcYext, Rop3);
 		}
 		else {
@@ -193,6 +199,7 @@ UINT16 npdisp_func_BitBlt_VRAMtoVRAM(int hasDstDev, int hasSrcDev, UINT32 lpDest
 UINT16 npdisp_func_StretchBlt_MEMtoVRAM(int hasDstDev, int hasSrcDev, UINT32 lpDestDevAddr, SINT16 wDestX, SINT16 wDestY, SINT16 wDestXext, SINT16 wDestYext, UINT32 lpSrcDevAddr, SINT16 wSrcX, SINT16 wSrcY, SINT16 wSrcXext, SINT16 wSrcYext, UINT32 Rop3, UINT32 lpPBrushAddr, UINT32 lpDrawModeAddr, UINT32 lpClipAddr)
 {
 	// MEM -> VRAM
+	int stretchMode = COLORONCOLOR;
 	UINT16 retValue = 1;
 	
 	// 実際に転送する範囲を計算
@@ -224,6 +231,9 @@ UINT16 npdisp_func_StretchBlt_MEMtoVRAM(int hasDstDev, int hasSrcDev, UINT32 lpD
 	bool isStretch = wDestXext != wSrcXext || wDestYext != wSrcYext;
 	if (isStretch) {
 		TRACEOUT_BITBLT(("Stretchlt MEM -> VRAM DEST X:%d Y:%d W:%d H:%d, rop:%08x", wDestX, wDestY, wDestXext, wDestYext, Rop3));
+		if (npdisp.version >= 4 && npdisp.isWin9x) {
+			if (lpDrawModeAddr) stretchMode = npdisp_readMemory16(lpDrawModeAddr + 36); // Win9x StretchBltModeを読む
+		}
 	}
 	else {
 		TRACEOUT_BITBLT(("BitBlt MEM -> VRAM DEST X:%d Y:%d W:%d H:%d, rop:%08x", wDestX, wDestY, wDestXext, wDestYext, Rop3));
@@ -241,11 +251,8 @@ UINT16 npdisp_func_StretchBlt_MEMtoVRAM(int hasDstDev, int hasSrcDev, UINT32 lpD
 	}
 	NPDISP_PBITMAP_EXT srcPBmp;
 	if (lpSrcDevAddr && npdisp_readPBitmap(&srcPBmp, lpSrcDevAddr)) {
-		if (!isStretch || srcPBmp.bmBitsPixel != 1) {
+		if (!isStretch || srcPBmp.bmBitsPixel != 1 || npdisp.isWin9x) {
 			NPDISP_WINDOWS_BMPHDC bmphdc = { 0 };
-			if (wDestYext == 18 && wDestXext < 32) {
-				wDestYext = wDestYext;
-			}
 			npdisp_PreloadBitmapFromPBITMAP(&srcPBmp, 0, srcBeginLine, srcNumLines, srcBeginX, srcCopyWidth);
 			if (npdisp.longjmpnum == 0 && npdisp_MakeBitmapFromPBITMAP(&srcPBmp, &bmphdc, 0, srcBeginLine, srcNumLines, srcBeginX, srcCopyWidth, npdisp_palette_transTbl)) {
 				npdisp_ConvertToDDBMonoBitmap(&bmphdc);
@@ -316,11 +323,11 @@ UINT16 npdisp_func_StretchBlt_MEMtoVRAM(int hasDstDev, int hasSrcDev, UINT32 lpD
 				//	srcHDC = npdispwin.hdc16BltBuf;
 				//}
 				if (hasDrawMode && drawMode.bkMode == 4) { // TRANSPARENT1
-					SetStretchBltMode(npdispwin.hdc, COLORONCOLOR);
+					SetStretchBltMode(npdispwin.hdc, stretchMode);
 					TransparentBlt(npdispwin.hdc, wDestX, wDestY, wDestXext, wDestYext, srcHDC, wSrcX, wSrcY, wSrcXext, wSrcYext, drawMode.LbkColor);
 				}
 				else if (isStretch) {
-					SetStretchBltMode(npdispwin.hdc, COLORONCOLOR);
+					SetStretchBltMode(npdispwin.hdc, stretchMode);
 					StretchBlt(npdispwin.hdc, wDestX, wDestY, wDestXext, wDestYext, srcHDC, wSrcX, wSrcY, wSrcXext, wSrcYext, Rop3);
 				}
 				else {
@@ -360,6 +367,9 @@ UINT16 npdisp_func_StretchBlt_MEMtoVRAM(int hasDstDev, int hasSrcDev, UINT32 lpD
 					//	//	}
 					//	//}
 					//	//SelectObject(npdispwin.hdcCache[2], oldbmp);
+					//	BitBlt(npdispwin.hdc, 0, 0, srcPBmp.bmWidth, srcPBmp.bmHeight, srcHDC, 0, 0, SRCCOPY);
+					//}
+					//if (srcPBmp.bmHeight == 6 && srcPBmp.bmWidth == 128 && srcPBmp.bmBitsPixel == 1) {
 					//	BitBlt(npdispwin.hdc, 0, 0, srcPBmp.bmWidth, srcPBmp.bmHeight, srcHDC, 0, 0, SRCCOPY);
 					//}
 				}
@@ -458,6 +468,7 @@ UINT16 npdisp_func_BitBlt_MEMtoVRAM(int hasDstDev, int hasSrcDev, UINT32 lpDestD
 UINT16 npdisp_func_StretchBlt_VRAMtoMEM(int hasDstDev, int hasSrcDev, UINT32 lpDestDevAddr, SINT16 wDestX, SINT16 wDestY, SINT16 wDestXext, SINT16 wDestYext, UINT32 lpSrcDevAddr, SINT16 wSrcX, SINT16 wSrcY, SINT16 wSrcXext, SINT16 wSrcYext, UINT32 Rop3, UINT32 lpPBrushAddr, UINT32 lpDrawModeAddr, UINT32 lpClipAddr)
 {
 	// VRAM -> MEM
+	int stretchMode = COLORONCOLOR;
 
 	// 実際に転送する範囲を計算
 	int srcBeginLine = wSrcY;
@@ -488,7 +499,12 @@ UINT16 npdisp_func_StretchBlt_VRAMtoMEM(int hasDstDev, int hasSrcDev, UINT32 lpD
 	bool isStretch = wDestXext != wSrcXext || wDestYext != wSrcYext;
 	if (isStretch) {
 		TRACEOUT_BITBLT(("Stretchlt VRAM -> MEM DEST X:%d Y:%d W:%d H:%d, rop:%08x", wDestX, wDestY, wDestXext, wDestYext, Rop3));
-		if (npdisp.bpp == 1) return 0xffff; //モノクロソースの時はCOLORONCOLOR以外だと致命的なのでGDIにやらせる
+		if (npdisp.version >= 4 && npdisp.isWin9x) {
+			if (lpDrawModeAddr) stretchMode = npdisp_readMemory16(lpDrawModeAddr + 36); // Win9x StretchBltModeを読む
+		}
+		else {
+			if (npdisp.bpp == 1) return 0xffff; //モノクロソースの時はCOLORONCOLOR以外だと致命的なのでGDIにやらせる
+		}
 	}
 	else {
 		TRACEOUT_BITBLT(("BitBlt VRAM -> MEM DEST X:%d Y:%d W:%d H:%d, rop:%08x", wDestX, wDestY, wDestXext, wDestYext, Rop3));
@@ -596,11 +612,11 @@ UINT16 npdisp_func_StretchBlt_VRAMtoMEM(int hasDstDev, int hasSrcDev, UINT32 lpD
 			//	srcHDC = npdispwin.hdc16BltBuf;
 			//}
 			if (hasDrawMode && drawMode.bkMode == 4) { // TRANSPARENT1
-				SetStretchBltMode(npdispwin.hdc, COLORONCOLOR);
+				SetStretchBltMode(npdispwin.hdc, stretchMode);
 				TransparentBlt(bmphdc.hdc, wDestX, wDestY, wDestXext, wDestYext, srcHDC, wSrcX, wSrcY, wSrcXext, wSrcYext, drawMode.LbkColor);
 			}
 			else if (isStretch) {
-				SetStretchBltMode(bmphdc.hdc, COLORONCOLOR);
+				SetStretchBltMode(bmphdc.hdc, stretchMode);
 				StretchBlt(bmphdc.hdc, wDestX, wDestY, wDestXext, wDestYext, srcHDC, wSrcX, wSrcY, wSrcXext, wSrcYext, Rop3);
 			}
 			else {
@@ -641,6 +657,7 @@ UINT16 npdisp_func_BitBlt_VRAMtoMEM(int hasDstDev, int hasSrcDev, UINT32 lpDestD
 UINT16 npdisp_func_StretchBlt_MEMtoMEM(int hasDstDev, int hasSrcDev, UINT32 lpDestDevAddr, SINT16 wDestX, SINT16 wDestY, SINT16 wDestXext, SINT16 wDestYext, UINT32 lpSrcDevAddr, SINT16 wSrcX, SINT16 wSrcY, SINT16 wSrcXext, SINT16 wSrcYext, UINT32 Rop3, UINT32 lpPBrushAddr, UINT32 lpDrawModeAddr, UINT32 lpClipAddr)
 {
 	// MEM -> MEM
+	int stretchMode = COLORONCOLOR;
 	UINT16 retValue = 0;
 
 	// 実際に転送する範囲を計算
@@ -672,6 +689,9 @@ UINT16 npdisp_func_StretchBlt_MEMtoMEM(int hasDstDev, int hasSrcDev, UINT32 lpDe
 	bool isStretch = wDestXext != wSrcXext || wDestYext != wSrcYext;
 	if (isStretch) {
 		TRACEOUT_BITBLT(("Stretchlt MEM -> MEM DEST X:%d Y:%d W:%d H:%d, rop:%08x", wDestX, wDestY, wDestXext, wDestYext, Rop3));
+		if (npdisp.version >= 4 && npdisp.isWin9x) {
+			if (lpDrawModeAddr) stretchMode = npdisp_readMemory16(lpDrawModeAddr + 36); // Win9x StretchBltModeを読む
+		}
 	}
 	else {
 		TRACEOUT_BITBLT(("BitBlt MEM -> MEM DEST X:%d Y:%d W:%d H:%d, rop:%08x", wDestX, wDestY, wDestXext, wDestYext, Rop3));
@@ -693,7 +713,7 @@ UINT16 npdisp_func_StretchBlt_MEMtoMEM(int hasDstDev, int hasSrcDev, UINT32 lpDe
 		if (lpSrcDevAddr) {
 			NPDISP_PBITMAP_EXT srcPBmp;
 			if (npdisp_readPBitmap(&srcPBmp, lpSrcDevAddr)) {
-				if (!isStretch || srcPBmp.bmBitsPixel != 1) {
+				if (!isStretch || srcPBmp.bmBitsPixel != 1 || npdisp.isWin9x) {
 					npdisp_PreloadBitmapFromPBITMAP(&srcPBmp, 0, srcBeginLine, srcNumLines, srcBeginX, srcCopyWidth);
 					npdisp_PreloadBitmapFromPBITMAP(&dstPBmp, 1, dstBeginLine, dstNumLines, dstBeginX, dstCopyWidth);
 					NPDISP_WINDOWS_BMPHDC srcbmphdc = { 0 };
@@ -812,11 +832,11 @@ UINT16 npdisp_func_StretchBlt_MEMtoMEM(int hasDstDev, int hasSrcDev, UINT32 lpDe
 
 							if (hRgn) SelectClipRgn(dstbmphdc.hdc, hRgn);
 							if (hasDrawMode && drawMode.bkMode == 4) { // TRANSPARENT1
-								SetStretchBltMode(npdispwin.hdc, COLORONCOLOR);
+								SetStretchBltMode(npdispwin.hdc, stretchMode);
 								TransparentBlt(dstbmphdc.hdc, wDestX, wDestY, wDestXext, wDestYext, srcHDC, wSrcX, wSrcY, wSrcXext, wSrcYext, drawMode.LbkColor);
 							}
 							else if (isStretch) {
-								SetStretchBltMode(dstbmphdc.hdc, COLORONCOLOR);
+								SetStretchBltMode(dstbmphdc.hdc, stretchMode);
 								StretchBlt(dstbmphdc.hdc, wDestX, wDestY, wDestXext, wDestYext, srcHDC, wSrcX, wSrcY, wSrcXext, wSrcYext, Rop3);
 							}
 							else {
@@ -837,13 +857,6 @@ UINT16 npdisp_func_StretchBlt_MEMtoMEM(int hasDstDev, int hasSrcDev, UINT32 lpDe
 #endif
 								{
 									BitBlt(dstbmphdc.hdc, wDestX, wDestY, wDestXext, wDestYext, srcHDC, wSrcX, wSrcY, Rop3);
-									//if (wDestXext == 8 && wDestXext == 8 && srcPBmp.bmBitsPixel == 1) {
-									//	//SetBkColor(npdispwin.hdc, drawMode.LbkColor);
-									//	//SetTextColor(npdispwin.hdc, drawMode.LTextColor);
-									//	//SetBkMode(npdispwin.hdc, drawMode.bkMode);
-									//	//SetROP2(npdispwin.hdc, drawMode.Rop2);
-									//	BitBlt(npdispwin.hdc, 0, 0, wDestXext, wDestYext, dstbmphdc.hdc, wDestX, wDestY, Rop3);
-									//}
 								}
 							}
 							if (hRgn) SelectClipRgn(dstbmphdc.hdc, NULL);

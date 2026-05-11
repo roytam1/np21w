@@ -156,8 +156,10 @@
 #define NPDISP_BRUSH_HATCH_CROSS		4
 #define NPDISP_BRUSH_HATCH_DIAGCROSS	5
 
-#define NPDISP_PBITMAPKEY_XOR		0xa659
-#define NPDISP_PBITMAPKEY_XOR_MASK	0x3fff
+#define NPDISP_DBB_SET 1
+#define NPDISP_DBB_GET 2
+#define NPDISP_DBB_COPY 4
+#define NPDISP_DBB_SETWITHFILLER 8
 
 #define NPDISP_QDI_SETDIBITS                1
 #define NPDISP_QDI_GETDIBITS                2
@@ -209,6 +211,7 @@ extern "C" {
 				UINT16 width;
 				UINT16 height;
 				UINT16 bpp;
+				UINT16 isWin9x;
 			} init;
 			struct
 			{
@@ -753,6 +756,13 @@ extern "C" {
 		SINT16 dvmXRes;
 		SINT16 dvmYRes;
 	} NPDISP_DISPVALMODE;
+
+	typedef struct
+	{
+		long version;
+		long driverVersion;
+		char dllName[262];
+	} NPDISP_OPENGL_INFO;
 
 
 	// ***** DirectDraw Support

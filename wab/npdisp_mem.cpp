@@ -713,7 +713,7 @@ void npdisp_PreloadBitmapFromPBITMAP(NPDISP_PBITMAP_EXT* srcPBmp, int dcIdx, int
 				lpbiLen = sizeof(BITMAPINFOHEADER) + sizeof(RGBQUAD) * (1 << (biHeader.biBitCount));
 			}
 		}
-		else if ((biHeader.biBitCount == 15 || biHeader.biBitCount == 16) && biHeader.biCompression == BI_BITFIELDS) {
+		else if ((biHeader.biBitCount == 15 || biHeader.biBitCount == 16 || biHeader.biBitCount == 32) && biHeader.biCompression == BI_BITFIELDS) {
 			// ビットフィールド
 			lpbiLen = sizeof(BITMAPINFOHEADER) + sizeof(RGBQUAD) * 3;
 		}
@@ -894,7 +894,7 @@ int npdisp_MakeBitmapFromPBITMAP(NPDISP_PBITMAP_EXT* srcPBmp, NPDISP_WINDOWS_BMP
 				lpbiLen = sizeof(BITMAPINFOHEADER) + sizeof(RGBQUAD) * (1 << (biHeader.biBitCount));
 			}
 		}
-		else if ((biHeader.biBitCount == 15 || biHeader.biBitCount == 16) && biHeader.biCompression == BI_BITFIELDS) {
+		else if ((biHeader.biBitCount == 15 || biHeader.biBitCount == 16 || biHeader.biBitCount == 32) && biHeader.biCompression == BI_BITFIELDS) {
 			// ビットフィールド
 			lpbiLen = sizeof(BITMAPINFOHEADER) + sizeof(RGBQUAD) * 3;
 		}

@@ -418,6 +418,24 @@ void npdisp_AdjustDrawModeColor(NPDISP_DRAWMODE* drawMode, bool use24buf) {
 		drawMode->LTextColor = npdisp_AdjustRGB565(drawMode->TextColor, use24buf);
 		drawMode->LbkColor = npdisp_AdjustRGB565(drawMode->bkColor, use24buf);
 	}
+	else if (npdisp.bpp == 24) {
+		//// 仮想パレット色が渡されたら256色扱いで変換
+		//if ((drawMode->LTextColor & 0xff000000) == 0x01000000) {
+		//	int idx = drawMode->LTextColor & 0xff;
+		//	drawMode->LTextColor = ((UINT32)npdisp_palette_rgb256[idx].r) | ((UINT32)npdisp_palette_rgb256[idx].g << 8) | ((UINT32)npdisp_palette_rgb256[idx].b << 16);
+		//}
+		//if ((drawMode->LbkColor & 0xff000000) == 0x01000000) {
+		//	int idx = drawMode->LbkColor & 0xff;
+		//	drawMode->LbkColor = ((UINT32)npdisp_palette_rgb256[idx].r) | ((UINT32)npdisp_palette_rgb256[idx].g << 8) | ((UINT32)npdisp_palette_rgb256[idx].b << 16);
+		//}
+		// XXX: パレット色が渡されたらTextColorやbkColorを素通し
+		if ((drawMode->LTextColor & 0xff000000) == 0x01000000) {
+			drawMode->LTextColor = drawMode->TextColor;
+		}
+		if ((drawMode->LbkColor & 0xff000000) == 0x01000000) {
+			drawMode->LbkColor = drawMode->bkColor;
+		}
+	}
 }
 void npdisp_AdjustSrcMonoPaletteByDrawMode(NPDISP_WINDOWS_BMPHDC* bmpHdcSrc, NPDISP_WINDOWS_BMPHDC* bmpHdcDst, NPDISP_DRAWMODE* drawMode) {
 	if (bmpHdcSrc->lpbi->bmiHeader.biBitCount == 1 && (bmpHdcDst && bmpHdcDst->lpbi->bmiHeader.biBitCount != 1 || !bmpHdcDst && npdisp.bpp != 1)) {

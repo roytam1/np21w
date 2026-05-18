@@ -1033,8 +1033,27 @@ extern "C" {
 
 	typedef struct {
 		BITMAPINFOHEADER bmiHeader;
+		RGBQUAD          bmiColors[2];
+	} BITMAPINFO_1BPP;
+	typedef struct {
+		BITMAPINFOHEADER bmiHeader;
+		RGBQUAD          bmiColors[16];
+	} BITMAPINFO_4BPP;
+	typedef struct {
+		BITMAPINFOHEADER bmiHeader;
 		RGBQUAD          bmiColors[256];
 	} BITMAPINFO_8BPP;
+	typedef struct {
+		BITMAPINFOHEADER bmiHeader;
+		RGBQUAD          bmiColors[3];
+	} BITMAPINFO_16BPP;
+	typedef struct {
+		BITMAPINFOHEADER bmiHeader;
+	} BITMAPINFO_24BPP;
+	typedef struct {
+		BITMAPINFOHEADER bmiHeader;
+		RGBQUAD          bmiColors[3];
+	} BITMAPINFO_32BPP;
 
 	typedef struct {
 		BITMAPINFOHEADER biHeader;
@@ -1127,6 +1146,19 @@ extern "C" {
 
 	} NPDISP_WINDOWS;
 
+	typedef struct {
+		UINT32 funcId;
+
+		std::vector<UINT8> npdisp_memread_buf; // リクエストされてから読み込み完了しているデータを表す
+		UINT32 npdisp_memwrite_bufwpos; // リクエストされてから書き込み完了している位置を表す
+
+		UINT32 npdisp_memread_curpos; // リクエストされてからのデータ読み取りバイト数
+		UINT32 npdisp_memread_preloadcount; // データプリロードバイト数
+		UINT32 npdisp_memwrite_curpos; // リクエストされてからのデータ書き込みバイト数
+
+		UINT32 last_npdisp_memread_bufsize;
+		UINT32 last_npdisp_memwrite_bufwpos;
+	} NPDISP_MEMCACHE;
 #pragma pack(pop)
 
 

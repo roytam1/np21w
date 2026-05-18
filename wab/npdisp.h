@@ -45,6 +45,8 @@ extern "C" {
 		UINT32  cursorBpp; // カーソルbpp (0の場合はモノクロ1bpp扱い)
 
 		UINT8	isWin9x;
+
+		int longjmpnum_nonfast;
 	} NPDISP;
 
 	extern NPDISP		npdisp;

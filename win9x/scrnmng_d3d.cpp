@@ -987,10 +987,10 @@ BRESULT scrnmngD3D_create(UINT8 scrnmode) {
 
 #ifdef SUPPORT_WAB
 		//if(!np2wabwnd.multiwindow && (np2wab.relay&0x3)!=0 && np2wab.realWidth>=640 && np2wab.realHeight>=400){
-		if(!np2wabwnd.multiwindow && (np2wab.relay&0x3)!=0 && scrnstat.width>=640 && scrnstat.height>=400){
+		if(!np2wabwnd.multiwindow && (np2wab.relay&0x3)!=0 && (scrnstat.width>=640 || scrnstat.height>=400)){
 			// é¿ÉTÉCÉYÇ…
-			width = wabwidth = bufwidth = scrnstat.width;//np2wab.realWidth;
-			height = wabheight = bufheight = scrnstat.height;//np2wab.realHeight;
+			width = wabwidth = bufwidth = max(scrnstat.width, 640);//np2wab.realWidth;
+			height = wabheight = bufheight = max(scrnstat.height, 400);//np2wab.realHeight;
 			if (scrnmode & SCRNMODE_ROTATE) {
 				wabwidth = bufwidth = scrnstat.height;
 				wabheight = bufheight = scrnstat.width;

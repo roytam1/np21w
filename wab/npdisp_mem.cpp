@@ -85,12 +85,26 @@ static void trace_fmt_exF(const char* fmt, ...)
 #define	TRACEOUT10(s)	(void)s
 #endif	/* 1 */
 
-static std::vector<UINT8> npdisp_memread_buf; // リクエストされてから読み込み完了しているデータを表す
-static UINT32 npdisp_memwrite_bufwpos = 0; // リクエストされてから書き込み完了している位置を表す
+#if 0
+static void trace_fmt_exM(const char* fmt, ...)
+{
+	char stmp[2048];
+	va_list ap;
+	va_start(ap, fmt);
+	vsprintf(stmp, fmt, ap);
+	strcat(stmp, "\n");
+	va_end(ap);
+	OutputDebugStringA(stmp);
+}
+#define	TRACEOUTM(s)	trace_fmt_exM s
+#else
+#define	TRACEOUTM(s)	(void)s
+#endif	/* 1 */
 
-static UINT32 npdisp_memread_curpos = 0; // リクエストされてからのデータ読み取りバイト数
-static UINT32 npdisp_memread_preloadcount = 0; // データプリロードバイト数
-static UINT32 npdisp_memwrite_curpos = 0; // リクエストされてからのデータ書き込みバイト数
+static std::map<UINT32, NPDISP_MEMCACHE> npdisp_memcaches;
+
+static NPDISP_MEMCACHE npdisp_common_memcache = { 0 };
+static NPDISP_MEMCACHE* npdisp_current_memcache = &npdisp_common_memcache;
 
 static UINT16 npdisp_selector_cache = 0; // 最後に使用したセレクタ
 static UINT32 npdisp_seg_cache = 0; // 最後に使用したセレクタに対応するセグメント
@@ -99,8 +113,48 @@ static UINT32 npdisp_exception_eip = 0; // 例外発生時のEIPレジスタ
 
 static sigjmp_buf npdisp_jmpbuf_bak; // 例外発生の捕捉用jmpbuf
 
-static UINT32 last_npdisp_memread_bufsize;
-static UINT32 last_npdisp_memwrite_bufwpos;
+/// <summary>
+/// 先読みバッファの関数番号を指定　関数番号単位で独立なバッファを使用できる
+/// </summary>
+/// <param name="funcId">関数番号</param>
+void npdisp_memory_setFunctionId(int funcId)
+{
+	if (funcId == 0) {
+		// 共用バッファ
+		npdisp_current_memcache = &npdisp_common_memcache;
+	}
+	else {
+		// 関数毎バッファ
+		auto it = npdisp_memcaches.find(funcId);
+		if (it != npdisp_memcaches.end()) {
+			npdisp_current_memcache = &(it->second);
+		}
+		else {
+			NPDISP_MEMCACHE memcache = { 0 };
+			memcache.funcId = funcId;
+			npdisp_memcaches[funcId] = memcache;
+			npdisp_current_memcache = &(npdisp_memcaches[funcId]);
+		}
+	}
+}
+
+/// <summary>
+/// 全関数の先読みバッファや例外フラグ等を全てクリアする
+/// </summary>
+void npdisp_memory_clearallpreload()
+{
+	npdisp.longjmpnum = 0;
+
+	npdisp_memcaches.clear();
+	npdisp_common_memcache.npdisp_memwrite_bufwpos = 0;
+	npdisp_common_memcache.npdisp_memread_buf.clear();
+	npdisp_common_memcache.npdisp_memread_curpos = 0;
+	npdisp_common_memcache.npdisp_memwrite_curpos = 0;
+	npdisp_common_memcache.npdisp_memread_preloadcount = 0;
+	npdisp_current_memcache = &npdisp_common_memcache;
+
+	npdisp_memory_resetposition();
+}
 
 /// <summary>
 /// 先読みバッファや例外フラグ等を全てクリアする
@@ -108,9 +162,18 @@ static UINT32 last_npdisp_memwrite_bufwpos;
 void npdisp_memory_clearpreload()
 {
 	npdisp.longjmpnum = 0;
-	npdisp_memwrite_bufwpos = 0;
-	npdisp_memread_buf.clear();
-	
+
+	if (npdisp_current_memcache) {
+		npdisp_current_memcache->npdisp_memwrite_bufwpos = 0;
+		npdisp_current_memcache->npdisp_memread_buf.clear();
+		npdisp_current_memcache->npdisp_memread_curpos = 0;
+		npdisp_current_memcache->npdisp_memwrite_curpos = 0;
+		npdisp_current_memcache->npdisp_memread_preloadcount = 0;
+	}
+	if (npdisp_current_memcache == &npdisp_common_memcache) {
+		npdisp.longjmpnum_nonfast = 0;
+	}
+
 	npdisp_memory_resetposition();
 }
 /// <summary>
@@ -120,36 +183,45 @@ void npdisp_memory_resetposition()
 {
 	npdisp_exception_eip = CPU_EIP;
 	npdisp.longjmpnum = 0;
-	npdisp_memread_curpos = 0;
-	npdisp_memwrite_curpos = 0;
-	npdisp_memread_preloadcount = 0;
 	npdisp_selector_cache = 0;
 	npdisp_seg_cache = 0;
 
-	// バッファのサイズを先に取得しておく データ読み書きが進んでいるかの確認用
-	last_npdisp_memread_bufsize = npdisp_memread_buf.size();
-	last_npdisp_memwrite_bufwpos = npdisp_memwrite_bufwpos;
+	if (npdisp_current_memcache) {
+		npdisp_current_memcache->npdisp_memread_curpos = 0;
+		npdisp_current_memcache->npdisp_memwrite_curpos = 0;
+		npdisp_current_memcache->npdisp_memread_preloadcount = 0;
+
+		// バッファのサイズを先に取得しておく データ読み書きが進んでいるかの確認用
+		npdisp_current_memcache->last_npdisp_memread_bufsize = npdisp_current_memcache->npdisp_memread_buf.size();
+		npdisp_current_memcache->last_npdisp_memwrite_bufwpos = npdisp_current_memcache->npdisp_memwrite_bufwpos;
+	}
+	if (npdisp_current_memcache == &npdisp_common_memcache) {
+		npdisp.longjmpnum_nonfast = 0;
+	}
 }
 /// <summary>
 /// 前回のnpdisp_memory_resetposition実行時から新たなデータ読み書きがあった場合は0以外を返す
 /// </summary>
 int npdisp_memory_hasNewCacheData()
 {
-	return last_npdisp_memread_bufsize != npdisp_memread_buf.size() || last_npdisp_memwrite_bufwpos != npdisp_memwrite_bufwpos;
+	if (!npdisp_current_memcache) return 0;
+	return npdisp_current_memcache->last_npdisp_memread_bufsize != npdisp_current_memcache->npdisp_memread_buf.size() || npdisp_current_memcache->last_npdisp_memwrite_bufwpos != npdisp_current_memcache->npdisp_memwrite_bufwpos;
 }
 /// <summary>
 /// バッファの読み取りデータサイズを返す
 /// </summary>
 int npdisp_memory_getTotalReadSize()
 {
-	return npdisp_memread_buf.size();
+	if (!npdisp_current_memcache) return 0;
+	return npdisp_current_memcache->npdisp_memread_buf.size();
 }
 /// <summary>
 /// バッファの書き込みデータサイズを返す
 /// </summary>
 int npdisp_memory_getTotalWriteSize()
 {
-	return npdisp_memwrite_bufwpos;
+	if (!npdisp_current_memcache) return 0;
+	return npdisp_current_memcache->npdisp_memwrite_bufwpos;
 }
 /// <summary>
 /// 読み取り開始時のEIPレジスタを返す
@@ -213,11 +285,11 @@ static int npdisp_preloadLMemory(UINT32 vaddr, UINT32 size)
 	npdisp.longjmpnum = sigsetjmp(exec_1step_jmpbuf, 1); // 新しい位置にセット
 	if (npdisp.longjmpnum == 0) {
 		// 既に読み取り済みの範囲ならそれを返す
-		if (npdisp_memread_curpos + npdisp_memread_preloadcount < npdisp_memread_buf.size()) {
-			UINT32 mrsize = min(readsize, npdisp_memread_buf.size() - (npdisp_memread_curpos + npdisp_memread_preloadcount));
+		if (npdisp_current_memcache->npdisp_memread_curpos + npdisp_current_memcache->npdisp_memread_preloadcount < npdisp_current_memcache->npdisp_memread_buf.size()) {
+			UINT32 mrsize = min(readsize, npdisp_current_memcache->npdisp_memread_buf.size() - (npdisp_current_memcache->npdisp_memread_curpos + npdisp_current_memcache->npdisp_memread_preloadcount));
 			readsize -= mrsize;
 			readaddr += mrsize;
-			npdisp_memread_preloadcount += mrsize;
+			npdisp_current_memcache->npdisp_memread_preloadcount += mrsize;
 		}
 
 		// ページ単位で読みとり
@@ -225,10 +297,10 @@ static int npdisp_preloadLMemory(UINT32 vaddr, UINT32 size)
 			UINT32 inPageSize = CPU_PAGE_SIZE - (readaddr & CPU_PAGE_MASK);
 			inPageSize = min(inPageSize, readsize);
 			cpu_lmemoryreads(readaddr, npdisp_memBuf, inPageSize, CPU_PAGE_READ_DATA | CPU_MODE_SUPERVISER);
-			npdisp_memread_buf.insert(npdisp_memread_buf.end(), npdisp_memBuf, npdisp_memBuf + inPageSize);
+			npdisp_current_memcache->npdisp_memread_buf.insert(npdisp_current_memcache->npdisp_memread_buf.end(), npdisp_memBuf, npdisp_memBuf + inPageSize);
 			readsize -= inPageSize;
 			readaddr += inPageSize;
-			npdisp_memread_preloadcount += inPageSize;
+			npdisp_current_memcache->npdisp_memread_preloadcount += inPageSize;
 		}
 	}
 	else {
@@ -253,14 +325,14 @@ static int npdisp_preloadAndReadLMemory(UINT32 vaddr, void* buffer, UINT32 size)
 	npdisp.longjmpnum = sigsetjmp(exec_1step_jmpbuf, 1); // 新しい位置にセット
 	if (npdisp.longjmpnum == 0) {
 		// 既に読み取り済みの範囲ならそれを返す
-		if (npdisp_memread_curpos + npdisp_memread_preloadcount < npdisp_memread_buf.size()) {
-			UINT32 mrsize = min(readsize, npdisp_memread_buf.size() - (npdisp_memread_curpos + npdisp_memread_preloadcount));
-			*readptr = npdisp_memread_buf[npdisp_memread_curpos + npdisp_memread_preloadcount];
-			memcpy(readptr, &npdisp_memread_buf[npdisp_memread_curpos + npdisp_memread_preloadcount], mrsize);
+		if (npdisp_current_memcache->npdisp_memread_curpos + npdisp_current_memcache->npdisp_memread_preloadcount < npdisp_current_memcache->npdisp_memread_buf.size()) {
+			UINT32 mrsize = min(readsize, npdisp_current_memcache->npdisp_memread_buf.size() - (npdisp_current_memcache->npdisp_memread_curpos + npdisp_current_memcache->npdisp_memread_preloadcount));
+			*readptr = npdisp_current_memcache->npdisp_memread_buf[npdisp_current_memcache->npdisp_memread_curpos + npdisp_current_memcache->npdisp_memread_preloadcount];
+			memcpy(readptr, &npdisp_current_memcache->npdisp_memread_buf[npdisp_current_memcache->npdisp_memread_curpos + npdisp_current_memcache->npdisp_memread_preloadcount], mrsize);
 			readsize -= mrsize;
 			readptr += mrsize;
 			readaddr += mrsize;
-			npdisp_memread_preloadcount += mrsize;
+			npdisp_current_memcache->npdisp_memread_preloadcount += mrsize;
 		}
 
 		// ページ単位で読みとり
@@ -268,11 +340,11 @@ static int npdisp_preloadAndReadLMemory(UINT32 vaddr, void* buffer, UINT32 size)
 			UINT32 inPageSize = CPU_PAGE_SIZE - (readaddr & CPU_PAGE_MASK);
 			inPageSize = min(inPageSize, readsize);
 			cpu_lmemoryreads(readaddr, readptr, inPageSize, CPU_PAGE_READ_DATA | CPU_MODE_SUPERVISER);
-			npdisp_memread_buf.insert(npdisp_memread_buf.end(), readptr, readptr + inPageSize);
+			npdisp_current_memcache->npdisp_memread_buf.insert(npdisp_current_memcache->npdisp_memread_buf.end(), readptr, readptr + inPageSize);
 			readsize -= inPageSize;
 			readptr += inPageSize;
 			readaddr += inPageSize;
-			npdisp_memread_preloadcount += inPageSize;
+			npdisp_current_memcache->npdisp_memread_preloadcount += inPageSize;
 		}
 	}
 	else {
@@ -290,7 +362,7 @@ static int npdisp_preloadAndReadLMemory(UINT32 vaddr, void* buffer, UINT32 size)
 /// <returns>成功は0以外、ページフォールトが発生した場合は0を返す</returns>
 static int npdisp_readLMemory(UINT32 vaddr, void* buffer, UINT32 size)
 {
-	int inCurPos = npdisp_memread_curpos;
+	int inCurPos = npdisp_current_memcache->npdisp_memread_curpos;
 	UINT32 readaddr = vaddr;
 	UINT32 readsize = size;
 	UINT8* readptr = (UINT8*)buffer;
@@ -299,19 +371,19 @@ static int npdisp_readLMemory(UINT32 vaddr, void* buffer, UINT32 size)
 	npdisp.longjmpnum = sigsetjmp(exec_1step_jmpbuf, 1); // 新しい位置にセット
 	if (npdisp.longjmpnum == 0) {
 		// 既に読み取り済みの範囲ならそれを返す
-		if (npdisp_memread_curpos < npdisp_memread_buf.size()) {
-			UINT32 mrsize = min(readsize, npdisp_memread_buf.size() - npdisp_memread_curpos);
-			*readptr = npdisp_memread_buf[npdisp_memread_curpos];
-			memcpy(readptr, &npdisp_memread_buf[npdisp_memread_curpos], mrsize);
+		if (npdisp_current_memcache->npdisp_memread_curpos < npdisp_current_memcache->npdisp_memread_buf.size()) {
+			UINT32 mrsize = min(readsize, npdisp_current_memcache->npdisp_memread_buf.size() - npdisp_current_memcache->npdisp_memread_curpos);
+			*readptr = npdisp_current_memcache->npdisp_memread_buf[npdisp_current_memcache->npdisp_memread_curpos];
+			memcpy(readptr, &npdisp_current_memcache->npdisp_memread_buf[npdisp_current_memcache->npdisp_memread_curpos], mrsize);
 			readsize -= mrsize;
 			readptr += mrsize;
 			readaddr += mrsize;
-			npdisp_memread_curpos += mrsize;
-			if (npdisp_memread_preloadcount >= mrsize) {
-				npdisp_memread_preloadcount -= mrsize;
+			npdisp_current_memcache->npdisp_memread_curpos += mrsize;
+			if (npdisp_current_memcache->npdisp_memread_preloadcount >= mrsize) {
+				npdisp_current_memcache->npdisp_memread_preloadcount -= mrsize;
 			}
 			else {
-				npdisp_memread_preloadcount = 0;
+				npdisp_current_memcache->npdisp_memread_preloadcount = 0;
 			}
 		}
 
@@ -320,16 +392,16 @@ static int npdisp_readLMemory(UINT32 vaddr, void* buffer, UINT32 size)
 			UINT32 inPageSize = CPU_PAGE_SIZE - (readaddr & CPU_PAGE_MASK);
 			inPageSize = min(inPageSize, readsize);
 			cpu_lmemoryreads(readaddr, readptr, inPageSize, CPU_PAGE_READ_DATA | CPU_MODE_SUPERVISER);
-			npdisp_memread_buf.insert(npdisp_memread_buf.end(), readptr, readptr + inPageSize);
-			npdisp_memread_curpos += inPageSize;
+			npdisp_current_memcache->npdisp_memread_buf.insert(npdisp_current_memcache->npdisp_memread_buf.end(), readptr, readptr + inPageSize);
+			npdisp_current_memcache->npdisp_memread_curpos += inPageSize;
 			readsize -= inPageSize;
 			readptr += inPageSize;
 			readaddr += inPageSize;
-			if (npdisp_memread_preloadcount > inPageSize) {
-				npdisp_memread_preloadcount -= inPageSize;
+			if (npdisp_current_memcache->npdisp_memread_preloadcount > inPageSize) {
+				npdisp_current_memcache->npdisp_memread_preloadcount -= inPageSize;
 			}
 			else {
-				npdisp_memread_preloadcount = 0;
+				npdisp_current_memcache->npdisp_memread_preloadcount = 0;
 			}
 		}
 	}
@@ -356,25 +428,25 @@ static int npdisp_writeLMemory(UINT32 vaddr, void* buffer, UINT32 size)
 	npdisp.longjmpnum = sigsetjmp(exec_1step_jmpbuf, 1); // 新しい位置にセット
 	if (npdisp.longjmpnum == 0) {
 		// 既に書き込み済みの範囲ならスキップ
-		UINT32 wnsize = npdisp_memwrite_bufwpos - npdisp_memwrite_curpos;
+		UINT32 wnsize = npdisp_current_memcache->npdisp_memwrite_bufwpos - npdisp_current_memcache->npdisp_memwrite_curpos;
 		if (wnsize >= size) {
 			// 全部書き込み済み
-			npdisp_memwrite_curpos += size;
+			npdisp_current_memcache->npdisp_memwrite_curpos += size;
 		}
 		else {
 			// 書き込み済み分があればスキップ
 			writesize -= wnsize;
 			writeptr += wnsize;
 			writeaddr += wnsize;
-			npdisp_memwrite_curpos += wnsize;
+			npdisp_current_memcache->npdisp_memwrite_curpos += wnsize;
 
 			// ページ単位で書き込み
 			while (writesize > 0) {
 				UINT32 inPageSize = CPU_PAGE_SIZE - (writeaddr & CPU_PAGE_MASK);
 				inPageSize = min(inPageSize, writesize);
 				cpu_lmemorywrites(writeaddr, writeptr, inPageSize, CPU_PAGE_WRITE_DATA | CPU_MODE_SUPERVISER);
-				npdisp_memwrite_bufwpos += inPageSize;
-				npdisp_memwrite_curpos += inPageSize;
+				npdisp_current_memcache->npdisp_memwrite_bufwpos += inPageSize;
+				npdisp_current_memcache->npdisp_memwrite_curpos += inPageSize;
 				writesize -= inPageSize;
 				writeptr += inPageSize;
 				writeaddr += inPageSize;
@@ -395,10 +467,10 @@ int npdisp_preloadAndReadMemoryWith32Offset(void* dst, UINT16 selector, UINT32 o
 	if (!selector) return 0;
 	if (npdisp.longjmpnum) return 0;
 	// 既に読み取り済みの範囲ならそれを返す
-	if (npdisp_memread_buf.size() - (int)(npdisp_memread_curpos + npdisp_memread_preloadcount) >= size) {
+	if (npdisp_current_memcache->npdisp_memread_buf.size() - (int)(npdisp_current_memcache->npdisp_memread_curpos + npdisp_current_memcache->npdisp_memread_preloadcount) >= size) {
 		UINT8* readptr = (UINT8*)dst;
-		memcpy(readptr, &(npdisp_memread_buf[npdisp_memread_curpos + npdisp_memread_preloadcount]), size);
-		npdisp_memread_preloadcount += size;
+		memcpy(readptr, &(npdisp_current_memcache->npdisp_memread_buf[npdisp_current_memcache->npdisp_memread_curpos + npdisp_current_memcache->npdisp_memread_preloadcount]), size);
+		npdisp_current_memcache->npdisp_memread_preloadcount += size;
 		return !npdisp.longjmpnum;
 	}
 	if (selector_to_linear(seg, offset, &linearAddr)) { // offsetを32bitで扱う
@@ -414,10 +486,10 @@ int npdisp_preloadAndReadMemory(void* dst, UINT32 lpAddr, int size)
 	if (!lpAddr) return 0;
 	if (npdisp.longjmpnum) return 0;
 	// 既に読み取り済みの範囲ならそれを返す
-	if (npdisp_memread_buf.size() - (int)(npdisp_memread_curpos + npdisp_memread_preloadcount) >= size) {
+	if (npdisp_current_memcache->npdisp_memread_buf.size() - (int)(npdisp_current_memcache->npdisp_memread_curpos + npdisp_current_memcache->npdisp_memread_preloadcount) >= size) {
 		UINT8* readptr = (UINT8*)dst;
-		memcpy(readptr, &(npdisp_memread_buf[npdisp_memread_curpos + npdisp_memread_preloadcount]), size);
-		npdisp_memread_preloadcount += size;
+		memcpy(readptr, &(npdisp_current_memcache->npdisp_memread_buf[npdisp_current_memcache->npdisp_memread_curpos + npdisp_current_memcache->npdisp_memread_preloadcount]), size);
+		npdisp_current_memcache->npdisp_memread_preloadcount += size;
 		return !npdisp.longjmpnum;
 	}
 	if (selector_to_linear(seg, ofs, &linearAddr)) {
@@ -432,8 +504,8 @@ int npdisp_preloadMemoryWith32Offset(UINT16 selector, UINT32 offset, int size)
 	if (!selector) return 0;
 	if (npdisp.longjmpnum) return 0;
 	// 既に読み取り済みの範囲ならそれを返す
-	if (npdisp_memread_buf.size() - (int)(npdisp_memread_curpos + npdisp_memread_preloadcount) >= size) {
-		npdisp_memread_preloadcount += size;
+	if (npdisp_current_memcache->npdisp_memread_buf.size() - (int)(npdisp_current_memcache->npdisp_memread_curpos + npdisp_current_memcache->npdisp_memread_preloadcount) >= size) {
+		npdisp_current_memcache->npdisp_memread_preloadcount += size;
 		return !npdisp.longjmpnum;
 	}
 	if (selector_to_linear(seg, offset, &linearAddr)) { // offsetを32bitで扱う
@@ -449,8 +521,8 @@ int npdisp_preloadMemory(UINT32 lpAddr, int size)
 	if (!lpAddr) return 0;
 	if (npdisp.longjmpnum) return 0;
 	// 既に読み取り済みの範囲ならそれを返す
-	if (npdisp_memread_buf.size() - (int)(npdisp_memread_curpos + npdisp_memread_preloadcount) >= size) {
-		npdisp_memread_preloadcount += size;
+	if (npdisp_current_memcache->npdisp_memread_buf.size() - (int)(npdisp_current_memcache->npdisp_memread_curpos + npdisp_current_memcache->npdisp_memread_preloadcount) >= size) {
+		npdisp_current_memcache->npdisp_memread_preloadcount += size;
 		return !npdisp.longjmpnum;
 	}
 	if (selector_to_linear(seg, ofs, &linearAddr)) {
@@ -465,15 +537,15 @@ int npdisp_readMemoryWith32Offset(void* dst, UINT16 selector, UINT32 offset, int
 	if (!selector) return 0;
 	if (npdisp.longjmpnum) return 0;
 	// 既に読み取り済みの範囲ならそれを返す
-	if (npdisp_memread_buf.size() - (int)npdisp_memread_curpos >= size) {
+	if (npdisp_current_memcache->npdisp_memread_buf.size() - (int)npdisp_current_memcache->npdisp_memread_curpos >= size) {
 		UINT8* readptr = (UINT8*)dst;
-		memcpy(readptr, &(npdisp_memread_buf[npdisp_memread_curpos]), size);
-		npdisp_memread_curpos += size;
-		if (npdisp_memread_preloadcount > size) {
-			npdisp_memread_preloadcount -= size;
+		memcpy(readptr, &(npdisp_current_memcache->npdisp_memread_buf[npdisp_current_memcache->npdisp_memread_curpos]), size);
+		npdisp_current_memcache->npdisp_memread_curpos += size;
+		if (npdisp_current_memcache->npdisp_memread_preloadcount > size) {
+			npdisp_current_memcache->npdisp_memread_preloadcount -= size;
 		}
 		else {
-			npdisp_memread_preloadcount = 0;
+			npdisp_current_memcache->npdisp_memread_preloadcount = 0;
 		}
 		return !npdisp.longjmpnum;
 	}
@@ -490,15 +562,15 @@ int npdisp_readMemory(void* dst, UINT32 lpAddr, int size)
 	if (!lpAddr) return 0;
 	if (npdisp.longjmpnum) return 0;
 	// 既に読み取り済みの範囲ならそれを返す
-	if (npdisp_memread_buf.size() - (int)npdisp_memread_curpos >= size) {
+	if (npdisp_current_memcache->npdisp_memread_buf.size() - (int)npdisp_current_memcache->npdisp_memread_curpos >= size) {
 		UINT8* readptr = (UINT8*)dst;
-		memcpy(readptr, &(npdisp_memread_buf[npdisp_memread_curpos]), size);
-		npdisp_memread_curpos += size;
-		if (npdisp_memread_preloadcount > size) {
-			npdisp_memread_preloadcount -= size;
+		memcpy(readptr, &(npdisp_current_memcache->npdisp_memread_buf[npdisp_current_memcache->npdisp_memread_curpos]), size);
+		npdisp_current_memcache->npdisp_memread_curpos += size;
+		if (npdisp_current_memcache->npdisp_memread_preloadcount > size) {
+			npdisp_current_memcache->npdisp_memread_preloadcount -= size;
 		}
 		else {
-			npdisp_memread_preloadcount = 0;
+			npdisp_current_memcache->npdisp_memread_preloadcount = 0;
 		}
 		return !npdisp.longjmpnum;
 	}
@@ -514,8 +586,8 @@ int npdisp_writeMemoryWith32Offset(void* src, UINT16 selector, UINT32 offset, in
 	if (!selector) return 0;
 	if (npdisp.longjmpnum) return 0;
 	// 既に書き込み済みの範囲なら何もしない
-	if ((int)npdisp_memwrite_bufwpos - (int)npdisp_memwrite_curpos >= size) {
-		npdisp_memwrite_curpos += size;
+	if ((int)npdisp_current_memcache->npdisp_memwrite_bufwpos - (int)npdisp_current_memcache->npdisp_memwrite_curpos >= size) {
+		npdisp_current_memcache->npdisp_memwrite_curpos += size;
 		return !npdisp.longjmpnum;
 	}
 	if (selector_to_linear(seg, offset, &linearAddr))
@@ -532,8 +604,8 @@ int npdisp_writeMemory(void* src, UINT32 lpAddr, int size)
 	if (!lpAddr) return 0;
 	if (npdisp.longjmpnum) return 0;
 	// 既に書き込み済みの範囲なら何もしない
-	if ((int)npdisp_memwrite_bufwpos - (int)npdisp_memwrite_curpos >= size) {
-		npdisp_memwrite_curpos += size;
+	if ((int)npdisp_current_memcache->npdisp_memwrite_bufwpos - (int)npdisp_current_memcache->npdisp_memwrite_curpos >= size) {
+		npdisp_current_memcache->npdisp_memwrite_curpos += size;
 		return !npdisp.longjmpnum;
 	}
 	if (selector_to_linear(seg, ofs, &linearAddr)) 

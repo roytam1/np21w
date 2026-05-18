@@ -746,10 +746,10 @@ BRESULT scrnmngDD_create(UINT8 scrnmode) {
 				ddsd.dwWidth = (WAB_MAX_WIDTH > maxx ? maxx : WAB_MAX_WIDTH);
 				ddsd.dwHeight = (WAB_MAX_HEIGHT > maxy ? maxy : WAB_MAX_HEIGHT);
 			}else{
-				if((np2wab.relay&0x3)!=0 && np2wab.realWidth>=640 && np2wab.realHeight>=400){
+				if((np2wab.relay&0x3)!=0 && (np2wab.realWidth>=640 || np2wab.realHeight>=400)){
 					// 実サイズに
-					ddsd.dwWidth = np2wab.realWidth;
-					ddsd.dwHeight = np2wab.realHeight;
+					ddsd.dwWidth = max(np2wab.realWidth, 640);
+					ddsd.dwHeight = max(np2wab.realHeight, 400);
 				}else{
 					ddsd.dwWidth = 640;
 					ddsd.dwHeight = 480;
@@ -844,10 +844,10 @@ BRESULT scrnmngDD_create(UINT8 scrnmode) {
 		ddsd.dwFlags = DDSD_CAPS | DDSD_WIDTH | DDSD_HEIGHT;
 		ddsd.ddsCaps.dwCaps = DDSCAPS_OFFSCREENPLAIN;
 #ifdef SUPPORT_WAB
-		if(!np2wabwnd.multiwindow && (np2wab.relay&0x3)!=0 && np2wab.realWidth>=640 && np2wab.realHeight>=400){
+		if(!np2wabwnd.multiwindow && (np2wab.relay&0x3)!=0 && (np2wab.realWidth>=640 || np2wab.realHeight>=400)){
 			// 実サイズに
-			width = ddsd.dwWidth = scrnstat.width;//np2wab.realWidth;
-			height = ddsd.dwHeight = scrnstat.height;//np2wab.realHeight;
+			width = ddsd.dwWidth = max(scrnstat.width, 640); ;//np2wab.realWidth;
+			height = ddsd.dwHeight = max(scrnstat.height, 400);//np2wab.realHeight;
 			if (scrnmode & SCRNMODE_ROTATE) {
 				ddsd.dwWidth = scrnstat.height;
 				ddsd.dwHeight = scrnstat.width;

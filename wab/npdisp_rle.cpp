@@ -69,12 +69,13 @@ static int map_rle_y_to_memory_row(int y_rle, SINT32 height_abs, int top_down)
     }
 }
 
-int npdisp_DecompressRLEBMP(const BITMAPINFOHEADER* bih, const UINT8* rle_data, int rle_size, UINT8* out_pixels)
+int npdisp_DecompressRLEBMP(const BITMAPINFOHEADER* bih, const UINT8* rle_data, int rle_size, UINT8* out_pixels, UINT8* out_validpixels)
 {
     SINT32 width, height_abs;
     int top_down;
     UINT32 stride, image_size;
     UINT8 *dst;
+    UINT8* dstValid = NULL;
     UINT32 pos = 0;
     int x = 0;
     int y_rle = 0;
@@ -99,6 +100,10 @@ int npdisp_DecompressRLEBMP(const BITMAPINFOHEADER* bih, const UINT8* rle_data, 
 
     dst = out_pixels;
     memset(dst, 0, image_size);
+    if (out_validpixels) {
+        dstValid = out_validpixels;
+        memset(dstValid, 0xff, image_size);
+    }
 
     if (bih->biCompression == BI_RLE8) {
         while (pos + 2 <= rle_size) {
@@ -111,6 +116,9 @@ int npdisp_DecompressRLEBMP(const BITMAPINFOHEADER* bih, const UINT8* rle_data, 
                     if (y_rle >= 0 && y_rle < height_abs) {
                         int y_mem = map_rle_y_to_memory_row(y_rle, height_abs, top_down);
                         put_pixel_8bpp(dst, stride, width, height_abs, x, y_mem, value);
+                        if (dstValid) {
+                            put_pixel_8bpp(dstValid, stride, width, height_abs, x, y_mem, 0);
+                        }
                     }
                     x++;
                 }
@@ -143,6 +151,9 @@ int npdisp_DecompressRLEBMP(const BITMAPINFOHEADER* bih, const UINT8* rle_data, 
                         if (y_rle >= 0 && y_rle < height_abs) {
                             int y_mem = map_rle_y_to_memory_row(y_rle, height_abs, top_down);
                             put_pixel_8bpp(dst, stride, width, height_abs, x, y_mem, px);
+                            if (dstValid) {
+                                put_pixel_8bpp(dstValid, stride, width, height_abs, x, y_mem, 0);
+                            }
                         }
                         x++;
                     }
@@ -169,6 +180,9 @@ int npdisp_DecompressRLEBMP(const BITMAPINFOHEADER* bih, const UINT8* rle_data, 
                     if (y_rle >= 0 && y_rle < height_abs) {
                         int y_mem = map_rle_y_to_memory_row(y_rle, height_abs, top_down);
                         put_pixel_4bpp(dst, stride, width, height_abs, x, y_mem, px);
+                        if (dstValid) {
+                            put_pixel_4bpp(dstValid, stride, width, height_abs, x, y_mem, 0);
+                        }
                     }
                     x++;
                 }
@@ -207,6 +221,9 @@ int npdisp_DecompressRLEBMP(const BITMAPINFOHEADER* bih, const UINT8* rle_data, 
                         if (y_rle >= 0 && y_rle < height_abs) {
                             int y_mem = map_rle_y_to_memory_row(y_rle, height_abs, top_down);
                             put_pixel_4bpp(dst, stride, width, height_abs, x, y_mem, px);
+                            if (dstValid) {
+                                put_pixel_4bpp(dstValid, stride, width, height_abs, x, y_mem, 0);
+                            }
                         }
                         x++;
                     }

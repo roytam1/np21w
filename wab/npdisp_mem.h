@@ -10,6 +10,8 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+	void npdisp_memory_setFunctionId(int funcId);
+	void npdisp_memory_clearallpreload();
 	void npdisp_memory_clearpreload();
 	void npdisp_memory_resetposition();
 	int npdisp_memory_hasNewCacheData();

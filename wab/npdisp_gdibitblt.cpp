@@ -184,6 +184,7 @@ UINT16 npdisp_func_StretchBlt_VRAMtoVRAM(int hasDstDev, int hasSrcDev, UINT32 lp
 	}
 	if (hRgn) SelectClipRgn(npdispwin.hdc, NULL);
 	SelectObject(npdispwin.hdc, npdispwin.hOldBrush);
+	npdisp_setDirty(wDestX, wDestY, wDestX + (wDestXext < 0 ? -wDestXext : wDestXext), wDestY + (wDestYext < 0 ? -wDestYext : wDestYext));
 	npdisp.updated = 1;
 
 	if (hRgn) {
@@ -392,6 +393,7 @@ UINT16 npdisp_func_StretchBlt_MEMtoVRAM(int hasDstDev, int hasSrcDev, UINT32 lpD
 				//}
 
 				SelectObject(npdispwin.hdc, npdispwin.hOldBrush);
+				npdisp_setDirty(wDestX, wDestY, wDestX + (wDestXext < 0 ? -wDestXext : wDestXext), wDestY + (wDestYext < 0 ? -wDestYext : wDestYext));
 				npdisp.updated = 1;
 
 				npdisp_FreeBitmap(&bmphdc);
@@ -443,6 +445,7 @@ UINT16 npdisp_func_StretchBlt_MEMtoVRAM(int hasDstDev, int hasSrcDev, UINT32 lpD
 						}
 						//BitBlt(npdispwin.hdc, wDestX, wDestY, wDestXext, wDestYext, npdispwin.hdc, wDestX, wDestY, Rop3);
 						if (hRgn) SelectClipRgn(npdispwin.hdc, NULL);
+						npdisp_setDirty(wDestX, wDestY, wDestX + (wDestXext < 0 ? -wDestXext : wDestXext), wDestY + (wDestYext < 0 ? -wDestYext : wDestYext));
 						npdisp.updated = 1;
 
 						SelectObject(npdispwin.hdc, npdispwin.hOldBrush);

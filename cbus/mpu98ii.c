@@ -1098,7 +1098,7 @@ REG8 IOINPCALL mpu98ii_i2(UINT port) {
 	if (cm_mpu98 == NULL) {
 		cm_mpu98 = commng_create(COMCREATE_MPU98II, FALSE);
 	}
-	if (cm_mpu98->connect != COMCONNECT_OFF || port == (cs4231.port[10] + 1) || (port & 0xff00) == 0x8100) {
+	if (cm_mpu98->connect != COMCONNECT_OFF || port == (cs4231.port[10] + 1)) {
 		ret = mpu98.status;
 		if ((mpu98.r.cnt == 0) && (mpu98.intreq == 0)) {
 			ret |= MIDIIN_AVAIL;
@@ -1118,6 +1118,9 @@ REG8 IOINPCALL mpu98ii_i2(UINT port) {
 		{
 			return(ret);
 		}
+	}
+	else if ((port & 0xff00) == 0x8100) {
+		return(0x00);
 	}
 	(void)port;
 	return(0xff);

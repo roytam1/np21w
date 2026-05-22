@@ -1144,6 +1144,9 @@ extern "C" {
 		UINT32 bitmapsIdx;
 		std::map<UINT32, NPDISP_HOSTBITMAP> bitmaps;
 
+		RECT dirtyRect;
+		RECT lastCursorRect;
+		bool cursorUpdated;
 	} NPDISP_WINDOWS;
 
 	typedef struct {

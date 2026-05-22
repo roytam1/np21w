@@ -160,6 +160,33 @@ static void npdisp_createScreen(bool resize = false);
 NPDISP npdisp = { 0 };
 NPDISP_WINDOWS npdispwin = { 0 };
 
+void npdisp_setDirty(int x1, int y1, int x2, int y2)
+{
+	if (npdispwin.dirtyRect.left == npdispwin.dirtyRect.right || npdispwin.dirtyRect.top == npdispwin.dirtyRect.bottom) {
+		npdispwin.dirtyRect.left = x1;
+		npdispwin.dirtyRect.top = y1;
+		npdispwin.dirtyRect.right = x2;
+		npdispwin.dirtyRect.bottom = y2;
+	}
+	else {
+		if (npdispwin.dirtyRect.left > x1) npdispwin.dirtyRect.left = x1;
+		if (npdispwin.dirtyRect.top > y1) npdispwin.dirtyRect.top = y1;
+		if (npdispwin.dirtyRect.right < x2) npdispwin.dirtyRect.right = x2;
+		if (npdispwin.dirtyRect.bottom < y2) npdispwin.dirtyRect.bottom = y2;
+	}
+}
+void npdisp_setDirtyAll()
+{
+	npdispwin.dirtyRect.left = 0;
+	npdispwin.dirtyRect.top = 0;
+	npdispwin.dirtyRect.right = npdisp.width;
+	npdispwin.dirtyRect.bottom = npdisp.height;
+}
+void npdisp_resetDirty()
+{
+	npdispwin.dirtyRect.left = npdispwin.dirtyRect.top = npdispwin.dirtyRect.right = npdispwin.dirtyRect.bottom = 0;
+}
+
 // *** 排他制御用 *****************
 
 static int npdisp_cs_initialized = 0;
@@ -450,6 +477,7 @@ static UINT16 npdisp_func_Enable(UINT32 lpDevInfoAddr, UINT16 wStyle, UINT32 lpD
 			np2wab.realHeight = npdisp.height;
 			np2wab.relaystateext = 3;
 			np2wab_setRelayState(np2wab.relaystateint | np2wab.relaystateext);
+			npdisp_setDirtyAll();
 			npdisp.updated = 1;
 			TRACEOUT(("Enable PDEVICE"));
 			break;
@@ -490,6 +518,7 @@ static UINT16 npdisp_func_ReEnable(UINT32 lpPDeviceAddr, UINT32 lpGDIInfoAddr)
 		np2wab.realHeight = npdisp.height;
 		np2wab.relaystateext = 3;
 		np2wab_setRelayState(np2wab.relaystateint | np2wab.relaystateext);
+		npdisp_setDirtyAll();
 		npdisp.updated = 1;
 	}
 	return 1;
@@ -969,29 +998,36 @@ static void npdisp_createBrush(NPDISP_HOSTBRUSH* lpHostBrush)
 		HDC hdcSrc = npdispwin.hdcCache[0];
 		void* pBits = NULL;
 		HBITMAP hPatBmpSrc = CreateDIBSection(hdcSrc, (BITMAPINFO*)(&(lpHostBrush->pattern)), DIB_RGB_COLORS, &pBits, NULL, 0);
-		const int height = lpHostBrush->pattern.biHeader.biHeight >= 0 ? lpHostBrush->pattern.biHeader.biHeight : -lpHostBrush->pattern.biHeader.biHeight;
-		const int stride = ((lpHostBrush->pattern.biHeader.biWidth * lpHostBrush->pattern.biHeader.biBitCount + 31) / 32) * 4;
-		memcpy(pBits, lpHostBrush->pattern.bmBits, stride * height);
 		if (hPatBmpSrc) {
-			if (lpHostBrush->pattern.biHeader.biBitCount == 1) {
-				HGDIOBJ hOldBmpSrc = SelectObject(hdcSrc, hPatBmpSrc);
-				HBITMAP hPatBmp = CreateBitmap(8, 8, 1, 1, NULL); // DDBでないとパターンにできない？
-				if (hPatBmp) {
-					HDC hdcPat = npdispwin.hdcCache[1];
-					HGDIOBJ hOldBmp = SelectObject(hdcPat, hPatBmp);
-					BitBlt(hdcPat, 0, 0, 8, 8, hdcSrc, 0, 0, SRCCOPY);
-					lpHostBrush->brs = CreatePatternBrush(hPatBmp);
-					SelectObject(hdcPat, hOldBmp);
-					DeleteObject(hPatBmp);
+			const int height = lpHostBrush->pattern.biHeader.biHeight >= 0 ? lpHostBrush->pattern.biHeader.biHeight : -lpHostBrush->pattern.biHeader.biHeight;
+			const int stride = ((lpHostBrush->pattern.biHeader.biWidth * lpHostBrush->pattern.biHeader.biBitCount + 31) / 32) * 4;
+			memcpy(pBits, lpHostBrush->pattern.bmBits, stride * height);
+			if (hPatBmpSrc) {
+				if (lpHostBrush->pattern.biHeader.biBitCount == 1) {
+					HGDIOBJ hOldBmpSrc = SelectObject(hdcSrc, hPatBmpSrc);
+					HBITMAP hPatBmp = CreateBitmap(8, 8, 1, 1, NULL); // DDBでないとパターンにできない？
+					if (hPatBmp) {
+						HDC hdcPat = npdispwin.hdcCache[1];
+						HGDIOBJ hOldBmp = SelectObject(hdcPat, hPatBmp);
+						BitBlt(hdcPat, 0, 0, 8, 8, hdcSrc, 0, 0, SRCCOPY);
+						lpHostBrush->brs = CreatePatternBrush(hPatBmp);
+						SelectObject(hdcPat, hOldBmp);
+						DeleteObject(hPatBmp);
+					}
+					SelectObject(hdcSrc, hOldBmpSrc);
 				}
-				SelectObject(hdcSrc, hOldBmpSrc);
+				else {
+					HDC hdcPat = npdispwin.hdcCache[1];
+					HGDIOBJ hOldBmp = SelectObject(hdcPat, hPatBmpSrc);
+					lpHostBrush->brs = CreatePatternBrush(hPatBmpSrc);
+					SelectObject(hdcPat, hOldBmp);
+				}
+				DeleteObject(hPatBmpSrc);
 			}
-			else {
-				HDC hdcPat = npdispwin.hdcCache[1];
-				HGDIOBJ hOldBmp = SelectObject(hdcPat, hPatBmpSrc);
-				lpHostBrush->brs = CreatePatternBrush(hPatBmpSrc);
-			}
-			DeleteObject(hPatBmpSrc);
+		}
+		else {
+			// Error!
+			lpHostBrush->brs = NULL;
 		}
 	}
 	else if (lpHostBrush->lbrush.lbStyle == NPDISP_BRUSH_STYLE_HOLLOW) {
@@ -1047,27 +1083,29 @@ static UINT32 npdisp_func_RealizeObject_CreateBrush(UINT32 lpInObjAddr, UINT32 l
 						if (patternBmp.bmHeight < 0) patternBmp.bmHeight = -patternBmp.bmHeight;
 						if (patternBmp.bmBitsPixel == 1) {
 							HBITMAP hPatBmp = CreateBitmap(8, 8, 1, 1, NULL); // DDBでないとパターンにできない？
-							HDC hdcPat = npdispwin.hdcCache[1];
-							HGDIOBJ hOldBmp = SelectObject(hdcPat, hPatBmp);
-							if (ptOrigin.x == 0 && ptOrigin.y == 0) {
-								BitBlt(hdcPat, 0, 0, 8, 8, patternBmphdc.hdc, 0, 0, SRCCOPY);
+							if (hPatBmp) {
+								HDC hdcPat = npdispwin.hdcCache[1];
+								HGDIOBJ hOldBmp = SelectObject(hdcPat, hPatBmp);
+								if (ptOrigin.x == 0 && ptOrigin.y == 0) {
+									BitBlt(hdcPat, 0, 0, 8, 8, patternBmphdc.hdc, 0, 0, SRCCOPY);
+								}
+								else {
+									BitBlt(hdcPat, ptOrigin.x - 8, ptOrigin.y - 8, 8, 8, patternBmphdc.hdc, 0, 0, SRCCOPY);
+									BitBlt(hdcPat, ptOrigin.x, ptOrigin.y - 8, 8, 8, patternBmphdc.hdc, 0, 0, SRCCOPY);
+									BitBlt(hdcPat, ptOrigin.x - 8, ptOrigin.y, 8, 8, patternBmphdc.hdc, 0, 0, SRCCOPY);
+									BitBlt(hdcPat, ptOrigin.x, ptOrigin.y, 8, 8, patternBmphdc.hdc, 0, 0, SRCCOPY);
+								}
+								hostbrush.brs = CreatePatternBrush(hPatBmp); // 取得のついでに生成までやる　npdisp_createBrushはnop
+								hostbrush.pattern.biHeader.biSize = sizeof(BITMAPINFOHEADER);
+								hostbrush.pattern.biHeader.biWidth = 8;
+								hostbrush.pattern.biHeader.biHeight = -8;
+								hostbrush.pattern.biHeader.biPlanes = 1;
+								hostbrush.pattern.biHeader.biBitCount = 1;
+								hostbrush.pattern.biHeader.biCompression = BI_RGB;
+								GetDIBits(hdcPat, hPatBmp, 0, 8, hostbrush.pattern.bmBits, (BITMAPINFO*)(&hostbrush.pattern.biHeader), DIB_RGB_COLORS);
+								SelectObject(hdcPat, hOldBmp);
+								DeleteObject(hPatBmp);
 							}
-							else {
-								BitBlt(hdcPat, ptOrigin.x - 8, ptOrigin.y - 8, 8, 8, patternBmphdc.hdc, 0, 0, SRCCOPY);
-								BitBlt(hdcPat, ptOrigin.x, ptOrigin.y - 8, 8, 8, patternBmphdc.hdc, 0, 0, SRCCOPY);
-								BitBlt(hdcPat, ptOrigin.x - 8, ptOrigin.y, 8, 8, patternBmphdc.hdc, 0, 0, SRCCOPY);
-								BitBlt(hdcPat, ptOrigin.x, ptOrigin.y, 8, 8, patternBmphdc.hdc, 0, 0, SRCCOPY);
-							}
-							hostbrush.brs = CreatePatternBrush(hPatBmp); // 取得のついでに生成までやる　npdisp_createBrushはnop
-							hostbrush.pattern.biHeader.biSize = sizeof(BITMAPINFOHEADER);
-							hostbrush.pattern.biHeader.biWidth = 8;
-							hostbrush.pattern.biHeader.biHeight = -8;
-							hostbrush.pattern.biHeader.biPlanes = 1;
-							hostbrush.pattern.biHeader.biBitCount = 1;
-							hostbrush.pattern.biHeader.biCompression = BI_RGB;
-							GetDIBits(hdcPat, hPatBmp, 0, 8, hostbrush.pattern.bmBits, (BITMAPINFO*)(&hostbrush.pattern.biHeader), DIB_RGB_COLORS);
-							SelectObject(hdcPat, hOldBmp);
-							DeleteObject(hPatBmp);
 						}
 						else {
 							hostbrush.pattern.biHeader.biSize = sizeof(BITMAPINFOHEADER);
@@ -1087,22 +1125,24 @@ static UINT32 npdisp_func_RealizeObject_CreateBrush(UINT32 lpInObjAddr, UINT32 l
 							HDC hdcPat = npdispwin.hdcCache[1];
 							void* pBits = NULL;
 							HBITMAP hPatBmp = CreateDIBSection(hdcPat, (BITMAPINFO*)(&hostbrush.pattern.biHeader), DIB_RGB_COLORS, &pBits, NULL, 0);
-							HGDIOBJ hOldBmp = SelectObject(hdcPat, hPatBmp);
-							if (ptOrigin.x == 0 && ptOrigin.y == 0) {
-								BitBlt(hdcPat, 0, 0, 8, 8, patternBmphdc.hdc, 0, 0, SRCCOPY);
+							if (hPatBmp) {
+								HGDIOBJ hOldBmp = SelectObject(hdcPat, hPatBmp);
+								if (ptOrigin.x == 0 && ptOrigin.y == 0) {
+									BitBlt(hdcPat, 0, 0, 8, 8, patternBmphdc.hdc, 0, 0, SRCCOPY);
+								}
+								else {
+									BitBlt(hdcPat, ptOrigin.x - 8, ptOrigin.y - 8, 8, 8, patternBmphdc.hdc, 0, 0, SRCCOPY);
+									BitBlt(hdcPat, ptOrigin.x, ptOrigin.y - 8, 8, 8, patternBmphdc.hdc, 0, 0, SRCCOPY);
+									BitBlt(hdcPat, ptOrigin.x - 8, ptOrigin.y, 8, 8, patternBmphdc.hdc, 0, 0, SRCCOPY);
+									BitBlt(hdcPat, ptOrigin.x, ptOrigin.y, 8, 8, patternBmphdc.hdc, 0, 0, SRCCOPY);
+								}
+								hostbrush.brs = CreatePatternBrush(hPatBmp); // 取得のついでに生成までやる　npdisp_createBrushはnop
+								const int height = hostbrush.pattern.biHeader.biHeight >= 0 ? hostbrush.pattern.biHeader.biHeight : -hostbrush.pattern.biHeader.biHeight;
+								const int stride = ((hostbrush.pattern.biHeader.biWidth * hostbrush.pattern.biHeader.biBitCount + 31) / 32) * 4;
+								memcpy(hostbrush.pattern.bmBits, pBits, stride * height);
+								SelectObject(hdcPat, hOldBmp);
+								DeleteObject(hPatBmp);
 							}
-							else {
-								BitBlt(hdcPat, ptOrigin.x - 8, ptOrigin.y - 8, 8, 8, patternBmphdc.hdc, 0, 0, SRCCOPY);
-								BitBlt(hdcPat, ptOrigin.x, ptOrigin.y - 8, 8, 8, patternBmphdc.hdc, 0, 0, SRCCOPY);
-								BitBlt(hdcPat, ptOrigin.x - 8, ptOrigin.y, 8, 8, patternBmphdc.hdc, 0, 0, SRCCOPY);
-								BitBlt(hdcPat, ptOrigin.x, ptOrigin.y, 8, 8, patternBmphdc.hdc, 0, 0, SRCCOPY);
-							}
-							hostbrush.brs = CreatePatternBrush(hPatBmp); // 取得のついでに生成までやる　npdisp_createBrushはnop
-							const int height = hostbrush.pattern.biHeader.biHeight >= 0 ? hostbrush.pattern.biHeader.biHeight : -hostbrush.pattern.biHeader.biHeight;
-							const int stride = ((hostbrush.pattern.biHeader.biWidth * hostbrush.pattern.biHeader.biBitCount + 31) / 32) * 4;
-							memcpy(hostbrush.pattern.bmBits, pBits, stride * height);
-							SelectObject(hdcPat, hOldBmp);
-							DeleteObject(hPatBmp);
 
 						}
 						npdisp_FreeBitmap(&patternBmphdc);
@@ -1831,7 +1871,6 @@ static UINT16 npdisp_func_DeviceBitmapBits(UINT32 lpBitmapAddr, UINT16 fGet, UIN
 										}
 
 										retValue = height;
-										npdisp.updated = 1;
 										npdisp_WriteBitmapToPBITMAP(&tgtPBmp, &tgtbmphdc, beginLine, height);
 									}
 
@@ -1979,171 +2018,180 @@ static UINT32 npdisp_func_ExtTextOut(UINT32 lpDestDevAddr, SINT16 wDestXOrg, SIN
 				int maxCharWidth = 0;
 				int loopLen = wCount >= 0 ? wCount : -wCount;
 				SINT16* charWidths = NULL;
+				SINT16* charRealWidths = NULL;
+				UINT32* charOffsets = NULL;
 				if (loopLen > 0) {
 					charWidths = (SINT16*)malloc(loopLen * sizeof(SINT16));
 					if (lpCharWidthsAddr) {
 						npdisp_readMemory(charWidths, lpCharWidthsAddr, sizeof(SINT16) * loopLen);
 					}
+					charRealWidths = (SINT16*)malloc(loopLen * sizeof(SINT16));
+					charOffsets = (UINT32*)malloc(loopLen * sizeof(UINT32));
 				}
-				if (npdisp.longjmpnum == 0) {
-					for (i = 0; i < loopLen; i++) {
-						NPDISP_FONTCHARINFO3 charInfo;
-						int charIdx = (int)lpText[i] - fontInfo.dfFirstChar;
-						if (charIdx < 0 || fontInfo.dfLastChar < charIdx) {
-							charIdx = fontInfo.dfDefaultChar;
-						}
-						int charWidth = 0;
-						if (lpCharWidthsAddr) {
-							charWidth = charWidths[i];
-							if (i == loopLen - 1) {
-								// 最後の文字は実際の描画幅分を確保
+				if (loopLen == 0 || (charOffsets && charRealWidths && charOffsets)) {
+					if (npdisp.longjmpnum == 0) {
+						for (i = 0; i < loopLen; i++) {
+							NPDISP_FONTCHARINFO3 charInfo;
+							int charIdx = (int)lpText[i] - fontInfo.dfFirstChar;
+							if (charIdx < 0 || fontInfo.dfLastChar < charIdx) {
+								charIdx = fontInfo.dfDefaultChar;
+							}
+							int charWidth = 0;
+							if (lpCharWidthsAddr) {
+								charWidth = charWidths[i];
 								if (npdisp_readMemory(&charInfo, lpFontInfoAddr + sizeof(NPDISP_FONTINFO) + sizeof(NPDISP_FONTCHARINFO3) * charIdx, sizeof(NPDISP_FONTCHARINFO3))) {
-									if (charInfo.width > charWidth) {
-										charWidth = charInfo.width;
+									charOffsets[i] = charInfo.offset;
+									charRealWidths[i] = charInfo.width;
+									if (i == loopLen - 1) {
+										// 最後の文字は実際の描画幅分を確保
+										if (charInfo.width > charWidth) {
+											charWidth = charInfo.width;
+										}
 									}
 								}
 							}
-						}
-						else {
-							if (npdisp_readMemory(&charInfo, lpFontInfoAddr + sizeof(NPDISP_FONTINFO) + sizeof(NPDISP_FONTCHARINFO3) * charIdx, sizeof(NPDISP_FONTCHARINFO3))) {
-								charWidth = charInfo.width;
+							else {
+								if (npdisp_readMemory(&charInfo, lpFontInfoAddr + sizeof(NPDISP_FONTINFO) + sizeof(NPDISP_FONTCHARINFO3) * charIdx, sizeof(NPDISP_FONTCHARINFO3))) {
+									charWidth = charInfo.width;
+									charOffsets[i] = charInfo.offset;
+									charRealWidths[i] = charInfo.width;
+								}
 							}
+							charWidths[i] = charWidth;
+							if (charWidth > maxCharWidth) maxCharWidth = charWidth;
+							if (charRealWidths[i] > maxCharWidth) maxCharWidth = charRealWidths[i];
+							sz.cx += charWidth;
+							if (npdisp.longjmpnum != 0) break;
 						}
-						charWidths[i] = charWidth;
-						if (charWidth > maxCharWidth) maxCharWidth = charWidth;
-						sz.cx += charWidth;
-						if (npdisp.longjmpnum != 0) break;
+						retValue = ((UINT32)sz.cx) | ((UINT32)sz.cy << 16);
 					}
-					retValue = ((UINT32)sz.cx) | ((UINT32)sz.cy << 16);
-				}
-				if (npdisp.longjmpnum != 0 && sz.cy > npdisp.height) {
-					// ページフォールト or 高さ異常
-				}
-				else if (wCount < 0) {
-					// nothing to do
-				}
-				else if (wCount == 0) {
-					// 塗りつぶし
-					TRACEOUT(("-> FILL"));
-					if (wOptions & 2) {
-						NPDISP_PBITMAP_EXT dstPBmp;
-						NPDISP_WINDOWS_BMPHDC bmphdc = { 0 };
-						int dstDevType = 0;
-						HDC tgtDC = npdispwin.hdc;
-						npdisp_readMemory(&dstDevType, lpDestDevAddr, 2);
-						if (!npdisp_isDisplayDevice(lpDestDevAddr)) {
-							// memory 
-							if (lpDestDevAddr && npdisp_readPBitmap(&dstPBmp, lpDestDevAddr)) {
-								if (npdisp_MakeBitmapFromPBITMAP(&dstPBmp, &bmphdc, 0)) {
-									tgtDC = bmphdc.hdc;
+					if (npdisp.longjmpnum != 0 && sz.cy > npdisp.height) {
+						// ページフォールト or 高さ異常
+					}
+					else if (wCount < 0) {
+						// nothing to do
+					}
+					else if (wCount == 0) {
+						// 塗りつぶし
+						TRACEOUT(("-> FILL"));
+						if (wOptions & 2) {
+							NPDISP_PBITMAP_EXT dstPBmp;
+							NPDISP_WINDOWS_BMPHDC bmphdc = { 0 };
+							int dstDevType = 0;
+							HDC tgtDC = npdispwin.hdc;
+							npdisp_readMemory(&dstDevType, lpDestDevAddr, 2);
+							if (!npdisp_isDisplayDevice(lpDestDevAddr)) {
+								// memory 
+								if (lpDestDevAddr && npdisp_readPBitmap(&dstPBmp, lpDestDevAddr)) {
+									if (npdisp_MakeBitmapFromPBITMAP(&dstPBmp, &bmphdc, 0)) {
+										tgtDC = bmphdc.hdc;
+									}
 								}
 							}
-						}
-						if (npdisp.longjmpnum == 0) {
-							if (lpOpaqueRectAddr && (wOptions & 2)) {
-								int dstLeft = opaquerect.left;
-								int dstTop = opaquerect.top;
-								int dstRight = opaquerect.right;
-								int dstBottom = opaquerect.bottom;
+							if (npdisp.longjmpnum == 0) {
+								if (lpOpaqueRectAddr && (wOptions & 2)) {
+									int dstLeft = opaquerect.left;
+									int dstTop = opaquerect.top;
+									int dstRight = opaquerect.right;
+									int dstBottom = opaquerect.bottom;
 
-								if (lpClipRectAddr) {
-									dstLeft = max(dstLeft, cliprect.left);
-									dstTop = max(dstTop, cliprect.top);
-									dstRight = min(dstRight, cliprect.right);
-									dstBottom = min(dstBottom, cliprect.bottom);
-								}
+									if (lpClipRectAddr) {
+										dstLeft = max(dstLeft, cliprect.left);
+										dstTop = max(dstTop, cliprect.top);
+										dstRight = min(dstRight, cliprect.right);
+										dstBottom = min(dstBottom, cliprect.bottom);
+									}
 
-								int dstX = dstLeft;
-								int dstY = dstTop;
+									int dstX = dstLeft;
+									int dstY = dstTop;
 
-								int srcX = dstLeft - wDestXOrg;
-								int srcY = dstTop - wDestYOrg;
-								int srcW = dstRight - dstLeft;
-								int srcH = dstBottom - dstTop;
+									int srcX = dstLeft - wDestXOrg;
+									int srcY = dstTop - wDestYOrg;
+									int srcW = dstRight - dstLeft;
+									int srcH = dstBottom - dstTop;
 
-								if (srcW > 0 && srcH > 0) {
-									HBRUSH hBrush;
-									bool isStockBrush = false;
-									bool preferDither;
-									UINT32 color = npdisp_AdjustColorRefForGDI(drawMode.bkColor, &preferDither);
-									if (!preferDither) {
-										// 純色
-										if (color == 0) {
-											hBrush = (HBRUSH)GetStockObject(BLACK_BRUSH);
-											isStockBrush = true;
-										}
-										else if ((color & 0xffffff) == 0xffffff) {
-											hBrush = (HBRUSH)GetStockObject(WHITE_BRUSH);
-											isStockBrush = true;
+									if (srcW > 0 && srcH > 0) {
+										HBRUSH hBrush;
+										bool isStockBrush = false;
+										bool preferDither;
+										UINT32 color = npdisp_AdjustColorRefForGDI(drawMode.bkColor, &preferDither);
+										if (!preferDither) {
+											// 純色
+											if (color == 0) {
+												hBrush = (HBRUSH)GetStockObject(BLACK_BRUSH);
+												isStockBrush = true;
+											}
+											else if ((color & 0xffffff) == 0xffffff) {
+												hBrush = (HBRUSH)GetStockObject(WHITE_BRUSH);
+												isStockBrush = true;
+											}
+											else {
+												hBrush = CreateSolidBrush(color);
+											}
 										}
 										else {
-											hBrush = CreateSolidBrush(color);
+											// ディザ
+											UINT32 actualColor1;
+											UINT32 actualColor2;
+											double ratio;
+											MakePaletteDitherBrushColor(color, &actualColor1, &actualColor2, &ratio);
+											hBrush = CreatePaletteDitherBrush(actualColor1, actualColor2, ratio);
 										}
-									}
-									else {
-										// ディザ
-										UINT32 actualColor1;
-										UINT32 actualColor2;
-										double ratio;
-										MakePaletteDitherBrushColor(color, &actualColor1, &actualColor2, &ratio);
-										hBrush = CreatePaletteDitherBrush(actualColor1, actualColor2, ratio);
-									}
-									HGDIOBJ oldBrush = SelectObject(tgtDC, hBrush);
-									SetBkMode(tgtDC, OPAQUE);
-									SetROP2(tgtDC, drawMode.Rop2);
-									RECT gdiopaquerect = { dstX, dstY, dstX + srcW, dstY + srcH };
-									FillRect(tgtDC, &gdiopaquerect, hBrush);
-									//PatBlt(tgtDC, opaquerect.left, opaquerect.top, opaquerect.right - opaquerect.left, opaquerect.bottom - opaquerect.top, drawMode.Rop2);
-									//Rectangle(tgtDC, opaquerect.left, opaquerect.top, opaquerect.right, opaquerect.bottom);
-									SelectObject(tgtDC, oldBrush);
-									if (!isStockBrush) {
-										DeleteObject(hBrush);
-									}
-									if (bmphdc.hdc) {
-										// 書き戻し
-										npdisp_WriteBitmapToPBITMAP(&dstPBmp, &bmphdc);
-									}
-									else {
-										npdisp.updated = 1;
+										HGDIOBJ oldBrush = SelectObject(tgtDC, hBrush);
+										SetBkMode(tgtDC, OPAQUE);
+										SetROP2(tgtDC, drawMode.Rop2);
+										RECT gdiopaquerect = { dstX, dstY, dstX + srcW, dstY + srcH };
+										FillRect(tgtDC, &gdiopaquerect, hBrush);
+										//PatBlt(tgtDC, opaquerect.left, opaquerect.top, opaquerect.right - opaquerect.left, opaquerect.bottom - opaquerect.top, drawMode.Rop2);
+										//Rectangle(tgtDC, opaquerect.left, opaquerect.top, opaquerect.right, opaquerect.bottom);
+										SelectObject(tgtDC, oldBrush);
+										if (!isStockBrush) {
+											DeleteObject(hBrush);
+										}
+										if (bmphdc.hdc) {
+											// 書き戻し
+											npdisp_WriteBitmapToPBITMAP(&dstPBmp, &bmphdc);
+										}
+										else {
+											npdisp_setDirty(gdiopaquerect.left, gdiopaquerect.top, gdiopaquerect.right, gdiopaquerect.bottom);
+											npdisp.updated = 1;
+										}
 									}
 								}
 							}
-						}
-						if (bmphdc.hdc) {
-							npdisp_FreeBitmap(&bmphdc);
+							if (bmphdc.hdc) {
+								npdisp_FreeBitmap(&bmphdc);
+							}
 						}
 					}
-				}
-				else {
-					// 描画
-					TRACEOUT(("-> TEXT"));
+					else {
+						// 描画
+						TRACEOUT(("-> TEXT"));
 
-					BITMAPINFO* lpbi = (BITMAPINFO*)malloc(sizeof(BITMAPINFOHEADER) + sizeof(RGBQUAD) * 2);
-					if (lpbi) {
-						HDC hdcText = npdispwin.hdcCache[1];
-						int stride = ((sz.cx + 7) / 8 + 1) / 2 * 2;
-						void* pBits = (char*)malloc(stride * sz.cy);
-						if (pBits) {
-							HGDIOBJ hbmpOld;
-							memset(pBits, 0x00, stride * sz.cy);
-							int maxCharXLen = (maxCharWidth + 7) / 8;
-							UINT8* srcBuf = (UINT8*)malloc(maxCharXLen * sz.cy);
-							if (srcBuf) {
-								// てんそう
-								int baseXbyte = 0;
-								int baseXbit = 0;
-								for (i = 0; i < loopLen; i++) {
-									NPDISP_FONTCHARINFO3 charInfo;
-									int charIdx = (int)lpText[i] - fontInfo.dfFirstChar;
-									if (charIdx < 0 || fontInfo.dfLastChar < charIdx) {
-										charIdx = fontInfo.dfDefaultChar;
-									}
-									if (npdisp_readMemory(&charInfo, lpFontInfoAddr + sizeof(NPDISP_FONTINFO) + sizeof(NPDISP_FONTCHARINFO3) * charIdx, sizeof(NPDISP_FONTCHARINFO3))) {
+						BITMAPINFO* lpbi = (BITMAPINFO*)malloc(sizeof(BITMAPINFOHEADER) + sizeof(RGBQUAD) * 2);
+						if (lpbi) {
+							HDC hdcText = npdispwin.hdcCache[1];
+							int stride = ((sz.cx + 7) / 8 + 1) / 2 * 2;
+							void* pBits = (char*)malloc(stride * sz.cy);
+							if (pBits) {
+								HGDIOBJ hbmpOld;
+								memset(pBits, 0x00, stride * sz.cy);
+								int maxCharXLen = (maxCharWidth + 7) / 8;
+								UINT8* srcBuf = (UINT8*)malloc(maxCharXLen * sz.cy);
+								if (srcBuf) {
+									// てんそう
+									int baseXbyte = 0;
+									int baseXbit = 0;
+									for (i = 0; i < loopLen; i++) {
+										int charIdx = (int)lpText[i] - fontInfo.dfFirstChar;
+										if (charIdx < 0 || fontInfo.dfLastChar < charIdx) {
+											charIdx = fontInfo.dfDefaultChar;
+										}
 										int y, x;
-										int charXLen = (charInfo.width + 7) / 8;
-										npdisp_readMemoryWith32Offset(srcBuf, fontInfo.dfBitsPointer >> 16, charInfo.offset, charXLen * sz.cy);
+										int charXLen = (charRealWidths[i] + 7) / 8;
+										npdisp_readMemoryWith32Offset(srcBuf, fontInfo.dfBitsPointer >> 16, charOffsets[i], charXLen * sz.cy);
 										for (x = 0; x < charXLen; x++) {
-											int curWidth = charInfo.width - x * 8;
+											int curWidth = charRealWidths[i] - x * 8;
 											if (curWidth > 8) curWidth = 8;
 											int bitMask = ((1 << curWidth) - 1) << (8 - curWidth);
 											int dstBitMask1 = (bitMask >> baseXbit) & 0xff;
@@ -2162,172 +2210,181 @@ static UINT32 npdisp_func_ExtTextOut(UINT32 lpDestDevAddr, SINT16 wDestXOrg, SIN
 												buf += stride;
 											}
 										}
+										baseXbyte += (baseXbit + charWidths[i]) / 8;
+										baseXbit = (baseXbit + charWidths[i]) % 8;
 									}
-									baseXbyte += (baseXbit + charWidths[i]) / 8;
-									baseXbit = (baseXbit + charWidths[i]) % 8;
+									free(srcBuf);
 								}
-								free(srcBuf);
-							}
-							HBITMAP hBmp = CreateBitmap(sz.cx, sz.cy, 1, 1, pBits);
-							if (hBmp) {
-								HGDIOBJ hbmpOld;
-								hbmpOld = SelectObject(hdcText, hBmp);
-								NPDISP_PBITMAP_EXT dstPBmp;
-								NPDISP_WINDOWS_BMPHDC bmphdc = { 0 };
-								HDC tgtDC = npdispwin.hdc;
-								if (!npdisp_isDisplayDevice(lpDestDevAddr)) {
-									// memory 
-									if (lpDestDevAddr && npdisp_readPBitmap(&dstPBmp, lpDestDevAddr)) {
-										if (npdisp_MakeBitmapFromPBITMAP(&dstPBmp, &bmphdc, 0)) {
-											tgtDC = bmphdc.hdc;
-										}
-									}
-								}
-								if (npdisp.longjmpnum == 0) {
-									bool hasClipRect = lpClipRectAddr != 0;
-									if (lpOpaqueRectAddr && (wOptions & 2)) {
-										int dstLeft = opaquerect.left;
-										int dstTop = opaquerect.top;
-										int dstRight = opaquerect.right;
-										int dstBottom = opaquerect.bottom;
-
-										if (lpClipRectAddr) {
-											dstLeft = max(dstLeft, cliprect.left);
-											dstTop = max(dstTop, cliprect.top);
-											dstRight = min(dstRight, cliprect.right);
-											dstBottom = min(dstBottom, cliprect.bottom);
-										}
-
-										int dstX = dstLeft;
-										int dstY = dstTop;
-
-										int srcX = dstLeft - wDestXOrg;
-										int srcY = dstTop - wDestYOrg;
-										int srcW = dstRight - dstLeft;
-										int srcH = dstBottom - dstTop;
-
-										if (srcW > 0 && srcH > 0) {
-											HBRUSH hBrush;
-											bool isStockBrush = false;
-											bool preferDither;
-											UINT32 color = npdisp_AdjustColorRefForGDI(drawMode.bkColor, &preferDither);
-											if (!preferDither) {
-												// 純色
-												if (color == 0) {
-													hBrush = (HBRUSH)GetStockObject(BLACK_BRUSH);
-													isStockBrush = true;
-												}
-												else if ((color & 0xffffff) == 0xffffff) {
-													hBrush = (HBRUSH)GetStockObject(WHITE_BRUSH);
-													isStockBrush = true;
-												}
-												else {
-													hBrush = CreateSolidBrush(color);
-												}
-											}
-											else {
-												// ディザ
-												UINT32 actualColor1;
-												UINT32 actualColor2;
-												double ratio;
-												MakePaletteDitherBrushColor(color, &actualColor1, &actualColor2, &ratio);
-												hBrush = CreatePaletteDitherBrush(actualColor1, actualColor2, ratio);
-											}
-											TRACEOUT(("-> HAS BACKGROUND"));
-
-											RECT gdiopaquerect = { dstX, dstY, dstX + srcW, dstY + srcH };
-											FillRect(tgtDC, &gdiopaquerect, hBrush);
-
-											if (!isStockBrush) {
-												DeleteObject(hBrush);
+								HBITMAP hBmp = CreateBitmap(sz.cx, sz.cy, 1, 1, pBits);
+								if (hBmp) {
+									HGDIOBJ hbmpOld;
+									hbmpOld = SelectObject(hdcText, hBmp);
+									NPDISP_PBITMAP_EXT dstPBmp;
+									NPDISP_WINDOWS_BMPHDC bmphdc = { 0 };
+									HDC tgtDC = npdispwin.hdc;
+									if (!npdisp_isDisplayDevice(lpDestDevAddr)) {
+										// memory 
+										if (lpDestDevAddr && npdisp_readPBitmap(&dstPBmp, lpDestDevAddr)) {
+											if (npdisp_MakeBitmapFromPBITMAP(&dstPBmp, &bmphdc, 0)) {
+												tgtDC = bmphdc.hdc;
 											}
 										}
 									}
-									{
-										int dstLeft = wDestXOrg;
-										int dstTop = wDestYOrg;
-										int dstRight = wDestXOrg + sz.cx;
-										int dstBottom = wDestYOrg + sz.cy;
+									if (npdisp.longjmpnum == 0) {
+										bool hasClipRect = lpClipRectAddr != 0;
+										if (lpOpaqueRectAddr && (wOptions & 2)) {
+											int dstLeft = opaquerect.left;
+											int dstTop = opaquerect.top;
+											int dstRight = opaquerect.right;
+											int dstBottom = opaquerect.bottom;
 
-										if (hasClipRect) {
-											dstLeft = max(dstLeft, cliprect.left);
-											dstTop = max(dstTop, cliprect.top);
-											dstRight = min(dstRight, cliprect.right);
-											dstBottom = min(dstBottom, cliprect.bottom);
-										}
+											if (lpClipRectAddr) {
+												dstLeft = max(dstLeft, cliprect.left);
+												dstTop = max(dstTop, cliprect.top);
+												dstRight = min(dstRight, cliprect.right);
+												dstBottom = min(dstBottom, cliprect.bottom);
+											}
 
-										int dstX = dstLeft;
-										int dstY = dstTop;
+											int dstX = dstLeft;
+											int dstY = dstTop;
 
-										int srcX = dstLeft - wDestXOrg;
-										int srcY = dstTop - wDestYOrg;
-										int srcW = dstRight - dstLeft;
-										int srcH = dstBottom - dstTop;
+											int srcX = dstLeft - wDestXOrg;
+											int srcY = dstTop - wDestYOrg;
+											int srcW = dstRight - dstLeft;
+											int srcH = dstBottom - dstTop;
 
-										if (srcW > 0 && srcH > 0) {
-
-											SetROP2(tgtDC, R2_COPYPEN);
-											bool isTransparentBk = (drawMode.bkMode == 1 || drawMode.bkMode == 4);
-											if (!isTransparentBk) {
+											if (srcW > 0 && srcH > 0) {
+												HBRUSH hBrush;
+												bool isStockBrush = false;
 												bool preferDither;
 												UINT32 color = npdisp_AdjustColorRefForGDI(drawMode.bkColor, &preferDither);
-												if (preferDither) {
-													// ディザ背景
+												if (!preferDither) {
+													// 純色
+													if (color == 0) {
+														hBrush = (HBRUSH)GetStockObject(BLACK_BRUSH);
+														isStockBrush = true;
+													}
+													else if ((color & 0xffffff) == 0xffffff) {
+														hBrush = (HBRUSH)GetStockObject(WHITE_BRUSH);
+														isStockBrush = true;
+													}
+													else {
+														hBrush = CreateSolidBrush(color);
+													}
+												}
+												else {
+													// ディザ
 													UINT32 actualColor1;
 													UINT32 actualColor2;
 													double ratio;
 													MakePaletteDitherBrushColor(color, &actualColor1, &actualColor2, &ratio);
-													HBRUSH hBrush = CreatePaletteDitherBrush(actualColor1, actualColor2, ratio);
-													HGDIOBJ oldBrush = SelectObject(tgtDC, hBrush);
-													RECT gdiopaquerect = { dstX, dstY, dstX + srcW, dstY + srcH };
-													FillRect(tgtDC, &gdiopaquerect, hBrush);
-													SelectObject(tgtDC, oldBrush);
+													hBrush = CreatePaletteDitherBrush(actualColor1, actualColor2, ratio);
+												}
+												TRACEOUT(("-> HAS BACKGROUND"));
+
+												RECT gdiopaquerect = { dstX, dstY, dstX + srcW, dstY + srcH };
+												FillRect(tgtDC, &gdiopaquerect, hBrush);
+
+												npdisp_setDirty(dstX, dstY, dstX + srcW, dstY + srcH);
+
+												if (!isStockBrush) {
 													DeleteObject(hBrush);
-													// 背景はもう描いたので背景透過扱いにする
-													isTransparentBk = true;
 												}
 											}
-											if (isTransparentBk) {
-												// 背景透過
-												TRACEOUT(("FG:%08x BG:TRANS", drawMode.LTextColor));
-												SetBkMode(tgtDC, OPAQUE);
-												SetBkColor(tgtDC, 0x000000);
-												SetTextColor(tgtDC, 0xffffff);
-												BitBlt(tgtDC, dstX, dstY, srcW, srcH, hdcText, srcX, srcY, SRCAND);
-												SetBkColor(tgtDC, drawMode.LTextColor);
-												SetTextColor(tgtDC, 0x000000);
-												BitBlt(tgtDC, dstX, dstY, srcW, srcH, hdcText, srcX, srcY, SRCPAINT);
+										}
+										{
+											int dstLeft = wDestXOrg;
+											int dstTop = wDestYOrg;
+											int dstRight = wDestXOrg + sz.cx;
+											int dstBottom = wDestYOrg + sz.cy;
+
+											if (hasClipRect) {
+												dstLeft = max(dstLeft, cliprect.left);
+												dstTop = max(dstTop, cliprect.top);
+												dstRight = min(dstRight, cliprect.right);
+												dstBottom = min(dstBottom, cliprect.bottom);
 											}
-											else if (drawMode.bkMode == 2) {
-												// 背景不透明
-												TRACEOUT(("FG:%08x BG:%08x", drawMode.LTextColor, drawMode.LbkColor));
-												SetBkColor(tgtDC, drawMode.LTextColor);
-												SetTextColor(tgtDC, drawMode.LbkColor);
-												BitBlt(tgtDC, dstX, dstY, srcW, srcH, hdcText, srcX, srcY, SRCCOPY);
-											}
-											if (bmphdc.hdc) {
-												// 書き戻し
-												npdisp_WriteBitmapToPBITMAP(&dstPBmp, &bmphdc);
-											}
-											else {
-												npdisp.updated = 1;
+
+											int dstX = dstLeft;
+											int dstY = dstTop;
+
+											int srcX = dstLeft - wDestXOrg;
+											int srcY = dstTop - wDestYOrg;
+											int srcW = dstRight - dstLeft;
+											int srcH = dstBottom - dstTop;
+
+											if (srcW > 0 && srcH > 0) {
+
+												SetROP2(tgtDC, R2_COPYPEN);
+												bool isTransparentBk = (drawMode.bkMode == 1 || drawMode.bkMode == 4);
+												if (!isTransparentBk) {
+													bool preferDither;
+													UINT32 color = npdisp_AdjustColorRefForGDI(drawMode.bkColor, &preferDither);
+													if (preferDither) {
+														// ディザ背景
+														UINT32 actualColor1;
+														UINT32 actualColor2;
+														double ratio;
+														MakePaletteDitherBrushColor(color, &actualColor1, &actualColor2, &ratio);
+														HBRUSH hBrush = CreatePaletteDitherBrush(actualColor1, actualColor2, ratio);
+														HGDIOBJ oldBrush = SelectObject(tgtDC, hBrush);
+														RECT gdiopaquerect = { dstX, dstY, dstX + srcW, dstY + srcH };
+														FillRect(tgtDC, &gdiopaquerect, hBrush);
+														SelectObject(tgtDC, oldBrush);
+														DeleteObject(hBrush);
+														// 背景はもう描いたので背景透過扱いにする
+														isTransparentBk = true;
+													}
+												}
+												if (isTransparentBk) {
+													// 背景透過
+													TRACEOUT(("FG:%08x BG:TRANS", drawMode.LTextColor));
+													SetBkMode(tgtDC, OPAQUE);
+													SetBkColor(tgtDC, 0x000000);
+													SetTextColor(tgtDC, 0xffffff);
+													BitBlt(tgtDC, dstX, dstY, srcW, srcH, hdcText, srcX, srcY, SRCAND);
+													SetBkColor(tgtDC, drawMode.LTextColor);
+													SetTextColor(tgtDC, 0x000000);
+													BitBlt(tgtDC, dstX, dstY, srcW, srcH, hdcText, srcX, srcY, SRCPAINT);
+												}
+												else if (drawMode.bkMode == 2) {
+													// 背景不透明
+													TRACEOUT(("FG:%08x BG:%08x", drawMode.LTextColor, drawMode.LbkColor));
+													SetBkColor(tgtDC, drawMode.LTextColor);
+													SetTextColor(tgtDC, drawMode.LbkColor);
+													BitBlt(tgtDC, dstX, dstY, srcW, srcH, hdcText, srcX, srcY, SRCCOPY);
+												}
+												if (bmphdc.hdc) {
+													// 書き戻し
+													npdisp_WriteBitmapToPBITMAP(&dstPBmp, &bmphdc);
+												}
+												else {
+													npdisp_setDirty(dstX, dstY, dstX + srcW, dstY + srcH);
+													npdisp.updated = 1;
+												}
 											}
 										}
 									}
+									if (bmphdc.hdc) {
+										npdisp_FreeBitmap(&bmphdc);
+									}
+									SelectObject(hdcText, hbmpOld);
+									DeleteObject(hBmp);
 								}
-								if (bmphdc.hdc) {
-									npdisp_FreeBitmap(&bmphdc);
-								}
-								SelectObject(hdcText, hbmpOld);
-								DeleteObject(hBmp);
+								free(pBits);
 							}
-							free(pBits);
+							free(lpbi);
 						}
-						free(lpbi);
 					}
 				}
 				if (charWidths) {
 					free(charWidths);
+				}
+				if (charRealWidths) {
+					free(charRealWidths);
+				}
+				if (charOffsets) {
+					free(charOffsets);
 				}
 			}
 		}
@@ -2626,6 +2683,24 @@ static UINT16 npdisp_func_SetDIBitsToDevice(UINT32 lpDestDevAddr, SINT16 X, SINT
 										npdisp_FreeBitmap(&bmphdc);
 									}
 									else {
+										if (biHeader.biHeight >= 0) {
+											// bottom-up
+											npdisp_setDirty(X, Y + biHeader.biHeight - iScanHost - cScansHost, X + biHeader.biWidth, Y + biHeader.biHeight - iScanHost);
+											//HGDIOBJ oldPen = SelectObject(npdispwin.hdc, GetStockObject(BLACK_PEN));
+											//HGDIOBJ oldBrush = SelectObject(npdispwin.hdc, GetStockObject(NULL_BRUSH));
+											//Rectangle(npdispwin.hdc, X, Y + biHeader.biHeight - iScanHost - cScansHost, X + biHeader.biWidth, Y + biHeader.biHeight - iScanHost);
+											//SelectObject(npdispwin.hdc, oldPen);
+											//SelectObject(npdispwin.hdc, oldBrush);
+										}
+										else {
+											npdisp_setDirty(X, Y + iScanHost, X + biHeader.biWidth, Y + iScanHost + cScansHost);
+											//HGDIOBJ oldPen = SelectObject(npdispwin.hdc, GetStockObject(BLACK_PEN));
+											//HGDIOBJ oldBrush = SelectObject(npdispwin.hdc, GetStockObject(NULL_BRUSH));
+											//Rectangle(npdispwin.hdc, X, Y + iScanHost, X + biHeader.biWidth, Y + iScanHost + cScansHost);
+											//SelectObject(npdispwin.hdc, oldPen);
+											//SelectObject(npdispwin.hdc, oldBrush);
+										}
+
 										npdisp.updated = 1;
 									}
 
@@ -2665,6 +2740,7 @@ static UINT16 npdisp_func_SaveScreenBitmap(UINT32 lpRect, UINT16 wCommand)
 		else if (wCommand == 1) {
 			if (npdispwin.rectShadow.left == rect.left && npdispwin.rectShadow.right == rect.right && npdispwin.rectShadow.top == rect.top && npdispwin.rectShadow.bottom == rect.bottom) {
 				BitBlt(npdispwin.hdc, rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top, npdispwin.hdcShadow, rect.left, rect.top, SRCCOPY);
+				npdisp_setDirty(rect.left, rect.top, rect.right, rect.bottom);
 				npdisp.updated = 1;
 				retValue = 1;
 			}
@@ -2893,6 +2969,7 @@ static void npdisp_func_SetCursor(UINT32 lpCursorShapeAddr)
 				npdisp.cursorHeight = cursorShape.csHeight;
 				npdisp.cursorBpp = cursorBpp;
 				npdisp.cursorStride = stride;
+				npdispwin.cursorUpdated = true;
 				npdisp.updated = 1;
 			}
 			else {
@@ -2909,6 +2986,8 @@ static void npdisp_func_SetCursor(UINT32 lpCursorShapeAddr)
 					npdispwin.hBmpCursor = NULL;
 					npdispwin.pBitsCursor = NULL;
 				}
+				npdispwin.cursorUpdated = true;
+				npdisp.updated = 1;
 			}
 		}
 	}
@@ -2926,6 +3005,8 @@ static void npdisp_func_SetCursor(UINT32 lpCursorShapeAddr)
 			npdispwin.hBmpCursor = NULL;
 			npdispwin.pBitsCursor = NULL;
 		}
+		npdispwin.cursorUpdated = true;
+		npdisp.updated = 1;
 	}
 }
 static void npdisp_func_MoveCursor(UINT16 wAbsX, UINT16 wAbsY)
@@ -2933,6 +3014,7 @@ static void npdisp_func_MoveCursor(UINT16 wAbsX, UINT16 wAbsY)
 	if (npdisp.cursorX != wAbsX || npdisp.cursorY != wAbsY) {
 		npdisp.cursorX = wAbsX;
 		npdisp.cursorY = wAbsY;
+		npdispwin.cursorUpdated = true;
 		npdisp.updated = 1;
 	}
 }
@@ -2997,11 +3079,9 @@ static UINT16 npdisp_func_FastBorder(UINT32 lpRectAddr, UINT16 wHorizBorderThick
 		PatBlt(tgtDC, rectBdr.left, rectBdr.top + ty, tx, (rectBdr.bottom - rectBdr.top) - ty * 2, dwRasterOp);
 		PatBlt(tgtDC, rectBdr.right - tx, rectBdr.top + ty, tx, (rectBdr.bottom - rectBdr.top) - ty * 2, dwRasterOp);
 		PatBlt(tgtDC, rectBdr.left, rectBdr.bottom - ty, rectBdr.right - rectBdr.left, ty, dwRasterOp);
-		if (rectBdr.right - rectBdr.left != 52 && rectBdr.right - rectBdr.left != 52) {
-			retValue = 1;
-		}
 
 		retValue = 1;
+		npdisp_setDirty(rectBdr.left, rectBdr.top, rectBdr.right, rectBdr.bottom);
 		npdisp.updated = 1;
 
 		if (hRgn) {
@@ -3066,12 +3146,14 @@ static UINT16 npdisp_func_Output(UINT32 lpDestDevAddr, UINT16 wStyle, UINT16 wCo
 
 	int dstBeginLine = 0;
 	int dstNumLines = -1;
-	if (dstDevType != NPDISP_DEVTYPE_DDB && !isDisplayDevice) {
-		// 転送先が画面やDDBでないときはレンジチェック
+	int dstBeginX = 0;
+	int dstWidth = -1;
+	if (dstDevType != NPDISP_DEVTYPE_DDB) {
+		// 転送先がDDBでないときはレンジチェック
 		switch (wStyle) {
 		case 18: // OS_POLYLINE
 		{
-			npdisp_func_Output_GetYRange_POLYLINE(&dstBeginLine, &dstNumLines, curPen, curBrush, wCount, lpPointsAddr);
+			npdisp_func_Output_GetXYRange_POLYLINE(&dstBeginX, &dstWidth, &dstBeginLine, &dstNumLines, curPen, curBrush, wCount, lpPointsAddr);
 			break;
 		}
 		case 80: // OS_BEGINNSCAN
@@ -3081,55 +3163,55 @@ static UINT16 npdisp_func_Output(UINT32 lpDestDevAddr, UINT16 wStyle, UINT16 wCo
 		}
 		case 4: // OS_SCANLINES
 		{
-			npdisp_func_Output_GetYRange_SCANLINES(&dstBeginLine, &dstNumLines, curPen, curBrush, wCount, lpPointsAddr);
+			npdisp_func_Output_GetXYRange_SCANLINES(&dstBeginX, &dstWidth, &dstBeginLine, &dstNumLines, curPen, curBrush, wCount, lpPointsAddr);
 			break;
 		}
 		case 6: // OS_RECTANGLE
 		{
-			npdisp_func_Output_GetYRange_RECTANGLE(&dstBeginLine, &dstNumLines, curPen, curBrush, wCount, lpPointsAddr);
+			npdisp_func_Output_GetXYRange_RECTANGLE(&dstBeginX, &dstWidth, &dstBeginLine, &dstNumLines, curPen, curBrush, wCount, lpPointsAddr);
 			break;
 		}
 		case 20: // OS_WINDPOLYGON
 		case 22: // OS_ALTPOLYGON
 		{
-			npdisp_func_Output_GetYRange_POLYGON(&dstBeginLine, &dstNumLines, curPen, curBrush, wCount, lpPointsAddr);
+			npdisp_func_Output_GetXYRange_POLYGON(&dstBeginX, &dstWidth, &dstBeginLine, &dstNumLines, curPen, curBrush, wCount, lpPointsAddr);
 			break;
 		}
 		case 55: // OS_CIRCLE
 		case 7: // OS_ELLIPSE 
 		{
-			npdisp_func_Output_GetYRange_ELLIPSE(&dstBeginLine, &dstNumLines, curPen, curBrush, wCount, lpPointsAddr);
+			npdisp_func_Output_GetXYRange_ELLIPSE(&dstBeginX, &dstWidth, &dstBeginLine, &dstNumLines, curPen, curBrush, wCount, lpPointsAddr);
 			break;
 		}
 		case 3: // OS_ARC
 		{
-			npdisp_func_Output_GetYRange_ARC(&dstBeginLine, &dstNumLines, curPen, curBrush, wCount, lpPointsAddr);
+			npdisp_func_Output_GetXYRange_ARC(&dstBeginX, &dstWidth, &dstBeginLine, &dstNumLines, curPen, curBrush, wCount, lpPointsAddr);
 			break;
 		}
 		case 23: // OS_PIE
 		{
-			npdisp_func_Output_GetYRange_PIE(&dstBeginLine, &dstNumLines, curPen, curBrush, wCount, lpPointsAddr);
+			npdisp_func_Output_GetXYRange_PIE(&dstBeginX, &dstWidth, &dstBeginLine, &dstNumLines, curPen, curBrush, wCount, lpPointsAddr);
 			break;
 		}
 		case 39: // OS_CHORD 
 		{
-			npdisp_func_Output_GetYRange_CHORD(&dstBeginLine, &dstNumLines, curPen, curBrush, wCount, lpPointsAddr);
+			npdisp_func_Output_GetXYRange_CHORD(&dstBeginX, &dstWidth, &dstBeginLine, &dstNumLines, curPen, curBrush, wCount, lpPointsAddr);
 			break;
 		}
 		case 72: // OS_ROUNDRECT 
 		{
-			npdisp_func_Output_GetYRange_ROUNDRECT(&dstBeginLine, &dstNumLines, curPen, curBrush, wCount, lpPointsAddr);
+			npdisp_func_Output_GetXYRange_ROUNDRECT(&dstBeginX, &dstWidth, &dstBeginLine, &dstNumLines, curPen, curBrush, wCount, lpPointsAddr);
 			break;
 		}
 		case 1: // OS_POLYBEZIER 
 		{
-			npdisp_func_Output_GetYRange_POLYBEZIER(&dstBeginLine, &dstNumLines, curPen, curBrush, wCount, lpPointsAddr);
+			npdisp_func_Output_GetXYRange_POLYBEZIER(&dstBeginX, &dstWidth, &dstBeginLine, &dstNumLines, curPen, curBrush, wCount, lpPointsAddr);
 			break;
 		}
 		case (0x4000 | 20): // OS_POLYPOLYGON | OS_WINDPOLYGON
 		case (0x4000 | 22): // OS_POLYPOLYGON | OS_ALTPOLYGON
 		{
-			npdisp_func_Output_GetYRange_POLYPOLYGON(&dstBeginLine, &dstNumLines, curPen, curBrush, wCount, lpPointsAddr);
+			npdisp_func_Output_GetXYRange_POLYPOLYGON(&dstBeginX, &dstWidth, &dstBeginLine, &dstNumLines, curPen, curBrush, wCount, lpPointsAddr);
 			break;
 		}
 		default:
@@ -3145,164 +3227,188 @@ static UINT16 npdisp_func_Output(UINT32 lpDestDevAddr, UINT16 wStyle, UINT16 wCo
 		dstNumLines += dstBeginLine;
 		dstBeginLine = 0;
 	}
+	if (dstBeginX < 0) {
+		dstWidth += dstBeginX;
+		dstBeginX = 0;
+	}
 
-	if (!isDisplayDevice) {
-		// memory 
-		if (dstNumLines != 0) {
-			if (lpDestDevAddr && npdisp_readPBitmap(&dstPBmp, lpDestDevAddr)) {
-				npdisp_PreloadBitmapFromPBITMAP(&dstPBmp, 0, dstBeginLine, dstNumLines);
-				if (npdisp_MakeBitmapFromPBITMAP(&dstPBmp, &bmphdc, 0, dstBeginLine, dstNumLines)) {
-					npdisp_ConvertToDDBMonoBitmap(&bmphdc);
-					tgtDC = bmphdc.hdc;
+	if ((dstNumLines > 0 || dstNumLines == -1) && (dstWidth > 0 || dstWidth == -1)) {
+		if (!isDisplayDevice) {
+			// memory 
+			if (dstNumLines != 0) {
+				if (lpDestDevAddr && npdisp_readPBitmap(&dstPBmp, lpDestDevAddr)) {
+					npdisp_PreloadBitmapFromPBITMAP(&dstPBmp, 0, dstBeginLine, dstNumLines, dstBeginX, dstWidth);
+					if (npdisp_MakeBitmapFromPBITMAP(&dstPBmp, &bmphdc, 0, dstBeginLine, dstNumLines, dstBeginX, dstWidth)) {
+						npdisp_ConvertToDDBMonoBitmap(&bmphdc);
+						tgtDC = bmphdc.hdc;
+					}
 				}
 			}
+			else {
+				tgtDC = NULL;
+			}
 		}
-		else {
-			tgtDC = NULL;
+		if (npdisp.longjmpnum == 0) {
+			// ペンがあれば選択
+			if (curPen) {
+				SelectObject(tgtDC, curPen);
+			}
+			else {
+				SelectObject(tgtDC, GetStockObject(NULL_PEN));
+			}
+			// ブラシがあれば選択
+			if (curBrush) {
+				SelectObject(tgtDC, curBrush);
+			}
+			else {
+				SelectObject(tgtDC, GetStockObject(NULL_BRUSH));
+			}
+			NPDISP_DRAWMODE drawMode = { 0 };
+			if (npdisp_readMemory(&drawMode, lpDrawModeAddr, sizeof(NPDISP_DRAWMODE))) {
+				npdisp_AdjustDrawModeColor(&drawMode);
+				SetBkColor(tgtDC, drawMode.LbkColor);
+				SetTextColor(tgtDC, drawMode.LTextColor);
+				SetBkMode(tgtDC, drawMode.bkMode);
+				SetROP2(tgtDC, drawMode.Rop2);
+			}
+			HRGN hRgn = NULL;
+			if (lpClipRectAddr) {
+				RECT cliprect = { 0 };
+				NPDISP_RECT rectTmp = { 0 };
+				npdisp_readMemory(&rectTmp, lpClipRectAddr, sizeof(NPDISP_RECT));
+				cliprect.top = rectTmp.top;
+				cliprect.left = rectTmp.left;
+				cliprect.bottom = rectTmp.bottom;
+				cliprect.right = rectTmp.right;
+				hRgn = CreateRectRgn(cliprect.left, cliprect.top, cliprect.right, cliprect.bottom);
+				SelectClipRgn(tgtDC, hRgn);
+			}
+			else {
+				SelectClipRgn(tgtDC, NULL);
+			}
+			bool success = false;
+			switch (wStyle) {
+			case 18: // OS_POLYLINE
+			{
+				success = npdisp_func_Output_POLYLINE(tgtDC, &bmphdc, &dstPBmp, curPen, curBrush, wCount, lpPointsAddr);
+				retValue = 1;
+				break;
+			}
+			case 80: // OS_BEGINNSCAN
+			case 81: // OS_ENDNSCAN
+			{
+				retValue = 1;
+				break;
+			}
+			case 4: // OS_SCANLINES
+			{
+				success = npdisp_func_Output_SCANLINES(tgtDC, &bmphdc, &dstPBmp, curPen, curBrush, wCount, lpPointsAddr);
+				retValue = 1;
+				break;
+			}
+			case 6: // OS_RECTANGLE
+			{
+				success = npdisp_func_Output_RECTANGLE(tgtDC, &bmphdc, &dstPBmp, curPen, curBrush, wCount, lpPointsAddr);
+				retValue = 1;
+				break;
+			}
+			case 20: // OS_WINDPOLYGON
+			{
+				success = npdisp_func_Output_WINDPOLYGON(tgtDC, &bmphdc, &dstPBmp, curPen, curBrush, wCount, lpPointsAddr);
+				retValue = 1;
+				break;
+			}
+			case 22: // OS_ALTPOLYGON
+			{
+				success = npdisp_func_Output_ALTPOLYGON(tgtDC, &bmphdc, &dstPBmp, curPen, curBrush, wCount, lpPointsAddr);
+				retValue = 1;
+				break;
+			}
+			case 55: // OS_CIRCLE
+			case 7: // OS_ELLIPSE 
+			{
+				success = npdisp_func_Output_ELLIPSE(tgtDC, &bmphdc, &dstPBmp, curPen, curBrush, wCount, lpPointsAddr);
+				retValue = 1;
+				break;
+			}
+			case 3: // OS_ARC
+			{
+				success = npdisp_func_Output_ARC(tgtDC, &bmphdc, &dstPBmp, curPen, curBrush, wCount, lpPointsAddr);
+				retValue = 1;
+				break;
+			}
+			case 23: // OS_PIE
+			{
+				success = npdisp_func_Output_PIE(tgtDC, &bmphdc, &dstPBmp, curPen, curBrush, wCount, lpPointsAddr);
+				retValue = 1;
+				break;
+			}
+			case 39: // OS_CHORD 
+			{
+				success = npdisp_func_Output_CHORD(tgtDC, &bmphdc, &dstPBmp, curPen, curBrush, wCount, lpPointsAddr);
+				retValue = 1;
+				break;
+			}
+			case 72: // OS_ROUNDRECT 
+			{
+				success = npdisp_func_Output_ROUNDRECT(tgtDC, &bmphdc, &dstPBmp, curPen, curBrush, wCount, lpPointsAddr);
+				retValue = 1;
+				break;
+			}
+			case 1: // OS_POLYBEZIER 
+			{
+				npdisp_func_Output_POLYBEZIER(tgtDC, &bmphdc, &dstPBmp, curPen, curBrush, wCount, lpPointsAddr);
+				break;
+			}
+			case (0x4000 | 20): // OS_POLYPOLYGON | OS_WINDPOLYGON
+			{
+				success = npdisp_func_Output_WINDPOLYPOLYGON(tgtDC, &bmphdc, &dstPBmp, curPen, curBrush, wCount, lpPointsAddr);
+				retValue = 1;
+				break;
+			}
+			case (0x4000 | 22): // OS_POLYPOLYGON | OS_ALTPOLYGON
+			{
+				success = npdisp_func_Output_ALTPOLYPOLYGON(tgtDC, &bmphdc, &dstPBmp, curPen, curBrush, wCount, lpPointsAddr);
+				retValue = 1;
+				break;
+			}
+			default:
+			{
+				TRACEOUTF(("Unsupported Output: %d", wStyle));
+				break;
+			}
+			}
+			if (success && bmphdc.hdc) {
+				// 書き戻し
+				npdisp_WriteBitmapToPBITMAP(&dstPBmp, &bmphdc, dstBeginLine, dstNumLines, dstBeginX, dstWidth);
+			}
+			if (hRgn) {
+				SelectClipRgn(tgtDC, NULL);
+				DeleteObject(hRgn);
+			}
+			if (bmphdc.hdc) {
+				npdisp_FreeBitmap(&bmphdc);
+			}
+			else {
+				if (dstNumLines == -1 && dstWidth == -1) {
+					npdisp_setDirtyAll();
+				}
+				else if (dstNumLines == -1) {
+					npdisp_setDirty(dstBeginX, 0, dstBeginX + dstWidth, npdisp.height);
+				}
+				else if (dstWidth == -1) {
+					npdisp_setDirty(0, dstBeginLine, npdisp.width, dstBeginLine + dstNumLines);
+				}
+				else {
+					npdisp_setDirty(dstBeginX, dstBeginLine, dstBeginX + dstWidth, dstBeginLine + dstNumLines);
+				}
+				npdisp.updated = 1;
+			}
 		}
 	}
-	if (npdisp.longjmpnum == 0) {
-		// ペンがあれば選択
-		if (curPen) {
-			SelectObject(tgtDC, curPen);
-		}
-		else {
-			SelectObject(tgtDC, GetStockObject(NULL_PEN));
-		}
-		// ブラシがあれば選択
-		if (curBrush) {
-			SelectObject(tgtDC, curBrush);
-		}
-		else {
-			SelectObject(tgtDC, GetStockObject(NULL_BRUSH));
-		}
-		NPDISP_DRAWMODE drawMode = { 0 };
-		if (npdisp_readMemory(&drawMode, lpDrawModeAddr, sizeof(NPDISP_DRAWMODE))) {
-			npdisp_AdjustDrawModeColor(&drawMode);
-			SetBkColor(tgtDC, drawMode.LbkColor);
-			SetTextColor(tgtDC, drawMode.LTextColor);
-			SetBkMode(tgtDC, drawMode.bkMode);
-			SetROP2(tgtDC, drawMode.Rop2);
-		}
-		HRGN hRgn = NULL;
-		if (lpClipRectAddr) {
-			RECT cliprect = { 0 };
-			NPDISP_RECT rectTmp = { 0 };
-			npdisp_readMemory(&rectTmp, lpClipRectAddr, sizeof(NPDISP_RECT));
-			cliprect.top = rectTmp.top;
-			cliprect.left = rectTmp.left;
-			cliprect.bottom = rectTmp.bottom;
-			cliprect.right = rectTmp.right;
-			hRgn = CreateRectRgn(cliprect.left, cliprect.top, cliprect.right, cliprect.bottom);
-			SelectClipRgn(tgtDC, hRgn);
-		}
-		else {
-			SelectClipRgn(tgtDC, NULL);
-		}
-		bool success = false;
-		switch (wStyle) {
-		case 18: // OS_POLYLINE
-		{
-			success = npdisp_func_Output_POLYLINE(tgtDC, &bmphdc, &dstPBmp, curPen, curBrush, wCount, lpPointsAddr);
-			retValue = 1;
-			break;
-		}
-		case 80: // OS_BEGINNSCAN
-		case 81: // OS_ENDNSCAN
-		{
-			retValue = 1;
-			break;
-		}
-		case 4: // OS_SCANLINES
-		{
-			success = npdisp_func_Output_SCANLINES(tgtDC, &bmphdc, &dstPBmp, curPen, curBrush, wCount, lpPointsAddr);
-			retValue = 1;
-			break;
-		}
-		case 6: // OS_RECTANGLE
-		{
-			success = npdisp_func_Output_RECTANGLE(tgtDC, &bmphdc, &dstPBmp, curPen, curBrush, wCount, lpPointsAddr);
-			retValue = 1;
-			break;
-		}
-		case 20: // OS_WINDPOLYGON
-		{
-			success = npdisp_func_Output_WINDPOLYGON(tgtDC, &bmphdc, &dstPBmp, curPen, curBrush, wCount, lpPointsAddr);
-			retValue = 1;
-			break;
-		}
-		case 22: // OS_ALTPOLYGON
-		{
-			success = npdisp_func_Output_ALTPOLYGON(tgtDC, &bmphdc, &dstPBmp, curPen, curBrush, wCount, lpPointsAddr);
-			retValue = 1;
-			break;
-		}
-		case 55: // OS_CIRCLE
-		case 7: // OS_ELLIPSE 
-		{
-			success = npdisp_func_Output_ELLIPSE(tgtDC, &bmphdc, &dstPBmp, curPen, curBrush, wCount, lpPointsAddr);
-			retValue = 1;
-			break;
-		}
-		case 3: // OS_ARC
-		{
-			success = npdisp_func_Output_ARC(tgtDC, &bmphdc, &dstPBmp, curPen, curBrush, wCount, lpPointsAddr);
-			retValue = 1;
-			break;
-		}
-		case 23: // OS_PIE
-		{
-			success = npdisp_func_Output_PIE(tgtDC, &bmphdc, &dstPBmp, curPen, curBrush, wCount, lpPointsAddr);
-			retValue = 1;
-			break;
-		}
-		case 39: // OS_CHORD 
-		{
-			success = npdisp_func_Output_CHORD(tgtDC, &bmphdc, &dstPBmp, curPen, curBrush, wCount, lpPointsAddr);
-			retValue = 1;
-			break;
-		}
-		case 72: // OS_ROUNDRECT 
-		{
-			success = npdisp_func_Output_ROUNDRECT(tgtDC, &bmphdc, &dstPBmp, curPen, curBrush, wCount, lpPointsAddr);
-			retValue = 1;
-			break;
-		}
-		case 1: // OS_POLYBEZIER 
-		{
-			npdisp_func_Output_POLYBEZIER(tgtDC, &bmphdc, &dstPBmp, curPen, curBrush, wCount, lpPointsAddr);
-			break;
-		}
-		case (0x4000 | 20): // OS_POLYPOLYGON | OS_WINDPOLYGON
-		{
-			success = npdisp_func_Output_WINDPOLYPOLYGON(tgtDC, &bmphdc, &dstPBmp, curPen, curBrush, wCount, lpPointsAddr);
-			retValue = 1;
-			break;
-		}
-		case (0x4000 | 22): // OS_POLYPOLYGON | OS_ALTPOLYGON
-		{
-			success = npdisp_func_Output_ALTPOLYPOLYGON(tgtDC, &bmphdc, &dstPBmp, curPen, curBrush, wCount, lpPointsAddr);
-			retValue = 1;
-			break;
-		}
-		default:
-		{
-			TRACEOUTF(("Unsupported Output: %d", wStyle));
-			break;
-		}
-		}
-		if (success && bmphdc.hdc) {
-			// 書き戻し
-			npdisp_WriteBitmapToPBITMAP(&dstPBmp, &bmphdc, dstBeginLine, dstNumLines);
-		}
-		if (hRgn) {
-			SelectClipRgn(tgtDC, NULL);
-			DeleteObject(hRgn);
-		}
-		if (bmphdc.hdc) {
-			npdisp_FreeBitmap(&bmphdc);
-		}
-		npdisp.updated = 1;
+	else {
+		// 成功したことにする 
+		retValue = 1;
 	}
 	return retValue;
 }
@@ -3326,9 +3432,18 @@ static UINT32 npdisp_func_Pixel(UINT32 lpDestDevAddr, UINT16 X, UINT16 Y, UINT32
 	NPDISP_DRAWMODE drawMode = { 0 };
 	int hasDrawMode = npdisp_readMemory(&drawMode, lpDrawModeAddr, sizeof(NPDISP_DRAWMODE));
 	if (hasDrawMode) {
-		if (npdisp.usePalette && npdisp.bpp == 8 && (dwPhysColor & 0xff000000)) {
-			dwPhysColor = dwPhysColor & 0xff;
-			dwPhysColor = dwPhysColor | (dwPhysColor << 8) | (dwPhysColor << 16);
+		if (npdisp.usePalette && npdisp.bpp == 8) {
+			if (dwPhysColor & 0xff000000) {
+				dwPhysColor = dwPhysColor & 0xff;
+				dwPhysColor = dwPhysColor | (dwPhysColor << 8) | (dwPhysColor << 16);
+			}
+			else {
+				const UINT8 r = (UINT8)(dwPhysColor & 0xFF);
+				const UINT8 g = (UINT8)((dwPhysColor >> 8) & 0xFF);
+				const UINT8 b = (UINT8)((dwPhysColor >> 16) & 0xFF);
+				dwPhysColor = npdisp_FindNearest256(r, g, b);
+				dwPhysColor = dwPhysColor | (dwPhysColor << 8) | (dwPhysColor << 16);
+			}
 		}
 		if (SetPixel(tgtDC, X, Y, dwPhysColor) != -1) {
 			retValue = 1;
@@ -3337,6 +3452,7 @@ static UINT32 npdisp_func_Pixel(UINT32 lpDestDevAddr, UINT16 X, UINT16 Y, UINT32
 			npdisp_WriteBitmapToPBITMAP(&dstPBmp, &bmphdc, Y, 1, X, 1);
 		}
 		else {
+			npdisp_setDirty(X, Y, X + 1, Y + 1);
 			npdisp.updated = 1;
 		}
 	}
@@ -3560,6 +3676,7 @@ static void npdisp_func_SetPalette(UINT16 nStartIndex, UINT16 nNumEntries, UINT3
 			lpPaletteAddr += 4;
 		}
 		npdisp_palette_clearCache(nStartIndex, endIdx);
+		npdisp_setDirtyAll();
 		npdisp.paletteUpdated = 1;
 	}
 }
@@ -3997,6 +4114,7 @@ static UINT16 npdisp_func_StretchDIBits(UINT32 lpPDevice, UINT16 fGet, SINT16 De
 										npdisp_WriteBitmapToPBITMAP(&dstPBmp, &bmphdc, DestY, absDestYE, DestX, absDestXE);
 									}
 									else {
+										npdisp_setDirty(DestX, DestY, DestX + absDestXE, DestY + absDestYE);
 										npdisp.updated = 1;
 									}
 									if (brs) {
@@ -4047,6 +4165,7 @@ static void npdisp_func_INT2Fh(UINT16 ax)
 	else if (ax == 0x4002) {
 		// DOS窓全画面モード解除
 		npdisp.active = 1;
+		npdisp_setDirtyAll();
 		npdisp.updated = 1;
 		np2wab.relaystateext = 3;
 		np2wab_setRelayState(np2wab.relaystateint | np2wab.relaystateext);
@@ -5153,30 +5272,93 @@ int npdisp_drawGraphic(void)
 	//if (paletteUpdated) {
 	//	npdisp_updatePalette();
 	//}
-	bool palChanged = false;
-	if (npdisp.usePalette) {
-		// グレースケールから実際のデバイス色へ置き換え
-		SetDIBColorTable(npdispwin.hdc, 0, 256, (RGBQUAD*)npdisp_palette_rgb256);
-		palChanged = true;
-	}
-	BitBlt(hdc, 0, 0, npdisp.width, npdisp.height, npdispwin.hdc, 0, 0, SRCCOPY);
-	//BitBlt(hdc, npdisp.width - 256, 0, npdisp.width, npdisp.height, npdispwin.hdcBltBuf, 0, 0, SRCCOPY);
+
+	// カーソル再描画判定
 	if (npdispwin.hBmpCursorMask && npdispwin.hBmpCursor) {
-		SetTextColor(npdispwin.hdcCursorMask, 0);
-		SetBkColor(npdispwin.hdcCursorMask, 0xffffff);
-		SetTextColor(npdispwin.hdcCursor, 0);
-		SetBkColor(npdispwin.hdcCursor, 0xffffff);
-		BitBlt(hdc, npdisp.cursorX - npdisp.cursorHotSpotX, npdisp.cursorY - npdisp.cursorHotSpotY, npdisp.cursorWidth, npdisp.cursorHeight, npdispwin.hdcCursorMask, 0, 0, SRCAND);
-		BitBlt(hdc, npdisp.cursorX - npdisp.cursorHotSpotX, npdisp.cursorY - npdisp.cursorHotSpotY, npdisp.cursorWidth, npdisp.cursorHeight, npdispwin.hdcCursor, 0, 0, SRCINVERT);
+		if (npdispwin.cursorUpdated) {
+			// カーソル自体に更新があれば旧カーソル領域と新カーソル領域を足す
+			if (npdispwin.lastCursorRect.left != npdispwin.lastCursorRect.right && npdispwin.lastCursorRect.top != npdispwin.lastCursorRect.bottom) {
+				npdisp_setDirty(npdispwin.lastCursorRect.left, npdispwin.lastCursorRect.top, npdispwin.lastCursorRect.right, npdispwin.lastCursorRect.bottom);
+			}
+			npdisp_setDirty(
+				npdisp.cursorX - npdisp.cursorHotSpotX,
+				npdisp.cursorY - npdisp.cursorHotSpotY,
+				npdisp.cursorX - npdisp.cursorHotSpotX + npdisp.cursorWidth,
+				npdisp.cursorY - npdisp.cursorHotSpotY + npdisp.cursorHeight);
+			npdispwin.cursorUpdated = 0;
+		}
+		else if (npdispwin.dirtyRect.left != npdispwin.dirtyRect.right && npdispwin.dirtyRect.top != npdispwin.dirtyRect.bottom) {
+			// カーソル自体に更新がない場合、カーソル領域とDirtyRectが交差していれば領域に追加する
+			bool intersects = npdisp.cursorX - npdisp.cursorHotSpotX < npdispwin.dirtyRect.right &&
+				npdispwin.dirtyRect.left < npdisp.cursorX - npdisp.cursorHotSpotX + npdisp.cursorWidth &&
+				npdisp.cursorY - npdisp.cursorHotSpotY < npdispwin.dirtyRect.bottom &&
+				npdispwin.dirtyRect.top < npdisp.cursorHotSpotY + npdisp.cursorHeight;
+			if (intersects) {
+				npdisp_setDirty(
+					npdisp.cursorX - npdisp.cursorHotSpotX,
+					npdisp.cursorY - npdisp.cursorHotSpotY,
+					npdisp.cursorX - npdisp.cursorHotSpotX + npdisp.cursorWidth,
+					npdisp.cursorY - npdisp.cursorHotSpotY + npdisp.cursorHeight);
+			}
+		}
 	}
-	else {
-		//// Test用
-		//BitBlt(hdc, npdisp.cursorX, npdisp.cursorY, 4, 4, NULL, 0, 0, BLACKNESS);
-		//BitBlt(hdc, npdisp.cursorX + 1, npdisp.cursorY + 1, 2, 2, NULL, 0, 0, WHITENESS);
+	else if(npdispwin.lastCursorRect.left != npdispwin.lastCursorRect.right && npdispwin.lastCursorRect.top != npdispwin.lastCursorRect.bottom) {
+		// カーソル非表示で前回カーソル表示状態なら前回カーソル領域を足す
+		npdisp_setDirty(npdispwin.lastCursorRect.left, npdispwin.lastCursorRect.top, npdispwin.lastCursorRect.right, npdispwin.lastCursorRect.bottom);
 	}
-	if (palChanged) {
-		// 描画後に元のグレースケールへ戻す
-		SetDIBColorTable(npdispwin.hdc, 0, 256, (RGBQUAD*)npdisp_palette_gray256);
+
+	// DirtyRectの範囲で更新
+	if (npdispwin.dirtyRect.left != npdispwin.dirtyRect.right && npdispwin.dirtyRect.top != npdispwin.dirtyRect.bottom) {
+		bool palChanged = false;
+		if (npdisp.usePalette) {
+			// グレースケールから実際のデバイス色へ置き換え
+			SetDIBColorTable(npdispwin.hdc, 0, 256, (RGBQUAD*)npdisp_palette_rgb256);
+			palChanged = true;
+		}
+		BitBlt(hdc, npdispwin.dirtyRect.left, npdispwin.dirtyRect.top, npdispwin.dirtyRect.right - npdispwin.dirtyRect.left, npdispwin.dirtyRect.bottom - npdispwin.dirtyRect.top, npdispwin.hdc, npdispwin.dirtyRect.left, npdispwin.dirtyRect.top, SRCCOPY);
+		//BitBlt(hdc, npdisp.width - 256, 0, npdisp.width, npdisp.height, npdispwin.hdcBltBuf, 0, 0, SRCCOPY);
+		if (npdispwin.hBmpCursorMask && npdispwin.hBmpCursor) {
+			SetTextColor(npdispwin.hdcCursorMask, 0);
+			SetBkColor(npdispwin.hdcCursorMask, 0xffffff);
+			SetTextColor(npdispwin.hdcCursor, 0);
+			SetBkColor(npdispwin.hdcCursor, 0xffffff);
+			BitBlt(hdc, npdisp.cursorX - npdisp.cursorHotSpotX, npdisp.cursorY - npdisp.cursorHotSpotY, npdisp.cursorWidth, npdisp.cursorHeight, npdispwin.hdcCursorMask, 0, 0, SRCAND);
+			BitBlt(hdc, npdisp.cursorX - npdisp.cursorHotSpotX, npdisp.cursorY - npdisp.cursorHotSpotY, npdisp.cursorWidth, npdisp.cursorHeight, npdispwin.hdcCursor, 0, 0, SRCINVERT);
+		}
+		else {
+			//// Test用
+			//BitBlt(hdc, npdisp.cursorX, npdisp.cursorY, 4, 4, NULL, 0, 0, BLACKNESS);
+			//BitBlt(hdc, npdisp.cursorX + 1, npdisp.cursorY + 1, 2, 2, NULL, 0, 0, WHITENESS);
+		}
+		if (palChanged) {
+			// 描画後に元のグレースケールへ戻す
+			SetDIBColorTable(npdispwin.hdc, 0, 256, (RGBQUAD*)npdisp_palette_gray256);
+		}
+
+		//// DEBUG: DirtyRect確認用
+		//HGDIOBJ oldPen = SelectObject(npdispwin.hdc, GetStockObject(BLACK_PEN));
+		//HGDIOBJ oldBrush = SelectObject(npdispwin.hdc, GetStockObject(NULL_BRUSH));
+		//Rectangle(npdispwin.hdc, npdispwin.dirtyRect.left, npdispwin.dirtyRect.top, npdispwin.dirtyRect.right, npdispwin.dirtyRect.bottom);
+		//SelectObject(npdispwin.hdc, oldPen);
+		//SelectObject(npdispwin.hdc, oldBrush);
+
+		// WAB転送時のDirtyRect設定
+		np2wab_setDirtyRect(npdispwin.dirtyRect);
+
+		// DirtyRectリセット
+		npdisp_resetDirty();
+
+		// 旧カーソル位置を記憶
+		if (npdispwin.hBmpCursorMask && npdispwin.hBmpCursor) {
+			npdispwin.lastCursorRect.left = npdisp.cursorX - npdisp.cursorHotSpotX;
+			npdispwin.lastCursorRect.top = npdisp.cursorY - npdisp.cursorHotSpotY;
+			npdispwin.lastCursorRect.right = npdisp.cursorX - npdisp.cursorHotSpotX + npdisp.cursorWidth;
+			npdispwin.lastCursorRect.bottom = npdisp.cursorY - npdisp.cursorHotSpotY + npdisp.cursorHeight;
+		}
+		else {
+			// カーソル非表示ならクリア
+			npdispwin.lastCursorRect.left = npdispwin.lastCursorRect.top = npdispwin.lastCursorRect.right = npdispwin.lastCursorRect.bottom = 0;
+		}
 	}
 	npdispcs_leave_criticalsection();
 
@@ -5261,7 +5443,7 @@ static void npdisp_releaseScreen(bool resize) {
 		}
 		if (npdispwin.hdcCursorMask) {
 			if (npdispwin.hBmpCursorMask) {
-				SelectObject(npdispwin.hdcCursorMask, npdispwin.hOldBmpCursor);
+				SelectObject(npdispwin.hdcCursorMask, npdispwin.hOldBmpCursorMask);
 				DeleteObject(npdispwin.hBmpCursorMask);
 				npdispwin.hBmpCursorMask = NULL;
 			}
@@ -5334,17 +5516,39 @@ static void npdisp_createScreen(bool resize) {
 	if (!npdispwin.hBmp || !npdispwin.pBits) {
 		DeleteDC(npdispwin.hdc);
 		npdispwin.hdc = NULL;
+		DeleteDC(npdispwin.hdcShadow);
+		npdispwin.hdcShadow = NULL;
+		DeleteDC(npdispwin.hdcBltBuf);
+		npdispwin.hdcBltBuf = NULL;
+		ReleaseDC(NULL, hdcScreen);
 		return;
 	}
 	npdispwin.hBmpShadow = CreateDIBSection(hdcScreen, (BITMAPINFO*)&npdispwin.bi, DIB_RGB_COLORS, &npdispwin.pBitsShadow, NULL, 0);
 	if (!npdispwin.hBmpShadow || !npdispwin.pBitsShadow) {
 		DeleteObject(npdispwin.hBmp);
-		DeleteDC(npdispwin.hdc);
 		npdispwin.hBmp = NULL;
+		DeleteDC(npdispwin.hdc);
 		npdispwin.hdc = NULL;
+		DeleteDC(npdispwin.hdcShadow);
+		npdispwin.hdcShadow = NULL;
+		DeleteDC(npdispwin.hdcBltBuf);
+		npdispwin.hdcBltBuf = NULL;
+		ReleaseDC(NULL, hdcScreen);
 		return;
 	}
 	npdispwin.hBmpBltBuf = CreateDIBSection(hdcScreen, (BITMAPINFO*)&npdispwin.bi, DIB_RGB_COLORS, &npdispwin.pBitsBltBuf, NULL, 0);
+	if (!npdispwin.hBmpBltBuf) {
+		DeleteObject(npdispwin.hBmp);
+		npdispwin.hBmp = NULL;
+		DeleteDC(npdispwin.hdc);
+		npdispwin.hdc = NULL;
+		DeleteDC(npdispwin.hdcShadow);
+		npdispwin.hdcShadow = NULL;
+		DeleteDC(npdispwin.hdcBltBuf);
+		npdispwin.hdcBltBuf = NULL;
+		ReleaseDC(NULL, hdcScreen);
+		return;
+	}
 
 	//npdispwin.hBmp16BltBuf = CreateCompatibleBitmap(hdcScreen, width, height);
 
@@ -5509,6 +5713,9 @@ void npdisp_reset(const NP2CFG* pConfig)
 	npdispwin.hdcCursorMask = NULL;
 	npdispwin.hBmpCursorMask = NULL;
 	npdispwin.hOldBmpCursorMask = NULL;
+
+	npdispwin.dirtyRect.left = npdispwin.dirtyRect.top = npdispwin.dirtyRect.right = npdispwin.dirtyRect.bottom = 0;
+	npdispwin.lastCursorRect.left = npdispwin.lastCursorRect.top = npdispwin.lastCursorRect.right = npdispwin.lastCursorRect.bottom = 0;
 
 	npdisp.cursorHotSpotX = 0;
 	npdisp.cursorHotSpotY = 0;
@@ -5775,7 +5982,7 @@ int npdisp_sfload(STFLAGH sfh, const SFENTRY* tbl)
 					if (!hBmpCursorMask) goto error;
 					hBmpCursor = CreateDIBSection(npdispwin.hdcCursor, (BITMAPINFO*)(&bi), DIB_RGB_COLORS, &pBitsCursor, NULL, 0);
 					if (!hBmpCursor) {
-						DeleteObject(hBmpCursor);
+						DeleteObject(hBmpCursorMask);
 						goto error;
 					}
 				}
@@ -5945,6 +6152,7 @@ int npdisp_sfload(STFLAGH sfh, const SFENTRY* tbl)
 			npdisp.longjmpnum = longjmpnum; // 読み込み中例外のフラグは残す
 
 			// 画面更新
+			npdisp_setDirtyAll();
 			npdisp.paletteUpdated = 1;
 			npdisp.updated = 1;
 		}

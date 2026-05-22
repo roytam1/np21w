@@ -4346,7 +4346,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInst,
 	BOOL		xrollkey;
 	int			winx, winy;
 	int			terminateFlag = 0;
-	
+
+	//_CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
 #ifdef _DEBUG
 	// 使うときはstdlib.hとcrtdbg.hをインクルードする
 	_CrtSetDbgFlag(_CrtSetDbgFlag(_CRTDBG_REPORT_FLAG) | _CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);

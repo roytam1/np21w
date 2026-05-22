@@ -167,7 +167,7 @@ int npdisp_FindNearest16(UINT8 r, UINT8 g, UINT8 b)
 	}
 	return best;
 }
-int npdisp_FindNearest256(UINT8 r, UINT8 g, UINT8 b)
+int npdisp_FindNearest256(UINT8 r, UINT8 g, UINT8 b, bool fromSystemColor)
 {
 	int i;
 	int best = 0;
@@ -193,15 +193,17 @@ int npdisp_FindNearest256(UINT8 r, UINT8 g, UINT8 b)
 			best = i;
 		}
 	}
-	// 無ければ自由色で
-	for (i = 10; i < 246; i++) {
-		long dr = (long)r - npdisp_palette_rgb256[i].r;
-		long dg = (long)g - npdisp_palette_rgb256[i].g;
-		long db = (long)b - npdisp_palette_rgb256[i].b;
-		long dist = dr * dr + dg * dg + db * db;
-		if (dist < bestDist) {
-			bestDist = dist;
-			best = i;
+	if (!fromSystemColor) {
+		// 無ければ自由色で
+		for (i = 10; i < 246; i++) {
+			long dr = (long)r - npdisp_palette_rgb256[i].r;
+			long dg = (long)g - npdisp_palette_rgb256[i].g;
+			long db = (long)b - npdisp_palette_rgb256[i].b;
+			long dist = dr * dr + dg * dg + db * db;
+			if (dist < bestDist) {
+				bestDist = dist;
+				best = i;
+			}
 		}
 	}
 	return best;

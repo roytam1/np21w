@@ -1215,7 +1215,7 @@ REG8 IOINPCALL smpu98_i2(UINT port) {
 		cm_smpu98[1] = commng_create(COMCREATE_SMPU98_B, FALSE);
 		smpu98.portBready = (cm_smpu98[1]->connect != COMCONNECT_OFF);
 	}
-	if ((cm_smpu98[0]->connect != COMCONNECT_OFF) || g_nSoundID == SOUNDID_PC_9801_118 || g_nSoundID == SOUNDID_PC_9801_118_SB16) {
+	if ((cm_smpu98[0]->connect != COMCONNECT_OFF) || port == (cs4231.port[10] + 1)) {
 
 		ret = smpu98.status;
 		if ((smpu98.r.cnt == 0) && (smpu98.intreq == 0)) {
@@ -1226,7 +1226,18 @@ REG8 IOINPCALL smpu98_i2(UINT port) {
 			smpu98.status &= ~MIDIOUT_BUSY;
 		}
 // TRACEOUT(("smpu98 inp %.4x %.2x", port, ret));
-		return(ret);
+		if ((port & 0xff00) == 0x8100)
+		{
+			// SB16のMPU互換ポートではMIDIIN_AVAILとMIDIOUT_BUSY以外のビットが常に1らしい
+			return(ret | ~(MIDIIN_AVAIL | MIDIOUT_BUSY));
+		}
+		else
+		{
+			return(ret);
+		}
+	}
+	else if ((port & 0xff00) == 0x8100) {
+		return(0x00);
 	}
 	(void)port;
 	return(0xff);

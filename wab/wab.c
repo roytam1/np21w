@@ -68,6 +68,13 @@ static HANDLE wab_thread_eventhandle = INVALID_HANDLE_VALUE;
 
 static int np2wab_forceupdateflag = 0;
 
+static RECT np2wab_dirtyrect = { 0 };
+
+void np2wab_setDirtyRect(RECT r)
+{
+	np2wab_dirtyrect = r;
+}
+
 static BOOL wab_tryenter_criticalsection(void){
 #if defined(_WIN32)
 	if(!wab_cs_initialized) return TRUE;
@@ -446,7 +453,11 @@ void np2wab_drawWABWindow(HDC hdc)
 		// DirectDrawに描かせる
 		//scrnmng_blthdc(np2wabwnd.hDCBuf);
 		// DirectDraw Surfaceに転送
-		scrnmng_blthdc(np2wabwnd.hDCBuf);
+		scrnmng_blthdc(np2wabwnd.hDCBuf, np2wab_dirtyrect);
+		np2wab_dirtyrect.left = 0;
+		np2wab_dirtyrect.right = 0;
+		np2wab_dirtyrect.top = 0;
+		np2wab_dirtyrect.bottom = 0;
 	}
 }
 
@@ -515,8 +526,13 @@ unsigned int __stdcall ga_ThreadFunc(LPVOID vdParam) {
 
 		if (ga_exitThread || !ga_threadmode) break;
 
-		//wab_enter_criticalsection();
-		//wab_leave_criticalsection();
+		wab_enter_criticalsection();
+		if (ga_screenupdated) {
+			wab_leave_criticalsection();
+			continue;
+		}
+		wab_leave_criticalsection();
+
 		drawFrameFunc = np2wabwnd.drawframe;
 #if defined(SUPPORT_WAB_NPDISP)
 		if (npdisp.active) {
@@ -530,6 +546,7 @@ unsigned int __stdcall ga_ThreadFunc(LPVOID vdParam) {
 #if defined(SUPPORT_WAB_NPDISP)
 					if (npdisp.active) {
 						npdisp.paletteUpdated = 1; // パレット強制更新
+						npdisp_setDirtyAll();
 						npdisp.updated = 1; // 強制更新
 					}
 #endif

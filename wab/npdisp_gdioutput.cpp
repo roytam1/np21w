@@ -56,20 +56,24 @@ bool npdisp_func_Output_POLYLINE(HDC tgtDC, NPDISP_WINDOWS_BMPHDC *bmphdc, NPDIS
 	}
 	return false;
 }
-bool npdisp_func_Output_GetYRange_POLYLINE(int*lineBegin, int* numLines, HPEN curPen, HBRUSH curBrush, UINT16 wCount, UINT32 lpPointsAddr)
+bool npdisp_func_Output_GetXYRange_POLYLINE(int* xBegin, int* width, int*lineBegin, int* numLines, HPEN curPen, HBRUSH curBrush, UINT16 wCount, UINT32 lpPointsAddr)
 {
-	TRACEOUT2(("npdisp_func_Output_GetYRange_POLYLINE %d", wCount));
+	TRACEOUT2(("npdisp_func_Output_GetXYRange_POLYLINE %d", wCount));
 	int penWidthOffset = 0;
 	if (curPen) {
 		LOGPEN lp;
 		GetObject(curPen, sizeof(LOGPEN), &lp);
 		penWidthOffset = (lp.lopnWidth.x + 1) / 2;
 	}
+	int minX = SHRT_MAX;
+	int maxX = 0;
 	int minY = SHRT_MAX;
 	int maxY = 0;
 	for (int i = 0; i < wCount; i++) {
 		NPDISP_POINT pt;
 		if (npdisp_readMemory(&pt, lpPointsAddr, sizeof(NPDISP_POINT))) {
+			if (pt.x < minX) minX = pt.x;
+			if (pt.x > maxX) maxX = pt.x;
 			if (pt.y < minY) minY = pt.y;
 			if (pt.y > maxY) maxY = pt.y;
 		}
@@ -78,14 +82,23 @@ bool npdisp_func_Output_GetYRange_POLYLINE(int*lineBegin, int* numLines, HPEN cu
 		}
 		lpPointsAddr += sizeof(NPDISP_POINT);
 	}
+	if (minX <= maxX) {
+		*xBegin = minX - penWidthOffset;
+		*width = maxX - minX + 1 + penWidthOffset * 2;
+	}
+	else {
+		*xBegin = 0;
+		*width = 0;
+	}
 	if (minY <= maxY) {
 		*lineBegin = minY - penWidthOffset;
 		*numLines = maxY - minY + 1 + penWidthOffset * 2;
-		return true;
 	}
-	*lineBegin = 0;
-	*numLines = 0;
-	return false;
+	else {
+		*lineBegin = 0;
+		*numLines = 0;
+	}
+	return true;
 }
 bool npdisp_func_Output_SCANLINES(HDC tgtDC, NPDISP_WINDOWS_BMPHDC* bmphdc, NPDISP_PBITMAP_EXT* dstPBmp, HPEN curPen, HBRUSH curBrush, UINT16 wCount, UINT32 lpPointsAddr)
 {
@@ -118,9 +131,9 @@ bool npdisp_func_Output_SCANLINES(HDC tgtDC, NPDISP_WINDOWS_BMPHDC* bmphdc, NPDI
 	}
 	return false;
 }
-bool npdisp_func_Output_GetYRange_SCANLINES(int* lineBegin, int* numLines, HPEN curPen, HBRUSH curBrush, UINT16 wCount, UINT32 lpPointsAddr)
+bool npdisp_func_Output_GetXYRange_SCANLINES(int* xBegin, int* width, int*lineBegin, int* numLines, HPEN curPen, HBRUSH curBrush, UINT16 wCount, UINT32 lpPointsAddr)
 {
-	TRACEOUT2(("npdisp_func_Output_GetYRange_SCANLINES %d", wCount));
+	TRACEOUT2(("npdisp_func_Output_GetXYRange_SCANLINES %d", wCount));
 	NPDISP_POINT pt;
 	if (npdisp_readMemory(&pt, lpPointsAddr, sizeof(NPDISP_POINT))) {
 		*lineBegin = pt.y;
@@ -150,9 +163,9 @@ bool npdisp_func_Output_RECTANGLE(HDC tgtDC, NPDISP_WINDOWS_BMPHDC* bmphdc, NPDI
 	}
 	return false;
 }
-bool npdisp_func_Output_GetYRange_RECTANGLE(int* lineBegin, int* numLines, HPEN curPen, HBRUSH curBrush, UINT16 wCount, UINT32 lpPointsAddr)
+bool npdisp_func_Output_GetXYRange_RECTANGLE(int* xBegin, int* width, int*lineBegin, int* numLines, HPEN curPen, HBRUSH curBrush, UINT16 wCount, UINT32 lpPointsAddr)
 {
-	TRACEOUT2(("npdisp_func_Output_GetYRange_RECTANGLE %d", wCount));
+	TRACEOUT2(("npdisp_func_Output_GetXYRange_RECTANGLE %d", wCount));
 	int penWidthOffset = 0;
 	if (curPen) {
 		LOGPEN lp;
@@ -171,13 +184,25 @@ bool npdisp_func_Output_GetYRange_RECTANGLE(int* lineBegin, int* numLines, HPEN 
 				*lineBegin = pt2.y;
 				*numLines = pt1.y - pt2.y;
 			}
+			if (pt1.x <= pt2.x) {
+				*xBegin = pt1.x;
+				*width = pt2.x - pt1.x;
+			}
+			else {
+				*xBegin = pt2.x;
+				*width = pt1.x - pt2.x;
+			}
 			*lineBegin -= penWidthOffset;
 			*numLines += penWidthOffset * 2;
+			*xBegin -= penWidthOffset;
+			*width += penWidthOffset * 2;
 			return true;
 		}
 	}
 	*lineBegin = 0;
 	*numLines = 0;
+	*xBegin = 0;
+	*width = 0;
 	return false;
 }
 bool npdisp_func_Output_WINDPOLYGON(HDC tgtDC, NPDISP_WINDOWS_BMPHDC* bmphdc, NPDISP_PBITMAP_EXT* dstPBmp, HPEN curPen, HBRUSH curBrush, UINT16 wCount, UINT32 lpPointsAddr)
@@ -226,20 +251,24 @@ bool npdisp_func_Output_ALTPOLYGON(HDC tgtDC, NPDISP_WINDOWS_BMPHDC* bmphdc, NPD
 	}
 	return false;
 }
-bool npdisp_func_Output_GetYRange_POLYGON(int* lineBegin, int* numLines, HPEN curPen, HBRUSH curBrush, UINT16 wCount, UINT32 lpPointsAddr)
+bool npdisp_func_Output_GetXYRange_POLYGON(int* xBegin, int* width, int*lineBegin, int* numLines, HPEN curPen, HBRUSH curBrush, UINT16 wCount, UINT32 lpPointsAddr)
 {
-	TRACEOUT2(("npdisp_func_Output_GetYRange_POLYGON %d", wCount));
+	TRACEOUT2(("npdisp_func_Output_GetXYRange_POLYGON %d", wCount));
 	int penWidthOffset = 0;
 	if (curPen) {
 		LOGPEN lp;
 		GetObject(curPen, sizeof(LOGPEN), &lp);
 		penWidthOffset = (lp.lopnWidth.x + 1) / 2;
 	}
+	int minX = SHRT_MAX;
+	int maxX = 0;
 	int minY = SHRT_MAX;
 	int maxY = 0;
 	for (int i = 0; i < wCount; i++) {
 		NPDISP_POINT pt;
 		if (npdisp_readMemory(&pt, lpPointsAddr, sizeof(NPDISP_POINT))) {
+			if (pt.x < minX) minX = pt.x;
+			if (pt.x > maxX) maxX = pt.x;
 			if (pt.y < minY) minY = pt.y;
 			if (pt.y > maxY) maxY = pt.y;
 		}
@@ -248,14 +277,23 @@ bool npdisp_func_Output_GetYRange_POLYGON(int* lineBegin, int* numLines, HPEN cu
 		}
 		lpPointsAddr += sizeof(NPDISP_POINT);
 	}
+	if (minX <= maxX) {
+		*xBegin = minX - penWidthOffset;
+		*width = maxX - minX + 1 + penWidthOffset * 2;
+	}
+	else {
+		*xBegin = 0;
+		*width = 0;
+	}
 	if (minY <= maxY) {
 		*lineBegin = minY - penWidthOffset;
 		*numLines = maxY - minY + 1 + penWidthOffset * 2;
-		return true;
 	}
-	*lineBegin = 0;
-	*numLines = 0;
-	return false;
+	else {
+		*lineBegin = 0;
+		*numLines = 0;
+	}
+	return true;
 }
 bool npdisp_func_Output_ELLIPSE(HDC tgtDC, NPDISP_WINDOWS_BMPHDC* bmphdc, NPDISP_PBITMAP_EXT* dstPBmp, HPEN curPen, HBRUSH curBrush, UINT16 wCount, UINT32 lpPointsAddr)
 {
@@ -271,9 +309,9 @@ bool npdisp_func_Output_ELLIPSE(HDC tgtDC, NPDISP_WINDOWS_BMPHDC* bmphdc, NPDISP
 	}
 	return false;
 }
-bool npdisp_func_Output_GetYRange_ELLIPSE(int* lineBegin, int* numLines, HPEN curPen, HBRUSH curBrush, UINT16 wCount, UINT32 lpPointsAddr)
+bool npdisp_func_Output_GetXYRange_ELLIPSE(int* xBegin, int* width, int*lineBegin, int* numLines, HPEN curPen, HBRUSH curBrush, UINT16 wCount, UINT32 lpPointsAddr)
 {
-	TRACEOUT2(("npdisp_func_Output_GetYRange_ELLIPSE %d", wCount));
+	TRACEOUT2(("npdisp_func_Output_GetXYRange_ELLIPSE %d", wCount));
 	int penWidthOffset = 0;
 	if (curPen) {
 		LOGPEN lp;
@@ -292,13 +330,25 @@ bool npdisp_func_Output_GetYRange_ELLIPSE(int* lineBegin, int* numLines, HPEN cu
 				*lineBegin = pt2.y;
 				*numLines = pt1.y - pt2.y;
 			}
+			if (pt1.x <= pt2.x) {
+				*xBegin = pt1.x;
+				*width = pt2.x - pt1.x;
+			}
+			else {
+				*xBegin = pt2.x;
+				*width = pt1.x - pt2.x;
+			}
 			*lineBegin -= penWidthOffset;
 			*numLines += penWidthOffset * 2;
+			*xBegin -= penWidthOffset;
+			*width += penWidthOffset * 2;
 			return true;
 		}
 	}
 	*lineBegin = 0;
 	*numLines = 0;
+	*xBegin = 0;
+	*width = 0;
 	return false;
 }
 bool npdisp_func_Output_ARC(HDC tgtDC, NPDISP_WINDOWS_BMPHDC* bmphdc, NPDISP_PBITMAP_EXT* dstPBmp, HPEN curPen, HBRUSH curBrush, UINT16 wCount, UINT32 lpPointsAddr)
@@ -315,7 +365,7 @@ bool npdisp_func_Output_ARC(HDC tgtDC, NPDISP_WINDOWS_BMPHDC* bmphdc, NPDISP_PBI
 	Arc(tgtDC, pts[0].x - penWidthOffset, pts[0].y - penWidthOffset, pts[1].x + penWidthOffset + 1, pts[1].y + penWidthOffset + 1, pts[2].x, pts[2].y, pts[3].x, pts[3].y);
 	return true;
 }
-bool npdisp_func_Output_GetYRange_ARC(int* lineBegin, int* numLines, HPEN curPen, HBRUSH curBrush, UINT16 wCount, UINT32 lpPointsAddr)
+bool npdisp_func_Output_GetXYRange_ARC(int* xBegin, int* width, int*lineBegin, int* numLines, HPEN curPen, HBRUSH curBrush, UINT16 wCount, UINT32 lpPointsAddr)
 {
 	TRACEOUT2(("npdisp_func_Output_ARC %d", wCount));
 	int penWidthOffset = 0;
@@ -336,13 +386,25 @@ bool npdisp_func_Output_GetYRange_ARC(int* lineBegin, int* numLines, HPEN curPen
 				*lineBegin = pt2.y;
 				*numLines = pt1.y - pt2.y + 1;
 			}
+			if (pt1.x <= pt2.x) {
+				*xBegin = pt1.x;
+				*width = pt2.x - pt1.x + 1;
+			}
+			else {
+				*xBegin = pt2.x;
+				*width = pt1.x - pt2.x + 1;
+			}
 			*lineBegin -= penWidthOffset;
 			*numLines += penWidthOffset * 2;
+			*xBegin -= penWidthOffset;
+			*width += penWidthOffset * 2;
 			return true;
 		}
 	}
 	*lineBegin = 0;
 	*numLines = 0;
+	*xBegin = 0;
+	*width = 0;
 	return false;
 }
 bool npdisp_func_Output_PIE(HDC tgtDC, NPDISP_WINDOWS_BMPHDC* bmphdc, NPDISP_PBITMAP_EXT* dstPBmp, HPEN curPen, HBRUSH curBrush, UINT16 wCount, UINT32 lpPointsAddr)
@@ -359,9 +421,9 @@ bool npdisp_func_Output_PIE(HDC tgtDC, NPDISP_WINDOWS_BMPHDC* bmphdc, NPDISP_PBI
 	Pie(tgtDC, pts[0].x - penWidthOffset, pts[0].y - penWidthOffset, pts[1].x + penWidthOffset + 1, pts[1].y + penWidthOffset + 1, pts[2].x, pts[2].y, pts[3].x, pts[3].y);
 	return true;
 }
-bool npdisp_func_Output_GetYRange_PIE(int* lineBegin, int* numLines, HPEN curPen, HBRUSH curBrush, UINT16 wCount, UINT32 lpPointsAddr)
+bool npdisp_func_Output_GetXYRange_PIE(int* xBegin, int* width, int*lineBegin, int* numLines, HPEN curPen, HBRUSH curBrush, UINT16 wCount, UINT32 lpPointsAddr)
 {
-	TRACEOUT2(("npdisp_func_Output_GetYRange_PIE %d", wCount));
+	TRACEOUT2(("npdisp_func_Output_GetXYRange_PIE %d", wCount));
 	int penWidthOffset = 0;
 	if (curPen) {
 		LOGPEN lp;
@@ -380,13 +442,25 @@ bool npdisp_func_Output_GetYRange_PIE(int* lineBegin, int* numLines, HPEN curPen
 				*lineBegin = pt2.y;
 				*numLines = pt1.y - pt2.y + 1;
 			}
+			if (pt1.x <= pt2.x) {
+				*xBegin = pt1.x;
+				*width = pt2.x - pt1.x + 1;
+			}
+			else {
+				*xBegin = pt2.x;
+				*width = pt1.x - pt2.x + 1;
+			}
 			*lineBegin -= penWidthOffset;
 			*numLines += penWidthOffset * 2;
+			*xBegin -= penWidthOffset;
+			*width += penWidthOffset * 2;
 			return true;
 		}
 	}
 	*lineBegin = 0;
 	*numLines = 0;
+	*xBegin = 0;
+	*width = 0;
 	return false;
 }
 bool npdisp_func_Output_CHORD(HDC tgtDC, NPDISP_WINDOWS_BMPHDC* bmphdc, NPDISP_PBITMAP_EXT* dstPBmp, HPEN curPen, HBRUSH curBrush, UINT16 wCount, UINT32 lpPointsAddr)
@@ -403,9 +477,9 @@ bool npdisp_func_Output_CHORD(HDC tgtDC, NPDISP_WINDOWS_BMPHDC* bmphdc, NPDISP_P
 	Chord(tgtDC, pts[0].x - penWidthOffset, pts[0].y - penWidthOffset, pts[1].x + penWidthOffset + 1, pts[1].y + penWidthOffset + 1, pts[2].x, pts[2].y, pts[3].x, pts[3].y);
 	return true;
 }
-bool npdisp_func_Output_GetYRange_CHORD(int* lineBegin, int* numLines, HPEN curPen, HBRUSH curBrush, UINT16 wCount, UINT32 lpPointsAddr)
+bool npdisp_func_Output_GetXYRange_CHORD(int* xBegin, int* width, int*lineBegin, int* numLines, HPEN curPen, HBRUSH curBrush, UINT16 wCount, UINT32 lpPointsAddr)
 {
-	TRACEOUT2(("npdisp_func_Output_GetYRange_CHORD %d", wCount));
+	TRACEOUT2(("npdisp_func_Output_GetXYRange_CHORD %d", wCount));
 	int penWidthOffset = 0;
 	if (curPen) {
 		LOGPEN lp;
@@ -424,13 +498,25 @@ bool npdisp_func_Output_GetYRange_CHORD(int* lineBegin, int* numLines, HPEN curP
 				*lineBegin = pt2.y;
 				*numLines = pt1.y - pt2.y + 1;
 			}
+			if (pt1.x <= pt2.x) {
+				*xBegin = pt1.x;
+				*width = pt2.x - pt1.x + 1;
+			}
+			else {
+				*xBegin = pt2.x;
+				*width = pt1.x - pt2.x + 1;
+			}
 			*lineBegin -= penWidthOffset;
 			*numLines += penWidthOffset * 2;
+			*xBegin -= penWidthOffset;
+			*width += penWidthOffset * 2;
 			return true;
 		}
 	}
 	*lineBegin = 0;
 	*numLines = 0;
+	*xBegin = 0;
+	*width = 0;
 	return false;
 }
 bool npdisp_func_Output_ROUNDRECT(HDC tgtDC, NPDISP_WINDOWS_BMPHDC* bmphdc, NPDISP_PBITMAP_EXT* dstPBmp, HPEN curPen, HBRUSH curBrush, UINT16 wCount, UINT32 lpPointsAddr)
@@ -450,9 +536,9 @@ bool npdisp_func_Output_ROUNDRECT(HDC tgtDC, NPDISP_WINDOWS_BMPHDC* bmphdc, NPDI
 	}
 	return false;
 }
-bool npdisp_func_Output_GetYRange_ROUNDRECT(int* lineBegin, int* numLines, HPEN curPen, HBRUSH curBrush, UINT16 wCount, UINT32 lpPointsAddr)
+bool npdisp_func_Output_GetXYRange_ROUNDRECT(int* xBegin, int* width, int*lineBegin, int* numLines, HPEN curPen, HBRUSH curBrush, UINT16 wCount, UINT32 lpPointsAddr)
 {
-	TRACEOUT2(("npdisp_func_Output_GetYRange_ROUNDRECT %d", wCount));
+	TRACEOUT2(("npdisp_func_Output_GetXYRange_ROUNDRECT %d", wCount));
 	int penWidthOffset = 0;
 	if (curPen) {
 		LOGPEN lp;
@@ -471,13 +557,25 @@ bool npdisp_func_Output_GetYRange_ROUNDRECT(int* lineBegin, int* numLines, HPEN 
 				*lineBegin = pt2.y;
 				*numLines = pt1.y - pt2.y;
 			}
+			if (pt1.x <= pt2.x) {
+				*xBegin = pt1.x;
+				*width = pt2.x - pt1.x;
+			}
+			else {
+				*xBegin = pt2.x;
+				*width = pt1.x - pt2.x;
+			}
 			*lineBegin -= penWidthOffset;
 			*numLines += penWidthOffset * 2;
+			*xBegin -= penWidthOffset;
+			*width += penWidthOffset * 2;
 			return true;
 		}
 	}
 	*lineBegin = 0;
 	*numLines = 0;
+	*xBegin = 0;
+	*width = 0;
 	return false;
 }
 bool npdisp_func_Output_POLYBEZIER(HDC tgtDC, NPDISP_WINDOWS_BMPHDC* bmphdc, NPDISP_PBITMAP_EXT* dstPBmp, HPEN curPen, HBRUSH curBrush, UINT16 wCount, UINT32 lpPointsAddr)
@@ -502,20 +600,24 @@ bool npdisp_func_Output_POLYBEZIER(HDC tgtDC, NPDISP_WINDOWS_BMPHDC* bmphdc, NPD
 	}
 	return false;
 }
-bool npdisp_func_Output_GetYRange_POLYBEZIER(int* lineBegin, int* numLines, HPEN curPen, HBRUSH curBrush, UINT16 wCount, UINT32 lpPointsAddr)
+bool npdisp_func_Output_GetXYRange_POLYBEZIER(int* xBegin, int* width, int*lineBegin, int* numLines, HPEN curPen, HBRUSH curBrush, UINT16 wCount, UINT32 lpPointsAddr)
 {
-	TRACEOUT2(("npdisp_func_Output_GetYRange_POLYBEZIER %d", wCount));
+	TRACEOUT2(("npdisp_func_Output_GetXYRange_POLYBEZIER %d", wCount));
 	int penWidthOffset = 0;
 	if (curPen) {
 		LOGPEN lp;
 		GetObject(curPen, sizeof(LOGPEN), &lp);
 		penWidthOffset = (lp.lopnWidth.x + 1) / 2;
 	}
+	int minX = SHRT_MAX;
+	int maxX = 0;
 	int minY = SHRT_MAX;
 	int maxY = 0;
 	for (int i = 0; i < wCount; i++) {
 		NPDISP_POINT pt;
 		if (npdisp_readMemory(&pt, lpPointsAddr, sizeof(NPDISP_POINT))) {
+			if (pt.x < minX) minX = pt.x;
+			if (pt.x > maxX) maxX = pt.x;
 			if (pt.y < minY) minY = pt.y;
 			if (pt.y > maxY) maxY = pt.y;
 		}
@@ -524,14 +626,23 @@ bool npdisp_func_Output_GetYRange_POLYBEZIER(int* lineBegin, int* numLines, HPEN
 		}
 		lpPointsAddr += sizeof(NPDISP_POINT);
 	}
+	if (minX <= maxX) {
+		*xBegin = minX - penWidthOffset;
+		*width = maxX - minX + 1 + penWidthOffset * 2;
+	}
+	else {
+		*xBegin = 0;
+		*width = 0;
+	}
 	if (minY <= maxY) {
 		*lineBegin = minY - penWidthOffset;
 		*numLines = maxY - minY + 1 + penWidthOffset * 2;
-		return true;
 	}
-	*lineBegin = 0;
-	*numLines = 0;
-	return false;
+	else {
+		*lineBegin = 0;
+		*numLines = 0;
+	}
+	return true;
 }
 bool npdisp_func_Output_WINDPOLYPOLYGON(HDC tgtDC, NPDISP_WINDOWS_BMPHDC* bmphdc, NPDISP_PBITMAP_EXT* dstPBmp, HPEN curPen, HBRUSH curBrush, UINT16 wCount, UINT32 lpPointsAddr)
 {
@@ -584,22 +695,23 @@ bool npdisp_func_Output_ALTPOLYPOLYGON(HDC tgtDC, NPDISP_WINDOWS_BMPHDC* bmphdc,
 			}
 			polypolyPointsAddr += sizeof(NPDISP_POINT);
 		}
-		pointsList.push_back(points);
 	}
 	SetPolyFillMode(tgtDC, ALTERNATE);
 	PolyPolygon(tgtDC, &(pointList[0]), &(pointsList[0]), wCount);
 errorout:
 	return true;
 }
-bool npdisp_func_Output_GetYRange_POLYPOLYGON(int* lineBegin, int* numLines, HPEN curPen, HBRUSH curBrush, UINT16 wCount, UINT32 lpPointsAddr)
+bool npdisp_func_Output_GetXYRange_POLYPOLYGON(int* xBegin, int* width, int*lineBegin, int* numLines, HPEN curPen, HBRUSH curBrush, UINT16 wCount, UINT32 lpPointsAddr)
 {
-	TRACEOUT2(("npdisp_func_Output_GetYRange_POLYPOLYGON %d", wCount));
+	TRACEOUT2(("npdisp_func_Output_GetXYRange_POLYPOLYGON %d", wCount));
 	int penWidthOffset = 0;
 	if (curPen) {
 		LOGPEN lp;
 		GetObject(curPen, sizeof(LOGPEN), &lp);
 		penWidthOffset = (lp.lopnWidth.x + 1) / 2;
 	}
+	int minX = SHRT_MAX;
+	int maxX = 0;
 	int minY = SHRT_MAX;
 	int maxY = 0;
 	int pointsSum = 0;
@@ -613,6 +725,8 @@ bool npdisp_func_Output_GetYRange_POLYPOLYGON(int* lineBegin, int* numLines, HPE
 	for (int j = 0; j < pointsSum; j++) {
 		NPDISP_POINT pt;
 		if (npdisp_readMemory(&pt, lpPointsAddr, sizeof(NPDISP_POINT))) {
+			if (pt.x < minX) minX = pt.x;
+			if (pt.x > maxX) maxX = pt.x;
 			if (pt.y < minY) minY = pt.y;
 			if (pt.y > maxY) maxY = pt.y;
 		}
@@ -622,14 +736,23 @@ bool npdisp_func_Output_GetYRange_POLYPOLYGON(int* lineBegin, int* numLines, HPE
 		lpPointsAddr += sizeof(NPDISP_POINT);
 	}
 errorout:
+	if (minX <= maxX) {
+		*xBegin = minX - penWidthOffset;
+		*width = maxX - minX + 1 + penWidthOffset * 2;
+	}
+	else {
+		*xBegin = 0;
+		*width = 0;
+	}
 	if (minY <= maxY) {
 		*lineBegin = minY - penWidthOffset;
 		*numLines = maxY - minY + 1 + penWidthOffset * 2;
-		return true;
 	}
-	*lineBegin = 0;
-	*numLines = 0;
-	return false;
+	else {
+		*lineBegin = 0;
+		*numLines = 0;
+	}
+	return true;
 }
 
 #endif

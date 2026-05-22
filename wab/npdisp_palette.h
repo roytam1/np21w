@@ -48,7 +48,7 @@ extern "C" {
 
 	int npdisp_FindNearest2(UINT8 r, UINT8 g, UINT8 b);
 	int npdisp_FindNearest16(UINT8 r, UINT8 g, UINT8 b);
-	int npdisp_FindNearest256(UINT8 r, UINT8 g, UINT8 b);
+	int npdisp_FindNearest256(UINT8 r, UINT8 g, UINT8 b, bool fromSystemColor = false);
 	int npdisp_FindNearest256Tbl(UINT8 r, UINT8 g, UINT8 b);
 
 	UINT32 npdisp_FindNearestColor(UINT8 r, UINT8 g, UINT8 b);

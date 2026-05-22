@@ -51,6 +51,10 @@ extern "C" {
 
 	extern NPDISP		npdisp;
 
+	void npdisp_setDirty(int x1, int y1, int x2, int y2);
+	void npdisp_setDirtyAll(void);
+	void npdisp_resetDirty(void);
+
 	int npdisp_drawGraphic(void);
 
 	void npdisp_exec(void);

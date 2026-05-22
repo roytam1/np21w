@@ -1570,7 +1570,7 @@ void scrnmngDD_updatefsres(void) {
 }
 
 // ウィンドウアクセラレータ画面転送
-void scrnmngDD_blthdc(HDC hdc) {
+void scrnmngDD_blthdc(HDC hdc, RECT dirtyRect) {
 #if defined(SUPPORT_WAB)
 	HRESULT	r;
 	HDC hDCDD;

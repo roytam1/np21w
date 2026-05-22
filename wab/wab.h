@@ -75,6 +75,8 @@ void wabwin_writeini(void);
 
 void np2wab_forceupdate(void);
 
+void np2wab_setDirtyRect(RECT r);
+
 extern NP2WAB		np2wab;
 extern NP2WABCFG	np2wabcfg;
 extern NP2WABWND	np2wabwnd;

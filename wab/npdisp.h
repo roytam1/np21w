@@ -47,6 +47,20 @@ extern "C" {
 		UINT8	isWin9x;
 
 		int longjmpnum_nonfast;
+
+		// プロトコルバージョン5以降
+		UINT32 mm_vramPhysicalAddr;
+		UINT8* mm_screenPtr;
+		UINT32 mm_screenSize;
+		UINT32 mm_bmpinfoAddr;
+		UINT32 mm_beginAccessAddr;
+		UINT32 mm_endAccessAddr;
+		UINT32 mm_dcibufAddr;
+		UINT32 mm_dciBeginAccessAddr;
+		UINT32 mm_dciEndAccessAddr;
+		UINT32 mm_dciDestroySurfaceAddr;
+		UINT32 mm_vramLinearAddr;
+		UINT32 mm_dciEnable;
 	} NPDISP;
 
 	extern NPDISP		npdisp;

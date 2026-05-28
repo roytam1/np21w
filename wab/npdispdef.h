@@ -56,7 +56,11 @@
 #define NPDISP_FUNCORDER_SaveScreenBitmap		92
 #define NPDISP_FUNCORDER_SetCursor				102
 #define NPDISP_FUNCORDER_UserRepaintDisable		500 // DDK HELPにないがこれがないとプログラム終了時に例外 
+#define NPDISP_FUNCORDER_DCI_BEGINACCESS		0xfe00
+#define NPDISP_FUNCORDER_DCI_ENDACCESS			0xfe01
+#define NPDISP_FUNCORDER_DCI_DESTROYSURFACE		0xfe02
 #define NPDISP_FUNCORDER_INT2Fh					0xff2f // 序数がないので0xff2fとしておく
+#define NPDISP_FUNCORDER_MEMORYMAP				0xfffc // 序数がないので0xfffcとしておく
 #define NPDISP_FUNCORDER_WEP					0xffff // 序数がないので0xffffとしておく
 // 以降 Win9x用
 #define NPDISP_FUNCORDER_ReEnable				31
@@ -135,6 +139,7 @@
 #define NPDISP_C1_DIBENGINE 	0x0010
 #define NPDISP_C1_REINIT_ABLE	0x0080
 #define NPDISP_C1_COLORCURSOR	0x0800
+#define NPDISP_C1_SLOW_CARD		0x2000
 
 #define NPDISP_PEN_STYLE_SOLID			0
 #define NPDISP_PEN_STYLE_DASHED			1
@@ -172,6 +177,8 @@
 #define NPDISP_VALMODE_NO_NODAC		3
 #define NPDISP_VALMODE_NO_UNKNOWN	4
 
+#define NPDISP_CONTROL_SETCOLORTABLE        4
+#define NPDISP_CONTROL_GETCOLORTABLE        5
 #define NPDISP_CONTROL_QUERYESCSUPPORT		8
 #define NPDISP_CONTROL_QUERYDIBSUPPORT		3073
 #define NPDISP_CONTROL_DCICOMMAND			3075
@@ -179,6 +186,9 @@
 #define NPDISP_CONTROL_OPENGL_CMD			4352
 #define NPDISP_CONTROL_OPENGL_GETINFO		4353
 #define NPDISP_CONTROL_WNDOBJ_SETUP			4354
+
+#define NPDISP_CONTROL_NP2DCIENABLE			0x7222
+#define NPDISP_CONTROL_NP2DCIDISABLE		0x7223
 
 #define NPDISP_CONTROL_DCI_DCICREATEPRIMARYSURFACE		1
 #define NPDISP_CONTROL_DCI_DCICREATEOFFSCREENSURFACE	2
@@ -212,6 +222,15 @@ extern "C" {
 				UINT16 height;
 				UINT16 bpp;
 				UINT16 isWin9x;
+				UINT32 bmpinfoAddr;
+				UINT32 beginAccessAddr;
+				UINT32 endAccessAddr;
+				UINT32 dcibufAddr;
+				UINT32 dciBeginAccessAddr;
+				UINT32 dciEndAccessAddr;
+				UINT32 dciDestroySurfaceAddr;
+				UINT32 vramLinearAddr;
+				UINT32 vramPhysicalAddr;
 			} init;
 			struct
 			{
@@ -504,6 +523,26 @@ extern "C" {
 				UINT32 lpDrawModeAddr;
 				UINT32 lpClipRecAddr;
 			} stretchDIBits;
+			struct
+			{
+				UINT32 physicalAddr;
+				UINT32 linearAddr;
+				UINT16 farSelector;
+				UINT32 farOffset;
+			} MEMORYMAP;
+			struct
+			{
+				UINT32 lpDeviceAddr;
+				UINT32 lpRectAddr;
+			} DCI_BeginAccess;
+			struct
+			{
+				UINT32 lpDeviceAddr;
+			} DCI_EndAccess;
+			struct
+			{
+				UINT32 lpDeviceAddr;
+			} DCI_DestroySurface;
 			struct
 			{
 				UINT16 arguments[20];
@@ -973,7 +1012,7 @@ extern "C" {
 		UINT32 dwModeIndex;
 		UINT32 lpdwFourCC;
 		UINT32 dwNumModes;
-		NPDISP_DDHALMODEINFO lpModeInfo;
+		UINT32 lpModeInfo;
 		UINT32 dwFlags;
 		UINT32 lpPDevice;
 		UINT32 hInstance;
@@ -981,7 +1020,6 @@ extern "C" {
 		UINT32 lpD3DHALCallbacks;
 		UINT32 lpDDExeBufCallbacksAddr;
 	} NPDISP_DDHALINFO;
-
 
 #pragma pack(pop)
 
@@ -1147,6 +1185,8 @@ extern "C" {
 		RECT dirtyRect;
 		RECT lastCursorRect;
 		bool cursorUpdated;
+
+		RECT dciDirtyRect;
 	} NPDISP_WINDOWS;
 
 	typedef struct {

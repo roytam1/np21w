@@ -699,8 +699,8 @@ bool npdisp_isDisplayDevice(UINT32 lpAddr)
 		// DIBエンジンかもしれない
 		NPDISP_PDEVICE pdev;
 		if (npdisp_readMemory(&pdev, lpAddr, sizeof(NPDISP_PDEVICE))) {
-			if (pdev.dibe.deFlags == 0x4) { // SELECTEDDIBフラグを見る
-				// 立っていたらDIBセクション
+			if ((pdev.dibe.deFlags & 0x25) == 0x04) { // NOT_FRAMEBUFFER, MINIDRIVER, SELECTEDDIBフラグを見る
+				// SELECTEDDIBだけ立っていたらDIBセクション
 				return false;
 			}
 		}

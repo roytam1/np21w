@@ -112,11 +112,14 @@ UINT16 npdisp_func_StretchBlt_VRAMtoVRAM(int hasDstDev, int hasSrcDev, UINT32 lp
 	NPDISP_DRAWMODE drawMode = { 0 };
 	int hasDrawMode = npdisp_readMemory(&drawMode, lpDrawModeAddr, sizeof(NPDISP_DRAWMODE));
 	if (hasDrawMode) {
-		npdisp_AdjustDrawModeColor(&drawMode);
-		SetBkColor(npdispwin.hdc, drawMode.LbkColor);
-		SetTextColor(npdispwin.hdc, drawMode.LTextColor);
-		SetBkMode(npdispwin.hdc, drawMode.bkMode);
-		SetROP2(npdispwin.hdc, drawMode.Rop2);
+		if (memcmp(&drawMode, &npdispwin.lastScreenDrawMode, sizeof(NPDISP_DRAWMODE)) != 0) {
+			npdispwin.lastScreenDrawMode = drawMode;
+			npdisp_AdjustDrawModeColor(&drawMode);
+			SetBkColor(npdispwin.hdc, drawMode.LbkColor);
+			SetTextColor(npdispwin.hdc, drawMode.LTextColor);
+			SetBkMode(npdispwin.hdc, drawMode.bkMode);
+			SetROP2(npdispwin.hdc, drawMode.Rop2);
+		}
 	}
 	else {
 		SetBkColor(npdispwin.hdc, 0xffffff);
@@ -260,11 +263,14 @@ UINT16 npdisp_func_StretchBlt_MEMtoVRAM(int hasDstDev, int hasSrcDev, UINT32 lpD
 				NPDISP_DRAWMODE drawMode = { 0 };
 				int hasDrawMode = npdisp_readMemory(&drawMode, lpDrawModeAddr, sizeof(NPDISP_DRAWMODE));
 				if (hasDrawMode) {
-					npdisp_AdjustDrawModeColor(&drawMode);
-					SetBkColor(npdispwin.hdc, drawMode.LbkColor);
-					SetTextColor(npdispwin.hdc, drawMode.LTextColor);
-					SetBkMode(npdispwin.hdc, drawMode.bkMode);
-					SetROP2(npdispwin.hdc, drawMode.Rop2);
+					if (memcmp(&drawMode, &npdispwin.lastScreenDrawMode, sizeof(NPDISP_DRAWMODE)) != 0) {
+						npdispwin.lastScreenDrawMode = drawMode;
+						npdisp_AdjustDrawModeColor(&drawMode);
+						SetBkColor(npdispwin.hdc, drawMode.LbkColor);
+						SetTextColor(npdispwin.hdc, drawMode.LTextColor);
+						SetBkMode(npdispwin.hdc, drawMode.bkMode);
+						SetROP2(npdispwin.hdc, drawMode.Rop2);
+					}
 					// ソースにもセットが必要
 					SetBkColor(bmphdc.hdc, drawMode.LbkColor);
 					SetTextColor(bmphdc.hdc, drawMode.LTextColor);
@@ -420,13 +426,14 @@ UINT16 npdisp_func_StretchBlt_MEMtoVRAM(int hasDstDev, int hasSrcDev, UINT32 lpD
 						int hasDrawMode = npdisp_readMemory(&drawMode, lpDrawModeAddr, sizeof(NPDISP_DRAWMODE));
 						SelectObject(npdispwin.hdc, value.brs);
 						if (hasDrawMode) {
-							npdisp_AdjustDrawModeColor(&drawMode);
-							SetBkColor(npdispwin.hdc, drawMode.LbkColor);
-							SetTextColor(npdispwin.hdc, drawMode.LTextColor);
-							if (brush.lbrush.lbStyle == NPDISP_BRUSH_STYLE_PATTERN) {
+							if (npdispwin.hdc != npdispwin.hdc || memcmp(&drawMode, &npdispwin.lastScreenDrawMode, sizeof(NPDISP_DRAWMODE)) != 0) {
+								if (npdispwin.hdc == npdispwin.hdc) npdispwin.lastScreenDrawMode = drawMode;
+								npdisp_AdjustDrawModeColor(&drawMode);
+								SetBkColor(npdispwin.hdc, drawMode.LbkColor);
+								SetTextColor(npdispwin.hdc, drawMode.LTextColor);
+								SetBkMode(npdispwin.hdc, drawMode.bkMode);
+								SetROP2(npdispwin.hdc, drawMode.Rop2);
 							}
-							SetBkMode(npdispwin.hdc, drawMode.bkMode);
-							SetROP2(npdispwin.hdc, drawMode.Rop2);
 						}
 						else {
 							SetBkColor(npdispwin.hdc, 0xffffff);
@@ -532,11 +539,14 @@ UINT16 npdisp_func_StretchBlt_VRAMtoMEM(int hasDstDev, int hasSrcDev, UINT32 lpD
 			NPDISP_DRAWMODE drawMode = { 0 };
 			int hasDrawMode = npdisp_readMemory(&drawMode, lpDrawModeAddr, sizeof(NPDISP_DRAWMODE));
 			if (hasDrawMode) {
-				npdisp_AdjustDrawModeColor(&drawMode);
-				SetBkColor(bmphdc.hdc, drawMode.LbkColor);
-				SetTextColor(bmphdc.hdc, drawMode.LTextColor);
-				SetBkMode(bmphdc.hdc, drawMode.bkMode);
-				SetROP2(bmphdc.hdc, drawMode.Rop2);
+				if (bmphdc.hdc != npdispwin.hdc || memcmp(&drawMode, &npdispwin.lastScreenDrawMode, sizeof(NPDISP_DRAWMODE)) != 0) {
+					if (bmphdc.hdc == npdispwin.hdc) npdispwin.lastScreenDrawMode = drawMode;
+					npdisp_AdjustDrawModeColor(&drawMode);
+					SetBkColor(bmphdc.hdc, drawMode.LbkColor);
+					SetTextColor(bmphdc.hdc, drawMode.LTextColor);
+					SetBkMode(bmphdc.hdc, drawMode.bkMode);
+					SetROP2(bmphdc.hdc, drawMode.Rop2);
+				}
 				// ソースにもセットが必要
 				SetBkColor(npdispwin.hdc, drawMode.LbkColor);
 				SetTextColor(npdispwin.hdc, drawMode.LTextColor);
@@ -729,22 +739,14 @@ UINT16 npdisp_func_StretchBlt_MEMtoMEM(int hasDstDev, int hasSrcDev, UINT32 lpDe
 							NPDISP_DRAWMODE drawMode = { 0 };
 							int hasDrawMode = npdisp_readMemory(&drawMode, lpDrawModeAddr, sizeof(NPDISP_DRAWMODE));
 							if (hasDrawMode) {
-								bool use24buf = false;
-								//if ((srcbmphdc.lpbi->bmiHeader.biBitCount == 16 || srcbmphdc.lpbi->bmiHeader.biBitCount == 15) && dstbmphdc.lpbi->bmiHeader.biBitCount == 1 && npdispwin.hdc16BltBuf && drawMode.LbkColor == 0xffffff) {
-								//	// XXX: ペイントブラシの色指定消しゴム専用
-								//	use24buf = true;
-								//	srcHDC = npdispwin.hdc16BltBuf;
-								//}
-								npdisp_AdjustDrawModeColor(&drawMode, use24buf);
-								if (use24buf) {
-									BitBlt(srcHDC, wSrcX, wSrcY, wDestXext, wDestYext, srcbmphdc.hdc, wSrcX, wSrcY, SRCCOPY);
+								if (dstbmphdc.hdc != npdispwin.hdc || memcmp(&drawMode, &npdispwin.lastScreenDrawMode, sizeof(NPDISP_DRAWMODE)) != 0) {
+									if (dstbmphdc.hdc == npdispwin.hdc) npdispwin.lastScreenDrawMode = drawMode;
+									npdisp_AdjustDrawModeColor(&drawMode);
+									SetBkColor(dstbmphdc.hdc, drawMode.LbkColor);
+									SetTextColor(dstbmphdc.hdc, drawMode.LTextColor);
+									SetBkMode(dstbmphdc.hdc, drawMode.bkMode);
+									SetROP2(dstbmphdc.hdc, drawMode.Rop2);
 								}
-							}
-							if (hasDrawMode) {
-								SetBkColor(dstbmphdc.hdc, drawMode.LbkColor);
-								SetTextColor(dstbmphdc.hdc, drawMode.LTextColor);
-								SetBkMode(dstbmphdc.hdc, drawMode.bkMode);
-								SetROP2(dstbmphdc.hdc, drawMode.Rop2);
 								// ソースにもセットが必要
 								SetBkColor(srcHDC, drawMode.LbkColor);
 								SetTextColor(srcHDC, drawMode.LTextColor);
@@ -919,13 +921,14 @@ UINT16 npdisp_func_StretchBlt_MEMtoMEM(int hasDstDev, int hasSrcDev, UINT32 lpDe
 								NPDISP_DRAWMODE drawMode = { 0 };
 								int hasDrawMode = npdisp_readMemory(&drawMode, lpDrawModeAddr, sizeof(NPDISP_DRAWMODE));
 								if (hasDrawMode) {
-									npdisp_AdjustDrawModeColor(&drawMode);
-									SetBkColor(dstbmphdc.hdc, drawMode.LbkColor);
-									SetTextColor(dstbmphdc.hdc, drawMode.LTextColor);
-									if (brush.lbrush.lbStyle == NPDISP_BRUSH_STYLE_PATTERN) {
+									if (dstbmphdc.hdc != npdispwin.hdc || memcmp(&drawMode, &npdispwin.lastScreenDrawMode, sizeof(NPDISP_DRAWMODE)) != 0) {
+										if (dstbmphdc.hdc == npdispwin.hdc) npdispwin.lastScreenDrawMode = drawMode;
+										npdisp_AdjustDrawModeColor(&drawMode);
+										SetBkColor(dstbmphdc.hdc, drawMode.LbkColor);
+										SetTextColor(dstbmphdc.hdc, drawMode.LTextColor);
+										SetBkMode(dstbmphdc.hdc, drawMode.bkMode);
+										SetROP2(dstbmphdc.hdc, drawMode.Rop2);
 									}
-									SetBkMode(dstbmphdc.hdc, drawMode.bkMode);
-									SetROP2(dstbmphdc.hdc, drawMode.Rop2);
 								}
 								else {
 									SetBkColor(dstbmphdc.hdc, 0xffffff);

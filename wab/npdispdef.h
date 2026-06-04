@@ -1187,6 +1187,8 @@ extern "C" {
 		bool cursorUpdated;
 
 		RECT dciDirtyRect;
+
+		NPDISP_DRAWMODE lastScreenDrawMode;
 	} NPDISP_WINDOWS;
 
 	typedef struct {

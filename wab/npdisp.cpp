@@ -404,7 +404,7 @@ static UINT16 npdisp_func_Enable_GDIINFO(NPDISP_GDIINFO *lpDevInfo, UINT16 wStyl
 	lpDevInfo->dpCurves = NPDISP_CC_CIRCLES | NPDISP_CC_ELLIPSES | NPDISP_CC_WIDE | NPDISP_CC_STYLED | NPDISP_CC_WIDESTYLED | NPDISP_CC_INTERIORS | NPDISP_CC_PIE | NPDISP_CC_CHORD | NPDISP_CC_ROUNDRECT;
 	lpDevInfo->dpLines = NPDISP_LC_POLYLINE | NPDISP_LC_STYLED | NPDISP_LC_WIDE | NPDISP_LC_WIDESTYLED | NPDISP_LC_INTERIORS;
 	lpDevInfo->dpPolygonals = NPDISP_PC_SCANLINE | NPDISP_PC_RECTANGLE | NPDISP_PC_POLYGON | NPDISP_PC_WINDPOLYGON | NPDISP_PC_WIDE | NPDISP_PC_STYLED | NPDISP_PC_WIDESTYLED | NPDISP_PC_INTERIORS | NPDISP_PC_POLYPOLYGON;
-	lpDevInfo->dpText = 0x7fff;// NPDISP_TC_RA_ABLE;// 0x0004 | 0x2000;
+	lpDevInfo->dpText = NPDISP_TC_RA_ABLE;// 0x0004 | 0x2000;
 	lpDevInfo->dpClip = NPDISP_CP_RECTANGLE;
 	lpDevInfo->dpRaster = NPDISP_RC_BITBLT | NPDISP_RC_BITMAP64 | NPDISP_RC_DI_BITMAP | NPDISP_RC_BIGFONT | NPDISP_RC_SAVEBITMAP | NPDISP_RC_DIBTODEV | NPDISP_RC_GDI20_OUTPUT | NPDISP_RC_OP_DX_OUTPUT | NPDISP_RC_STRETCHBLT | NPDISP_RC_GDI20_STATE | NPDISP_RC_FLOODFILL; // 0x4699; // RC_BITBLT | RC_BITMAP64 | RC_SAVEBITMAP | RC_GDI20_OUTPUT | RC_DI_BITMAP;
 	if (npdisp.version >= 3) {
@@ -1932,11 +1932,14 @@ static UINT16 npdisp_func_DeviceBitmapBits(UINT32 lpBitmapAddr, UINT16 fGet, UIN
 									}
 									NPDISP_DRAWMODE drawMode = { 0 };
 									if (npdisp_readMemory(&drawMode, lpDrawModeAddr, sizeof(NPDISP_DRAWMODE))) {
-										npdisp_AdjustDrawModeColor(&drawMode);
-										SetBkColor(hdc, drawMode.LbkColor);
-										SetTextColor(hdc, drawMode.LTextColor);
-										SetBkMode(hdc, drawMode.bkMode);
-										SetROP2(hdc, drawMode.Rop2);
+										if (hdc != npdispwin.hdc || memcmp(&drawMode, &npdispwin.lastScreenDrawMode, sizeof(NPDISP_DRAWMODE)) != 0) {
+											if (hdc == npdispwin.hdc) npdispwin.lastScreenDrawMode = drawMode;
+											npdisp_AdjustDrawModeColor(&drawMode);
+											SetBkColor(hdc, drawMode.LbkColor);
+											SetTextColor(hdc, drawMode.LTextColor);
+											SetBkMode(hdc, drawMode.bkMode);
+											SetROP2(hdc, drawMode.Rop2);
+										}
 									}
 									if (fGet) {
 										// Get Bits
@@ -2239,40 +2242,55 @@ static UINT32 npdisp_func_ExtTextOut(UINT32 lpDestDevAddr, SINT16 wDestXOrg, SIN
 
 									if (srcW > 0 && srcH > 0) {
 										HBRUSH hBrush;
-										bool isStockBrush = false;
+										bool isBlack = false;
+										bool isWhite = false;
 										bool preferDither;
-										UINT32 color = npdisp_AdjustColorRefForGDI(drawMode.bkColor, &preferDither);
-										if (!preferDither) {
-											// ƒF
-											if (color == 0) {
-												hBrush = (HBRUSH)GetStockObject(BLACK_BRUSH);
-												isStockBrush = true;
-											}
-											else if ((color & 0xffffff) == 0xffffff) {
-												hBrush = (HBRUSH)GetStockObject(WHITE_BRUSH);
-												isStockBrush = true;
-											}
-											else {
-												hBrush = CreateSolidBrush(color);
-											}
+										if ((drawMode.bkColor & 0xffffff) == 0) {
+											// •‚ÅŠm’è
+											isBlack = true;
+										}
+										else if ((drawMode.bkColor & 0xffffff) == 0xffffff) {
+											// ”’‚ÅŠm’è
+											isWhite = true;
 										}
 										else {
-											// ƒfƒBƒU
-											UINT32 actualColor1;
-											UINT32 actualColor2;
-											double ratio;
-											MakePaletteDitherBrushColor(color, &actualColor1, &actualColor2, &ratio);
-											hBrush = CreatePaletteDitherBrush(actualColor1, actualColor2, ratio);
+											UINT32 color = npdisp_AdjustColorRefForGDI(drawMode.bkColor, &preferDither);
+											if (!preferDither) {
+												// ƒF
+												if (color == 0) {
+													isBlack = true;
+												}
+												else if ((color & 0xffffff) == 0xffffff) {
+													isWhite = true;
+												}
+												else {
+													hBrush = CreateSolidBrush(color);
+												}
+											}
+											else {
+												// ƒfƒBƒU
+												UINT32 actualColor1;
+												UINT32 actualColor2;
+												double ratio;
+												MakePaletteDitherBrushColor(color, &actualColor1, &actualColor2, &ratio);
+												hBrush = CreatePaletteDitherBrush(actualColor1, actualColor2, ratio);
+											}
 										}
-										HGDIOBJ oldBrush = SelectObject(tgtDC, hBrush);
-										SetBkMode(tgtDC, OPAQUE);
-										SetROP2(tgtDC, drawMode.Rop2);
 										RECT gdiopaquerect = { dstX, dstY, dstX + srcW, dstY + srcH };
-										FillRect(tgtDC, &gdiopaquerect, hBrush);
-										//PatBlt(tgtDC, opaquerect.left, opaquerect.top, opaquerect.right - opaquerect.left, opaquerect.bottom - opaquerect.top, drawMode.Rop2);
-										//Rectangle(tgtDC, opaquerect.left, opaquerect.top, opaquerect.right, opaquerect.bottom);
-										SelectObject(tgtDC, oldBrush);
-										if (!isStockBrush) {
+										if (isBlack) {
+											PatBlt(tgtDC, dstX, dstY, srcW, srcH, BLACKNESS);
+										}
+										else if (isWhite) {
+											PatBlt(tgtDC, dstX, dstY, srcW, srcH, WHITENESS);
+										}
+										else {
+											HGDIOBJ oldBrush = SelectObject(tgtDC, hBrush);
+											SetBkMode(tgtDC, OPAQUE);
+											SetROP2(tgtDC, drawMode.Rop2);
+											FillRect(tgtDC, &gdiopaquerect, hBrush);
+											//PatBlt(tgtDC, opaquerect.left, opaquerect.top, opaquerect.right - opaquerect.left, opaquerect.bottom - opaquerect.top, drawMode.Rop2);
+											//Rectangle(tgtDC, opaquerect.left, opaquerect.top, opaquerect.right, opaquerect.bottom);
+											SelectObject(tgtDC, oldBrush);
 											DeleteObject(hBrush);
 										}
 										if (bmphdc.hdc) {
@@ -2298,7 +2316,13 @@ static UINT32 npdisp_func_ExtTextOut(UINT32 lpDestDevAddr, SINT16 wDestXOrg, SIN
 						BITMAPINFO* lpbi = (BITMAPINFO*)malloc(sizeof(BITMAPINFOHEADER) + sizeof(RGBQUAD) * 2);
 						if (lpbi) {
 							HDC hdcText = npdispwin.hdcCache[1];
-							int stride = ((sz.cx + 7) / 8 + 1) / 2 * 2;
+							int ddbWidth = sz.cx;
+							int stride = ((ddbWidth + 7) / 8 + 1) / 2 * 2;
+							int stride4 = ((ddbWidth + 31) / 32) * 4;
+							if (stride != stride4) {
+								ddbWidth += 16; // 16dot = 2byte‘‚â‚·‚±‚Æ‚Å4ƒoƒCƒgƒAƒ‰ƒCƒƒ“ƒg‹­§‚·‚é
+								stride = stride4;
+							}
 							void* pBits = (char*)malloc(stride * sz.cy);
 							if (pBits) {
 								HGDIOBJ hbmpOld;
@@ -2342,10 +2366,7 @@ static UINT32 npdisp_func_ExtTextOut(UINT32 lpDestDevAddr, SINT16 wDestXOrg, SIN
 									}
 									free(srcBuf);
 								}
-								HBITMAP hBmp = CreateBitmap(sz.cx, sz.cy, 1, 1, pBits);
-								if (hBmp) {
-									HGDIOBJ hbmpOld;
-									hbmpOld = SelectObject(hdcText, hBmp);
+								if (npdisp.longjmpnum == 0) {
 									NPDISP_PBITMAP_EXT dstPBmp;
 									NPDISP_WINDOWS_BMPHDC bmphdc = { 0 };
 									HDC tgtDC = npdispwin.hdc;
@@ -2357,43 +2378,50 @@ static UINT32 npdisp_func_ExtTextOut(UINT32 lpDestDevAddr, SINT16 wDestXOrg, SIN
 											}
 										}
 									}
-									if (npdisp.longjmpnum == 0) {
-										bool hasClipRect = lpClipRectAddr != 0;
-										if (lpOpaqueRectAddr && (wOptions & 2)) {
-											int dstLeft = opaquerect.left;
-											int dstTop = opaquerect.top;
-											int dstRight = opaquerect.right;
-											int dstBottom = opaquerect.bottom;
+									bool hasClipRect = lpClipRectAddr != 0;
+									if (lpOpaqueRectAddr && (wOptions & 2)) {
+										int dstLeft = opaquerect.left;
+										int dstTop = opaquerect.top;
+										int dstRight = opaquerect.right;
+										int dstBottom = opaquerect.bottom;
 
-											if (lpClipRectAddr) {
-												dstLeft = max(dstLeft, cliprect.left);
-												dstTop = max(dstTop, cliprect.top);
-												dstRight = min(dstRight, cliprect.right);
-												dstBottom = min(dstBottom, cliprect.bottom);
+										if (lpClipRectAddr) {
+											dstLeft = max(dstLeft, cliprect.left);
+											dstTop = max(dstTop, cliprect.top);
+											dstRight = min(dstRight, cliprect.right);
+											dstBottom = min(dstBottom, cliprect.bottom);
+										}
+
+										int dstX = dstLeft;
+										int dstY = dstTop;
+
+										int srcX = dstLeft - wDestXOrg;
+										int srcY = dstTop - wDestYOrg;
+										int srcW = dstRight - dstLeft;
+										int srcH = dstBottom - dstTop;
+
+										if (srcW > 0 && srcH > 0) {
+											HBRUSH hBrush;
+											bool isBlack = false;
+											bool isWhite = false;
+											bool preferDither;
+											if ((drawMode.bkColor & 0xffffff) == 0) {
+												// •‚ÅŠm’è
+												isBlack = true;
 											}
-
-											int dstX = dstLeft;
-											int dstY = dstTop;
-
-											int srcX = dstLeft - wDestXOrg;
-											int srcY = dstTop - wDestYOrg;
-											int srcW = dstRight - dstLeft;
-											int srcH = dstBottom - dstTop;
-
-											if (srcW > 0 && srcH > 0) {
-												HBRUSH hBrush;
-												bool isStockBrush = false;
-												bool preferDither;
+											else if ((drawMode.bkColor & 0xffffff) == 0xffffff) {
+												// ”’‚ÅŠm’è
+												isWhite = true;
+											}
+											else {
 												UINT32 color = npdisp_AdjustColorRefForGDI(drawMode.bkColor, &preferDither);
 												if (!preferDither) {
 													// ƒF
 													if (color == 0) {
-														hBrush = (HBRUSH)GetStockObject(BLACK_BRUSH);
-														isStockBrush = true;
+														isBlack = true;
 													}
 													else if ((color & 0xffffff) == 0xffffff) {
-														hBrush = (HBRUSH)GetStockObject(WHITE_BRUSH);
-														isStockBrush = true;
+														isWhite = true;
 													}
 													else {
 														hBrush = CreateSolidBrush(color);
@@ -2407,65 +2435,77 @@ static UINT32 npdisp_func_ExtTextOut(UINT32 lpDestDevAddr, SINT16 wDestXOrg, SIN
 													MakePaletteDitherBrushColor(color, &actualColor1, &actualColor2, &ratio);
 													hBrush = CreatePaletteDitherBrush(actualColor1, actualColor2, ratio);
 												}
-												TRACEOUT(("-> HAS BACKGROUND"));
+											}
+											TRACEOUT(("-> HAS BACKGROUND"));
 
-												RECT gdiopaquerect = { dstX, dstY, dstX + srcW, dstY + srcH };
+											RECT gdiopaquerect = { dstX, dstY, dstX + srcW, dstY + srcH };
+											if (isBlack) {
+												PatBlt(tgtDC, dstX, dstY, srcW, srcH, BLACKNESS);
+											}
+											else if (isWhite) {
+												PatBlt(tgtDC, dstX, dstY, srcW, srcH, WHITENESS);
+											}
+											else {
 												FillRect(tgtDC, &gdiopaquerect, hBrush);
-
-												npdisp_setDirty(dstX, dstY, dstX + srcW, dstY + srcH);
-
-												if (!isStockBrush) {
-													DeleteObject(hBrush);
-												}
+												DeleteObject(hBrush);
 											}
+
+											npdisp_setDirty(dstX, dstY, dstX + srcW, dstY + srcH);
+
 										}
-										{
-											int dstLeft = wDestXOrg;
-											int dstTop = wDestYOrg;
-											int dstRight = wDestXOrg + sz.cx;
-											int dstBottom = wDestYOrg + sz.cy;
+									}
+									{
+										int dstLeft = wDestXOrg;
+										int dstTop = wDestYOrg;
+										int dstRight = wDestXOrg + sz.cx;
+										int dstBottom = wDestYOrg + sz.cy;
 
-											if (hasClipRect) {
-												dstLeft = max(dstLeft, cliprect.left);
-												dstTop = max(dstTop, cliprect.top);
-												dstRight = min(dstRight, cliprect.right);
-												dstBottom = min(dstBottom, cliprect.bottom);
-											}
+										if (hasClipRect) {
+											dstLeft = max(dstLeft, cliprect.left);
+											dstTop = max(dstTop, cliprect.top);
+											dstRight = min(dstRight, cliprect.right);
+											dstBottom = min(dstBottom, cliprect.bottom);
+										}
 
-											int dstX = dstLeft;
-											int dstY = dstTop;
+										int dstX = dstLeft;
+										int dstY = dstTop;
 
-											int srcX = dstLeft - wDestXOrg;
-											int srcY = dstTop - wDestYOrg;
-											int srcW = dstRight - dstLeft;
-											int srcH = dstBottom - dstTop;
+										int srcX = dstLeft - wDestXOrg;
+										int srcY = dstTop - wDestYOrg;
+										int srcW = dstRight - dstLeft;
+										int srcH = dstBottom - dstTop;
 
-											if (srcW > 0 && srcH > 0) {
+										if (srcW > 0 && srcH > 0) {
 
-												SetROP2(tgtDC, R2_COPYPEN);
-												bool isTransparentBk = (drawMode.bkMode == 1 || drawMode.bkMode == 4);
-												if (!isTransparentBk) {
-													bool preferDither;
-													UINT32 color = npdisp_AdjustColorRefForGDI(drawMode.bkColor, &preferDither);
-													if (preferDither) {
-														// ƒfƒBƒU”wŒi
-														UINT32 actualColor1;
-														UINT32 actualColor2;
-														double ratio;
-														MakePaletteDitherBrushColor(color, &actualColor1, &actualColor2, &ratio);
-														HBRUSH hBrush = CreatePaletteDitherBrush(actualColor1, actualColor2, ratio);
-														HGDIOBJ oldBrush = SelectObject(tgtDC, hBrush);
-														RECT gdiopaquerect = { dstX, dstY, dstX + srcW, dstY + srcH };
-														FillRect(tgtDC, &gdiopaquerect, hBrush);
-														SelectObject(tgtDC, oldBrush);
-														DeleteObject(hBrush);
-														// ”wŒi‚Í‚à‚¤•`‚¢‚½‚Ì‚Å”wŒi“§‰ßˆµ‚¢‚É‚·‚é
-														isTransparentBk = true;
-													}
+											//SetROP2(tgtDC, R2_COPYPEN);
+											bool isTransparentBk = (drawMode.bkMode == 1 || drawMode.bkMode == 4);
+											if (!isTransparentBk) {
+												bool preferDither;
+												UINT32 color = npdisp_AdjustColorRefForGDI(drawMode.bkColor, &preferDither);
+												if (preferDither) {
+													// ƒfƒBƒU”wŒi
+													UINT32 actualColor1;
+													UINT32 actualColor2;
+													double ratio;
+													MakePaletteDitherBrushColor(color, &actualColor1, &actualColor2, &ratio);
+													HBRUSH hBrush = CreatePaletteDitherBrush(actualColor1, actualColor2, ratio);
+													HGDIOBJ oldBrush = SelectObject(tgtDC, hBrush);
+													RECT gdiopaquerect = { dstX, dstY, dstX + srcW, dstY + srcH };
+													FillRect(tgtDC, &gdiopaquerect, hBrush);
+													SelectObject(tgtDC, oldBrush);
+													DeleteObject(hBrush);
+													// ”wŒi‚Í‚à‚¤•`‚¢‚½‚Ì‚Å”wŒi“§‰ßˆµ‚¢‚É‚·‚é
+													isTransparentBk = true;
 												}
-												if (isTransparentBk) {
-													// ”wŒi“§‰ß
-													TRACEOUT(("FG:%08x BG:TRANS", drawMode.LTextColor));
+											}
+											if (isTransparentBk) {
+												// ”wŒi“§‰ß ROP‚ª—v‚é‚Ì‚ÅDDBŒo—R
+												TRACEOUT(("FG:%08x BG:TRANS", drawMode.LTextColor));
+												HBITMAP hBmp = CreateBitmap(ddbWidth, sz.cy, 1, 1, pBits);
+												if (hBmp) {
+													HGDIOBJ hbmpOld;
+													hbmpOld = SelectObject(hdcText, hBmp);
+
 													SetBkMode(tgtDC, OPAQUE);
 													SetBkColor(tgtDC, 0x000000);
 													SetTextColor(tgtDC, 0xffffff);
@@ -2473,30 +2513,52 @@ static UINT32 npdisp_func_ExtTextOut(UINT32 lpDestDevAddr, SINT16 wDestXOrg, SIN
 													SetBkColor(tgtDC, drawMode.LTextColor);
 													SetTextColor(tgtDC, 0x000000);
 													BitBlt(tgtDC, dstX, dstY, srcW, srcH, hdcText, srcX, srcY, SRCPAINT);
+
+													SelectObject(hdcText, hbmpOld);
+													DeleteObject(hBmp);
 												}
-												else if (drawMode.bkMode == 2) {
-													// ”wŒi•s“§–¾
-													TRACEOUT(("FG:%08x BG:%08x", drawMode.LTextColor, drawMode.LbkColor));
-													SetBkColor(tgtDC, drawMode.LTextColor);
-													SetTextColor(tgtDC, drawMode.LbkColor);
-													BitBlt(tgtDC, dstX, dstY, srcW, srcH, hdcText, srcX, srcY, SRCCOPY);
-												}
-												if (bmphdc.hdc) {
-													// ‘‚«–ß‚µ
-													npdisp_WriteBitmapToPBITMAP(&dstPBmp, &bmphdc);
-												}
-												else {
-													npdisp_setDirty(dstX, dstY, dstX + srcW, dstY + srcH);
-													npdisp.updated = 1;
-												}
+											}
+											else if (drawMode.bkMode == 2) {
+												// ”wŒi•s“§–¾ SetDIBitsToDevice‚ðŽg‚¤
+												TRACEOUT(("FG:%08x BG:%08x", drawMode.LTextColor, drawMode.LbkColor));
+
+												BITMAPINFO_1BPP biText;
+												biText.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+												biText.bmiHeader.biWidth = ddbWidth;
+												biText.bmiHeader.biHeight = -sz.cy;
+												biText.bmiHeader.biPlanes = 1;
+												biText.bmiHeader.biBitCount = 1;
+												biText.bmiHeader.biCompression = BI_RGB;
+												biText.bmiHeader.biSizeImage = 0;
+												biText.bmiHeader.biXPelsPerMeter = 0;
+												biText.bmiHeader.biYPelsPerMeter = 0;
+												biText.bmiHeader.biClrUsed = 2;
+												biText.bmiHeader.biClrImportant = 2;
+												biText.bmiColors[0].rgbRed = drawMode.LbkColor & 0xff;
+												biText.bmiColors[0].rgbGreen = (drawMode.LbkColor >> 8) & 0xff;
+												biText.bmiColors[0].rgbBlue = (drawMode.LbkColor >> 16) & 0xff;
+												biText.bmiColors[0].rgbReserved = 0;
+												biText.bmiColors[1].rgbRed = drawMode.LTextColor & 0xff;
+												biText.bmiColors[1].rgbGreen = (drawMode.LTextColor >> 8) & 0xff;
+												biText.bmiColors[1].rgbBlue = (drawMode.LTextColor >> 16) & 0xff;
+												biText.bmiColors[1].rgbReserved = 0;
+
+												SetDIBitsToDevice(tgtDC, dstX, dstY, srcW, srcH, srcX, 0, 0, srcH, (UINT8*)pBits + srcY * stride, (BITMAPINFO*)&biText, DIB_RGB_COLORS);
+											}
+											if (bmphdc.hdc) {
+												// ‘‚«–ß‚µ
+												npdisp_WriteBitmapToPBITMAP(&dstPBmp, &bmphdc);
+											}
+											else {
+												memset(&npdispwin.lastScreenDrawMode, 0, sizeof(NPDISP_DRAWMODE));
+												npdisp_setDirty(dstX, dstY, dstX + srcW, dstY + srcH);
+												npdisp.updated = 1;
 											}
 										}
 									}
 									if (bmphdc.hdc) {
 										npdisp_FreeBitmap(&bmphdc);
 									}
-									SelectObject(hdcText, hbmpOld);
-									DeleteObject(hBmp);
 								}
 								free(pBits);
 							}
@@ -2719,11 +2781,14 @@ static UINT16 npdisp_func_SetDIBitsToDevice(UINT32 lpDestDevAddr, SINT16 X, SINT
 									}
 									NPDISP_DRAWMODE drawMode = { 0 };
 									if (npdisp_readMemory(&drawMode, lpDrawModeAddr, sizeof(NPDISP_DRAWMODE))) {
-										npdisp_AdjustDrawModeColor(&drawMode);
-										SetBkColor(tgtDC, drawMode.LbkColor);
-										SetTextColor(tgtDC, drawMode.LTextColor);
-										SetBkMode(tgtDC, drawMode.bkMode);
-										SetROP2(tgtDC, drawMode.Rop2);
+										if (tgtDC != npdispwin.hdc || memcmp(&drawMode, &npdispwin.lastScreenDrawMode, sizeof(NPDISP_DRAWMODE)) != 0) {
+											if (tgtDC == npdispwin.hdc) npdispwin.lastScreenDrawMode = drawMode;
+											npdisp_AdjustDrawModeColor(&drawMode);
+											SetBkColor(tgtDC, drawMode.LbkColor);
+											SetTextColor(tgtDC, drawMode.LTextColor);
+											SetBkMode(tgtDC, drawMode.bkMode);
+											SetROP2(tgtDC, drawMode.Rop2);
+										}
 										if (lpbi->bmiHeader.biBitCount == 1) {
 											// ƒ‚ƒmƒNƒ“Á—á
 											lpbi->bmiColors[0].rgbRed = drawMode.LTextColor & 0xff;
@@ -3178,11 +3243,14 @@ static UINT16 npdisp_func_FastBorder(UINT32 lpRectAddr, UINT16 wHorizBorderThick
 		}
 		NPDISP_DRAWMODE drawMode = { 0 };
 		if (npdisp_readMemory(&drawMode, lpDrawModeAddr, sizeof(NPDISP_DRAWMODE))) {
-			npdisp_AdjustDrawModeColor(&drawMode);
-			SetBkColor(tgtDC, drawMode.LbkColor);
-			SetTextColor(tgtDC, drawMode.LTextColor);
-			SetBkMode(tgtDC, drawMode.bkMode);
-			SetROP2(tgtDC, drawMode.Rop2);
+			if (tgtDC != npdispwin.hdc || memcmp(&drawMode, &npdispwin.lastScreenDrawMode, sizeof(NPDISP_DRAWMODE)) != 0) {
+				if (tgtDC == npdispwin.hdc) npdispwin.lastScreenDrawMode = drawMode;
+				npdisp_AdjustDrawModeColor(&drawMode);
+				SetBkColor(tgtDC, drawMode.LbkColor);
+				SetTextColor(tgtDC, drawMode.LTextColor);
+				SetBkMode(tgtDC, drawMode.bkMode);
+				SetROP2(tgtDC, drawMode.Rop2);
+			}
 		}
 		HRGN hRgn = NULL;
 		if (lpClipRectAddr) {
@@ -3231,6 +3299,7 @@ static UINT16 npdisp_func_Output(UINT32 lpDestDevAddr, UINT16 wStyle, UINT16 wCo
 	bool isDisplayDevice = npdisp_isDisplayDevice(lpDestDevAddr);
 
 	HPEN curPen = NULL;
+	int curPenWidth = 0;
 	if (lpPPenAddr) {
 		// ƒyƒ“‚ª‚ ‚ê‚ÎŽæ“¾
 		NPDISP_PEN pen = { 0 };
@@ -3241,6 +3310,7 @@ static UINT16 npdisp_func_Output(UINT32 lpDestDevAddr, UINT16 wStyle, UINT16 wCo
 					NPDISP_HOSTPEN value = it->second;
 					if (value.pen) {
 						curPen = value.pen;
+						curPenWidth = value.lpen.lopnWidth.x;
 					}
 					else {
 						curPen = (HPEN)GetStockObject(NULL_PEN);
@@ -3271,6 +3341,7 @@ static UINT16 npdisp_func_Output(UINT32 lpDestDevAddr, UINT16 wStyle, UINT16 wCo
 
 	if (npdisp.longjmpnum != 0) return retValue;
 
+	NPDISP_POINT ptBuf[4];
 	int dstBeginLine = 0;
 	int dstNumLines = -1;
 	int dstBeginX = 0;
@@ -3280,7 +3351,7 @@ static UINT16 npdisp_func_Output(UINT32 lpDestDevAddr, UINT16 wStyle, UINT16 wCo
 		switch (wStyle) {
 		case 18: // OS_POLYLINE
 		{
-			npdisp_func_Output_GetXYRange_POLYLINE(&dstBeginX, &dstWidth, &dstBeginLine, &dstNumLines, curPen, curBrush, wCount, lpPointsAddr);
+			npdisp_func_Output_GetXYRange_POLYLINE(&dstBeginX, &dstWidth, &dstBeginLine, &dstNumLines, curPenWidth, curBrush, wCount, lpPointsAddr);
 			break;
 		}
 		case 80: // OS_BEGINNSCAN
@@ -3290,55 +3361,55 @@ static UINT16 npdisp_func_Output(UINT32 lpDestDevAddr, UINT16 wStyle, UINT16 wCo
 		}
 		case 4: // OS_SCANLINES
 		{
-			npdisp_func_Output_GetXYRange_SCANLINES(&dstBeginX, &dstWidth, &dstBeginLine, &dstNumLines, curPen, curBrush, wCount, lpPointsAddr);
+			npdisp_func_Output_GetXYRange_SCANLINES(&dstBeginX, &dstWidth, &dstBeginLine, &dstNumLines, curPenWidth, curBrush, wCount, lpPointsAddr);
 			break;
 		}
 		case 6: // OS_RECTANGLE
 		{
-			npdisp_func_Output_GetXYRange_RECTANGLE(&dstBeginX, &dstWidth, &dstBeginLine, &dstNumLines, curPen, curBrush, wCount, lpPointsAddr);
+			npdisp_func_Output_GetXYRange_RECTANGLE(&dstBeginX, &dstWidth, &dstBeginLine, &dstNumLines, curPenWidth, curBrush, wCount, lpPointsAddr, ptBuf);
 			break;
 		}
 		case 20: // OS_WINDPOLYGON
 		case 22: // OS_ALTPOLYGON
 		{
-			npdisp_func_Output_GetXYRange_POLYGON(&dstBeginX, &dstWidth, &dstBeginLine, &dstNumLines, curPen, curBrush, wCount, lpPointsAddr);
+			npdisp_func_Output_GetXYRange_POLYGON(&dstBeginX, &dstWidth, &dstBeginLine, &dstNumLines, curPenWidth, curBrush, wCount, lpPointsAddr);
 			break;
 		}
 		case 55: // OS_CIRCLE
 		case 7: // OS_ELLIPSE 
 		{
-			npdisp_func_Output_GetXYRange_ELLIPSE(&dstBeginX, &dstWidth, &dstBeginLine, &dstNumLines, curPen, curBrush, wCount, lpPointsAddr);
+			npdisp_func_Output_GetXYRange_ELLIPSE(&dstBeginX, &dstWidth, &dstBeginLine, &dstNumLines, curPenWidth, curBrush, wCount, lpPointsAddr, ptBuf);
 			break;
 		}
 		case 3: // OS_ARC
 		{
-			npdisp_func_Output_GetXYRange_ARC(&dstBeginX, &dstWidth, &dstBeginLine, &dstNumLines, curPen, curBrush, wCount, lpPointsAddr);
+			npdisp_func_Output_GetXYRange_ARC(&dstBeginX, &dstWidth, &dstBeginLine, &dstNumLines, curPenWidth, curBrush, wCount, lpPointsAddr);
 			break;
 		}
 		case 23: // OS_PIE
 		{
-			npdisp_func_Output_GetXYRange_PIE(&dstBeginX, &dstWidth, &dstBeginLine, &dstNumLines, curPen, curBrush, wCount, lpPointsAddr);
+			npdisp_func_Output_GetXYRange_PIE(&dstBeginX, &dstWidth, &dstBeginLine, &dstNumLines, curPenWidth, curBrush, wCount, lpPointsAddr);
 			break;
 		}
 		case 39: // OS_CHORD 
 		{
-			npdisp_func_Output_GetXYRange_CHORD(&dstBeginX, &dstWidth, &dstBeginLine, &dstNumLines, curPen, curBrush, wCount, lpPointsAddr);
+			npdisp_func_Output_GetXYRange_CHORD(&dstBeginX, &dstWidth, &dstBeginLine, &dstNumLines, curPenWidth, curBrush, wCount, lpPointsAddr);
 			break;
 		}
 		case 72: // OS_ROUNDRECT 
 		{
-			npdisp_func_Output_GetXYRange_ROUNDRECT(&dstBeginX, &dstWidth, &dstBeginLine, &dstNumLines, curPen, curBrush, wCount, lpPointsAddr);
+			npdisp_func_Output_GetXYRange_ROUNDRECT(&dstBeginX, &dstWidth, &dstBeginLine, &dstNumLines, curPenWidth, curBrush, wCount, lpPointsAddr, ptBuf);
 			break;
 		}
 		case 1: // OS_POLYBEZIER 
 		{
-			npdisp_func_Output_GetXYRange_POLYBEZIER(&dstBeginX, &dstWidth, &dstBeginLine, &dstNumLines, curPen, curBrush, wCount, lpPointsAddr);
+			npdisp_func_Output_GetXYRange_POLYBEZIER(&dstBeginX, &dstWidth, &dstBeginLine, &dstNumLines, curPenWidth, curBrush, wCount, lpPointsAddr);
 			break;
 		}
 		case (0x4000 | 20): // OS_POLYPOLYGON | OS_WINDPOLYGON
 		case (0x4000 | 22): // OS_POLYPOLYGON | OS_ALTPOLYGON
 		{
-			npdisp_func_Output_GetXYRange_POLYPOLYGON(&dstBeginX, &dstWidth, &dstBeginLine, &dstNumLines, curPen, curBrush, wCount, lpPointsAddr);
+			npdisp_func_Output_GetXYRange_POLYPOLYGON(&dstBeginX, &dstWidth, &dstBeginLine, &dstNumLines, curPenWidth, curBrush, wCount, lpPointsAddr);
 			break;
 		}
 		default:
@@ -3392,11 +3463,14 @@ static UINT16 npdisp_func_Output(UINT32 lpDestDevAddr, UINT16 wStyle, UINT16 wCo
 			}
 			NPDISP_DRAWMODE drawMode = { 0 };
 			if (npdisp_readMemory(&drawMode, lpDrawModeAddr, sizeof(NPDISP_DRAWMODE))) {
-				npdisp_AdjustDrawModeColor(&drawMode);
-				SetBkColor(tgtDC, drawMode.LbkColor);
-				SetTextColor(tgtDC, drawMode.LTextColor);
-				SetBkMode(tgtDC, drawMode.bkMode);
-				SetROP2(tgtDC, drawMode.Rop2);
+				if (tgtDC != npdispwin.hdc || memcmp(&drawMode, &npdispwin.lastScreenDrawMode, sizeof(NPDISP_DRAWMODE)) != 0) {
+					if (tgtDC == npdispwin.hdc) npdispwin.lastScreenDrawMode = drawMode;
+					npdisp_AdjustDrawModeColor(&drawMode);
+					SetBkColor(tgtDC, drawMode.LbkColor);
+					SetTextColor(tgtDC, drawMode.LTextColor);
+					SetBkMode(tgtDC, drawMode.bkMode);
+					SetROP2(tgtDC, drawMode.Rop2);
+				}
 			}
 			HRGN hRgn = NULL;
 			if (lpClipRectAddr) {
@@ -3410,14 +3484,11 @@ static UINT16 npdisp_func_Output(UINT32 lpDestDevAddr, UINT16 wStyle, UINT16 wCo
 				hRgn = CreateRectRgn(cliprect.left, cliprect.top, cliprect.right, cliprect.bottom);
 				SelectClipRgn(tgtDC, hRgn);
 			}
-			else {
-				SelectClipRgn(tgtDC, NULL);
-			}
 			bool success = false;
 			switch (wStyle) {
 			case 18: // OS_POLYLINE
 			{
-				success = npdisp_func_Output_POLYLINE(tgtDC, &bmphdc, &dstPBmp, curPen, curBrush, wCount, lpPointsAddr);
+				success = npdisp_func_Output_POLYLINE(tgtDC, &bmphdc, &dstPBmp, curPenWidth, curBrush, wCount, lpPointsAddr);
 				retValue = 1;
 				break;
 			}
@@ -3429,73 +3500,73 @@ static UINT16 npdisp_func_Output(UINT32 lpDestDevAddr, UINT16 wStyle, UINT16 wCo
 			}
 			case 4: // OS_SCANLINES
 			{
-				success = npdisp_func_Output_SCANLINES(tgtDC, &bmphdc, &dstPBmp, curPen, curBrush, wCount, lpPointsAddr);
+				success = npdisp_func_Output_SCANLINES(tgtDC, &bmphdc, &dstPBmp, curPenWidth, curBrush, wCount, lpPointsAddr);
 				retValue = 1;
 				break;
 			}
 			case 6: // OS_RECTANGLE
 			{
-				success = npdisp_func_Output_RECTANGLE(tgtDC, &bmphdc, &dstPBmp, curPen, curBrush, wCount, lpPointsAddr);
+				success = npdisp_func_Output_RECTANGLE(tgtDC, &bmphdc, &dstPBmp, curPenWidth, curBrush, wCount, lpPointsAddr, ptBuf);
 				retValue = 1;
 				break;
 			}
 			case 20: // OS_WINDPOLYGON
 			{
-				success = npdisp_func_Output_WINDPOLYGON(tgtDC, &bmphdc, &dstPBmp, curPen, curBrush, wCount, lpPointsAddr);
+				success = npdisp_func_Output_WINDPOLYGON(tgtDC, &bmphdc, &dstPBmp, curPenWidth, curBrush, wCount, lpPointsAddr);
 				retValue = 1;
 				break;
 			}
 			case 22: // OS_ALTPOLYGON
 			{
-				success = npdisp_func_Output_ALTPOLYGON(tgtDC, &bmphdc, &dstPBmp, curPen, curBrush, wCount, lpPointsAddr);
+				success = npdisp_func_Output_ALTPOLYGON(tgtDC, &bmphdc, &dstPBmp, curPenWidth, curBrush, wCount, lpPointsAddr);
 				retValue = 1;
 				break;
 			}
 			case 55: // OS_CIRCLE
 			case 7: // OS_ELLIPSE 
 			{
-				success = npdisp_func_Output_ELLIPSE(tgtDC, &bmphdc, &dstPBmp, curPen, curBrush, wCount, lpPointsAddr);
+				success = npdisp_func_Output_ELLIPSE(tgtDC, &bmphdc, &dstPBmp, curPenWidth, curBrush, wCount, lpPointsAddr, ptBuf);
 				retValue = 1;
 				break;
 			}
 			case 3: // OS_ARC
 			{
-				success = npdisp_func_Output_ARC(tgtDC, &bmphdc, &dstPBmp, curPen, curBrush, wCount, lpPointsAddr);
+				success = npdisp_func_Output_ARC(tgtDC, &bmphdc, &dstPBmp, curPenWidth, curBrush, wCount, lpPointsAddr);
 				retValue = 1;
 				break;
 			}
 			case 23: // OS_PIE
 			{
-				success = npdisp_func_Output_PIE(tgtDC, &bmphdc, &dstPBmp, curPen, curBrush, wCount, lpPointsAddr);
+				success = npdisp_func_Output_PIE(tgtDC, &bmphdc, &dstPBmp, curPenWidth, curBrush, wCount, lpPointsAddr);
 				retValue = 1;
 				break;
 			}
 			case 39: // OS_CHORD 
 			{
-				success = npdisp_func_Output_CHORD(tgtDC, &bmphdc, &dstPBmp, curPen, curBrush, wCount, lpPointsAddr);
+				success = npdisp_func_Output_CHORD(tgtDC, &bmphdc, &dstPBmp, curPenWidth, curBrush, wCount, lpPointsAddr);
 				retValue = 1;
 				break;
 			}
 			case 72: // OS_ROUNDRECT 
 			{
-				success = npdisp_func_Output_ROUNDRECT(tgtDC, &bmphdc, &dstPBmp, curPen, curBrush, wCount, lpPointsAddr);
+				success = npdisp_func_Output_ROUNDRECT(tgtDC, &bmphdc, &dstPBmp, curPenWidth, curBrush, wCount, lpPointsAddr, ptBuf);
 				retValue = 1;
 				break;
 			}
 			case 1: // OS_POLYBEZIER 
 			{
-				npdisp_func_Output_POLYBEZIER(tgtDC, &bmphdc, &dstPBmp, curPen, curBrush, wCount, lpPointsAddr);
+				npdisp_func_Output_POLYBEZIER(tgtDC, &bmphdc, &dstPBmp, curPenWidth, curBrush, wCount, lpPointsAddr);
 				break;
 			}
 			case (0x4000 | 20): // OS_POLYPOLYGON | OS_WINDPOLYGON
 			{
-				success = npdisp_func_Output_WINDPOLYPOLYGON(tgtDC, &bmphdc, &dstPBmp, curPen, curBrush, wCount, lpPointsAddr);
+				success = npdisp_func_Output_WINDPOLYPOLYGON(tgtDC, &bmphdc, &dstPBmp, curPenWidth, curBrush, wCount, lpPointsAddr);
 				retValue = 1;
 				break;
 			}
 			case (0x4000 | 22): // OS_POLYPOLYGON | OS_ALTPOLYGON
 			{
-				success = npdisp_func_Output_ALTPOLYPOLYGON(tgtDC, &bmphdc, &dstPBmp, curPen, curBrush, wCount, lpPointsAddr);
+				success = npdisp_func_Output_ALTPOLYPOLYGON(tgtDC, &bmphdc, &dstPBmp, curPenWidth, curBrush, wCount, lpPointsAddr);
 				retValue = 1;
 				break;
 			}
@@ -4170,11 +4241,14 @@ static UINT16 npdisp_func_StretchDIBits(UINT32 lpPDevice, UINT16 fGet, SINT16 De
 								}
 								NPDISP_DRAWMODE drawMode = { 0 };
 								if (npdisp_readMemory(&drawMode, lpDrawModeAddr, sizeof(NPDISP_DRAWMODE))) {
-									npdisp_AdjustDrawModeColor(&drawMode);
-									SetBkColor(hdc, drawMode.LbkColor);
-									SetTextColor(hdc, drawMode.LTextColor);
-									SetBkMode(hdc, drawMode.bkMode);
-									SetROP2(hdc, drawMode.Rop2);
+									if (hdc != npdispwin.hdc || memcmp(&drawMode, &npdispwin.lastScreenDrawMode, sizeof(NPDISP_DRAWMODE)) != 0) {
+										if (hdc == npdispwin.hdc) npdispwin.lastScreenDrawMode = drawMode;
+										npdisp_AdjustDrawModeColor(&drawMode);
+										SetBkColor(hdc, drawMode.LbkColor);
+										SetTextColor(hdc, drawMode.LTextColor);
+										SetBkMode(hdc, drawMode.bkMode);
+										SetROP2(hdc, drawMode.Rop2);
+									}
 								}
 
 								HBRUSH brs = NULL;
@@ -5653,7 +5727,7 @@ static void npdisp_releaseScreen(bool resize) {
 		npdispwin.hOldBmpBltBuf = NULL;
 		npdispwin.pBitsBltBuf = NULL;
 		//npdispwin.hBmp16BltBuf = NULL;
-		//npdispwin.hOldBmp16BltBuf = NULL;
+		//npdispwin.hOldBmp16BltBuf = NULL;x
 
 		if (npdisp.cursorBpp <= 1) {
 			// 1bpp‚ÍŽ©‘Omalloc‚È‚Ì‚Åfree‚·‚é
@@ -5829,6 +5903,8 @@ static void npdisp_createScreen(bool resize) {
 
 	BitBlt(npdispwin.hdcShadow, 0, 0, npdisp.width, npdisp.height, npdispwin.hdc, 0, 0, BLACKNESS);
 	BitBlt(npdispwin.hdcBltBuf, 0, 0, npdisp.width, npdisp.height, npdispwin.hdc, 0, 0, BLACKNESS);
+
+	memset(&npdispwin.lastScreenDrawMode, 0, sizeof(NPDISP_DRAWMODE));
 
 	// ƒfƒoƒbƒO—pƒtƒHƒ“ƒg
 	LOGFONT lf = { 0 };

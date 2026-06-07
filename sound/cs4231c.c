@@ -122,8 +122,8 @@ void cs4231cs_shutdown(void)
 	/* クリティカルセクション破棄 */
 	if (cs4231_cs_initialized)
 	{
-		memset(&cs4231_cs, 0, sizeof(cs4231_cs));
 		DeleteCriticalSection(&cs4231_cs);
+		memset(&cs4231_cs, 0, sizeof(cs4231_cs));
 		cs4231_cs_initialized = 0;
 	}
 }

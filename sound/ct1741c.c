@@ -42,8 +42,8 @@ void ct1741cs_shutdown(void)
 	/* クリティカルセクション破棄 */
 	if (ct1741_cs_initialized)
 	{
-		memset(&ct1741_cs, 0, sizeof(ct1741_cs));
 		DeleteCriticalSection(&ct1741_cs);
+		memset(&ct1741_cs, 0, sizeof(ct1741_cs));
 		ct1741_cs_initialized = 0;
 	}
 }

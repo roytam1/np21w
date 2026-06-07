@@ -78,8 +78,8 @@ static const UINT clk20_128[] = {
 		/* クリティカルセクション破棄 */
 		if (pcm86_cs_initialized)
 		{
-			memset(&pcm86_cs, 0, sizeof(pcm86_cs));
 			DeleteCriticalSection(&pcm86_cs);
+			memset(&pcm86_cs, 0, sizeof(pcm86_cs));
 			pcm86_cs_initialized = 0;
 		}
 	}

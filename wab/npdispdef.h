@@ -1148,6 +1148,7 @@ extern "C" {
 		HGDIOBJ hOldBrush;
 		UINT32 stride;
 		HFONT hFont;
+		HGDIOBJ hOldhFont;
 
 		HDC hdcShadow;
 		void* pBitsShadow;

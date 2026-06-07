@@ -678,8 +678,8 @@ void np2wab_reset(const NP2CFG *pConfig)
 	np2wab.wndWidth = 640;
 	np2wab.wndHeight = 480;
 	np2wab.fps = 60;
-	ga_lastwabwidth = 640;
-	ga_lastwabheight = 480;
+	ga_lastwabwidth = 0;
+	ga_lastwabheight = 0;
 	ga_reqChangeWindowSize = 0;
 	
 	// パレットを更新させる

@@ -56,8 +56,8 @@ void nevent_shutdown(void)
 {
 	/* クリティカルセクション破棄 */
 	if(nevent_cs_initialized){
-		memset(&nevent_cs, 0, sizeof(nevent_cs));
 		DeleteCriticalSection(&nevent_cs);
+		memset(&nevent_cs, 0, sizeof(nevent_cs));
 		nevent_cs_initialized = 0;
 	}
 }

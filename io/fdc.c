@@ -261,7 +261,7 @@ static void FDC_Specify(void) {							// cmd: 03
 			fdc.hut = fdc.cmds[0] & 0x0f;
 			fdc.hlt = fdc.cmds[1] >> 1;
 			fdc.nd = fdc.cmds[1] & 1;
-			fdc.stat[fdc.us] = (fdc.hd << 2) | fdc.us;
+			//fdc.stat[fdc.us] = (fdc.hd << 2) | fdc.us;
 			break;
 	}
 	fdc.event = FDCEVENT_NEUTRAL;
@@ -275,7 +275,8 @@ static void FDC_SenseDeviceStatus(void) {				// cmd: 04
 		case FDCEVENT_CMDRECV:
 			get_hdus();
 			fdc.buf[0] = (fdc.hd << 2) | fdc.us;
-			fdc.stat[fdc.us] = (fdc.hd << 2) | fdc.us;
+			//fdc.stat[fdc.us] = (fdc.hd << 2) | fdc.us;
+			//fdc.stat[fdc.us] = fdc.us;
 			if (fdc.equip & (1 << fdc.us)) {
 				fdc.buf[0] |= 0x08;
 				if (!fdc.treg[fdc.us]) {

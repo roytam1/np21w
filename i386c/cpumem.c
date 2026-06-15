@@ -43,6 +43,9 @@ static void trace_fmt_ex(const char *fmt, ...)
 #if defined(SUPPORT_WAB_NPDISP)
 #include	"wab/npdisp.h"
 #endif
+#if defined(SUPPORT_WAB_GA1280A)
+#include	"wab/ga1280a.h"
+#endif
 #if defined(SUPPORT_PCI)
 #include	"bios/bios.h"
 #endif
@@ -575,6 +578,12 @@ REG8 MEMCALL memp_read8(UINT32 address) {
 			}
 		}
 #endif
+#if defined(SUPPORT_WAB_GA1280A)
+		if (ga1280a.active) {
+			REG8 retValue;
+			if (ga1280a_memp_read8(address, &retValue)) return retValue;
+		}
+#endif
 		address = address & CPU_ADRSMASK;
 		if (address < USE_HIMEM) {
 			return(memfn0.rd8[address >> 15](address));
@@ -690,6 +699,12 @@ REG16 MEMCALL memp_read16(UINT32 address) {
 						}
 					}
 				}
+			}
+#endif
+#if defined(SUPPORT_WAB_GA1280A)
+			if (ga1280a.active) {
+				REG16 retValue;
+				if (ga1280a_memp_read16(address, &retValue)) return retValue;
 			}
 #endif
 			address = address & CPU_ADRSMASK;
@@ -814,6 +829,12 @@ UINT32 MEMCALL memp_read32(UINT32 address) {
 						}
 					}
 				}
+			}
+#endif
+#if defined(SUPPORT_WAB_GA1280A)
+			if (ga1280a.active) {
+				UINT32 retValue;
+				if (ga1280a_memp_read32(address, &retValue)) return retValue;
 			}
 #endif
 			address = address & CPU_ADRSMASK;
@@ -1119,6 +1140,11 @@ void MEMCALL memp_write8(UINT32 address, REG8 value) {
 			}
 		}
 #endif
+#if defined(SUPPORT_WAB_GA1280A)
+		if (ga1280a.active) {
+			if (ga1280a_memp_write8(address, value)) return;
+		}
+#endif
 		address = address & CPU_ADRSMASK;
 		if (address < USE_HIMEM) {
 			memfn0.wr8[address >> 15](address, value);
@@ -1248,6 +1274,11 @@ void MEMCALL memp_write16(UINT32 address, REG16 value) {
 						}
 					}
 				}
+			}
+#endif
+#if defined(SUPPORT_WAB_GA1280A)
+			if (ga1280a.active) {
+				if (ga1280a_memp_write16(address, value)) return;
 			}
 #endif
 			address = address & CPU_ADRSMASK;
@@ -1386,6 +1417,11 @@ void MEMCALL memp_write32(UINT32 address, UINT32 value) {
 						}
 					}
 				}
+			}
+#endif
+#if defined(SUPPORT_WAB_GA1280A)
+			if (ga1280a.active) {
+				if (ga1280a_memp_write32(address, value)) return;
 			}
 #endif
 			address = address & CPU_ADRSMASK;

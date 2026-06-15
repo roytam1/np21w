@@ -27,6 +27,9 @@
 #if defined(SUPPORT_WAB_NPDISP)
 #include	"wab/npdisp.h"
 #endif
+#if defined(SUPPORT_WAB_GA1280A)
+#include	"wab/ga1280a.h"
+#endif
 
 
 	_ARTIC		artic;
@@ -564,6 +567,9 @@ static const FNIORESET resetfn[] =
 #if defined(SUPPORT_WAB_NPDISP)
 			npdisp_reset,
 #endif
+#if defined(SUPPORT_WAB_GA1280A)
+			ga1280a_reset,
+#endif
 };
 
 static const FNIOBIND bindfn[] =
@@ -589,6 +595,9 @@ static const FNIOBIND bindfn[] =
 #endif
 #if defined(SUPPORT_WAB_NPDISP)
 			npdisp_bind,
+#endif
+#if defined(SUPPORT_WAB_GA1280A)
+			ga1280a_bind,
 #endif
 };
 
@@ -695,6 +704,14 @@ void IOOUTCALL iocore_out16(UINT port, REG16 dat) {
 		}
 	}
 #endif
+#if defined(SUPPORT_WAB_GA1280A)
+	if (ga1280a.enabled) {
+		if (((port >> 8) & 0xff) < 0x20 && (port & 0xfc) == 0xd8) {
+			ga1280a_ow(port, dat);
+			return;
+		}
+	}
+#endif
 	if ((port & 0xfff1) == 0x04a0) {
 		egc_w16(port, dat);
 		return;
@@ -758,6 +775,13 @@ REG16 IOINPCALL iocore_inp16(UINT port) {
 			if(port == 0xc44){
 				return(np2clvga.VRAMWindowAddr3 >> 16);
 			}
+		}
+	}
+#endif
+#if defined(SUPPORT_WAB_GA1280A)
+	if (ga1280a.enabled) {
+		if (((port >> 8) & 0xff) < 0x20 && (port & 0xfc) == 0xd8) {
+			return(ga1280a_iw(port));
 		}
 	}
 #endif

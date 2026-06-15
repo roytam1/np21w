@@ -200,6 +200,8 @@
 #define NPDISP_CONTROL_DCI_DDGET32BITDRIVERNAME	11
 #define NPDISP_CONTROL_DCI_DDNEWCALLBACKFNS		12
 
+#define NPDISP_FONT_CACHE_MAX	16
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -1052,8 +1054,8 @@ extern "C" {
 		UINT8 dfBreakChar;
 
 		SINT16 dfWidthBytes;
-		SINT32 dfDevice;
-		SINT32 dfFace;
+		UINT32 dfDevice;
+		UINT32 dfFace;
 		UINT32 dfBitsPointer;
 		UINT32 dfBitsOffset;
 		SINT8 dfReserved;
@@ -1190,6 +1192,10 @@ extern "C" {
 		RECT dciDirtyRect;
 
 		NPDISP_DRAWMODE lastScreenDrawMode;
+
+		HFONT hFontCache[NPDISP_FONT_CACHE_MAX];
+		LOGFONTA logFontCache[NPDISP_FONT_CACHE_MAX];
+		char fontFaceCache[NPDISP_FONT_CACHE_MAX][32];
 	} NPDISP_WINDOWS;
 
 	typedef struct {

@@ -2424,6 +2424,9 @@
     <ClCompile Include="..\wab\npdisp_gdibitblt.cpp">
       <Filter>ソース ファイル\wab</Filter>
     </ClCompile>
+    <ClCompile Include="..\wab\ga1280a.cpp">
+      <Filter>ソース ファイル\wab</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\calendar.h">
@@ -3621,6 +3624,12 @@
       <Filter>ヘッダー ファイル\wab</Filter>
     </ClInclude>
     <ClInclude Include="..\wab\npdisp_statsave.h">
+      <Filter>ヘッダー ファイル\wab</Filter>
+    </ClInclude>
+    <ClInclude Include="..\wab\ga1280a.h">
+      <Filter>ヘッダー ファイル\wab</Filter>
+    </ClInclude>
+    <ClInclude Include="..\wab\ga1280adef.h">
       <Filter>ヘッダー ファイル\wab</Filter>
     </ClInclude>
   </ItemGroup>

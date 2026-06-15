@@ -35,6 +35,9 @@
 #if defined(SUPPORT_WAB_NPDISP)
 #include "npdisp.h"
 #endif
+#if defined(SUPPORT_WAB_GA1280A)
+#include "ga1280a.h"
+#endif
 #if defined(SUPPORT_CL_GD5430)
 #include "cirrus_vga_extern.h"
 #endif
@@ -475,6 +478,11 @@ void np2wab_drawframe()
 				drawFrameFunc = npdisp_drawGraphic;
 			}
 #endif
+#if defined(SUPPORT_WAB_GA1280A)
+			if (ga1280a.active) {
+				drawFrameFunc = ga1280a_drawGraphic;
+			}
+#endif
 			if (drawFrameFunc != NULL && drawFrameFunc())
 			{
 				np2wab_drawWABWindow(np2wabwnd.hDCBuf);
@@ -539,6 +547,11 @@ unsigned int __stdcall ga_ThreadFunc(LPVOID vdParam) {
 			drawFrameFunc = npdisp_drawGraphic;
 		}
 #endif
+#if defined(SUPPORT_WAB_GA1280A)
+		if (ga1280a.active) {
+			drawFrameFunc = ga1280a_drawGraphic;
+		}
+#endif
 		if(np2wabwnd.ready && np2wabwnd.hWndWAB!=NULL && drawFrameFunc !=NULL && (np2wab.relay&0x3)!=0){
 			if (drawFrameFunc() || np2wab_forceupdateflag)
 			{
@@ -548,6 +561,12 @@ unsigned int __stdcall ga_ThreadFunc(LPVOID vdParam) {
 						npdisp.paletteUpdated = 1; // パレット強制更新
 						npdisp_setDirtyAll();
 						npdisp.updated = 1; // 強制更新
+					}
+#endif
+#if defined(SUPPORT_WAB_GA1280A)
+					if (ga1280a.active) {
+						ga1280a.paletteUpdated = 1; // パレット強制更新
+						ga1280a.updated = 1; // 強制更新
 					}
 #endif
 #if defined(SUPPORT_CL_GD5430)
@@ -666,12 +685,15 @@ void np2wab_reset(const NP2CFG *pConfig)
 	np2wab.relaystateext = 0;
 	np2wab_setRelayState(np2wab.relaystateint|np2wab.relaystateext);
 
-	if (np2wabwnd.curWidth != WAB_RESERVED_WIDTH && np2wabwnd.curHeight != WAB_RESERVED_HEIGHT) {
+	if (np2wabwnd.curWidth != WAB_RESERVED_WIDTH || np2wabwnd.curHeight != WAB_RESERVED_HEIGHT) {
+		HBITMAP newBitmap;
 		np2wabwnd.curWidth = WAB_RESERVED_WIDTH;
 		np2wabwnd.curHeight = WAB_RESERVED_HEIGHT;
+		newBitmap = CreateCompatibleBitmap(np2wabwnd.hDCBuf, np2wabwnd.curWidth, np2wabwnd.curHeight);
 		SelectObject(np2wabwnd.hDCBuf, np2wabwnd.hBmpOld);
 		DeleteObject(np2wabwnd.hBmpBuf);
-		np2wabwnd.hBmpBuf = CreateCompatibleBitmap(np2wabwnd.hDCBuf, np2wabwnd.curWidth, np2wabwnd.curHeight);
+		np2wabwnd.hBmpBuf = newBitmap;
+		SelectObject(np2wabwnd.hDCBuf, np2wabwnd.hBmpBuf);
 	}
 
 	// 設定値更新とか

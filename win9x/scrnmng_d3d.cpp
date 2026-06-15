@@ -2184,9 +2184,9 @@ void scrnmngD3D_bltwab() {
 		//TRACEOUTF(("DRAW Direct3D WAB surface -> Direct3D back surface"));
 		if (d3d.d3ddev)
 		{
-			D3DSURFACE_DESC desc;
-			d3d.wabsurf->GetDesc(&desc);
-			d3d.backsurf->GetDesc(&desc);
+			//D3DSURFACE_DESC desc;
+			//d3d.wabsurf->GetDesc(&desc);
+			//d3d.backsurf->GetDesc(&desc);
 			d3d.d3ddev->StretchRect(d3d.wabsurf, &src, d3d.backsurf, &dstmp, D3DTEXF_POINT);
 		}
 		d3d_leave_criticalsection();

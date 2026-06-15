@@ -190,6 +190,89 @@ void npdisp_resetDirty()
 	npdispwin.dirtyRect.left = npdispwin.dirtyRect.top = npdispwin.dirtyRect.right = npdispwin.dirtyRect.bottom = 0;
 }
 
+static HFONT npdisp_getFont(NPDISP_FONTINFO* lpFontInfo, UINT32 fontInfoAddr)
+{
+	if ((UINT8)lpFontInfo->dfCharSet != 0x80) return NULL;
+
+	// 暫定: 本来はWIFEMANからフォントデータをとるが、仕様がよく分からないのでホストが持つ近いフォントで置き換え
+	char* faceName = npdisp_readMemoryString((fontInfoAddr & 0xffff0000) | lpFontInfo->dfFace);
+	//if (stricmp(faceName, "System") == 0) {
+	//	// 日本語が使えるフォントへ置き換え
+	//	free(faceName);
+	//	faceName = (char*)malloc(32);
+	//	strcpy(faceName, "MS Gothic");
+	//}
+	if (stricmp(faceName, "ゴシック") == 0 || stricmp(faceName, "ｺﾞｼｯｸ") == 0) {
+		// 日本語が使えるフォントへ置き換え
+		free(faceName);
+		faceName = (char*)malloc(32);
+		strcpy(faceName, "MS Gothic");
+	}
+	else if (stricmp(faceName, "明朝") == 0) {
+		// 日本語が使えるフォントへ置き換え
+		free(faceName);
+		faceName = (char*)malloc(32);
+		strcpy(faceName, "MS Mincho");
+	}
+	else if (stricmp(faceName, "@ゴシック") == 0 || stricmp(faceName, "@ｺﾞｼｯｸ") == 0) {
+		// 日本語が使えるフォントへ置き換え
+		free(faceName);
+		faceName = (char*)malloc(32);
+		strcpy(faceName, "@MS Gothic");
+	}
+	else if (stricmp(faceName, "@明朝") == 0) {
+		// 日本語が使えるフォントへ置き換え
+		free(faceName);
+		faceName = (char*)malloc(32);
+		strcpy(faceName, "@MS Mincho");
+	}
+	int lfHeight = -lpFontInfo->dfPixHeight;// -MulDiv(lpFontInfo->dfPoints, npdisp.dpiX, 72);
+	int invalidIndex = -1;
+	for (int i = 0; i < NPDISP_FONT_CACHE_MAX; i++) {
+		if (npdispwin.hFontCache[i]) {
+			if (npdispwin.logFontCache[i].lfHeight == lfHeight && stricmp(npdispwin.fontFaceCache[i], faceName) == 0) {
+				free(faceName);
+				return npdispwin.hFontCache[i];
+			}
+		}
+		else if (invalidIndex == -1) {
+			invalidIndex = i;
+		}
+	}
+	if (invalidIndex == -1) {
+		// 適当に捨てる
+		invalidIndex = rand() % NPDISP_FONT_CACHE_MAX;
+	}
+	if (npdispwin.hFontCache[invalidIndex]) {
+		DeleteObject(npdispwin.hFontCache[invalidIndex]);
+		npdispwin.hFontCache[invalidIndex] = NULL;
+	}
+
+	LOGFONTA lf = { 0 };
+	if (strlen(faceName) < sizeof(lf.lfFaceName)) {
+		lf.lfHeight = lfHeight;
+		lf.lfWeight = FW_NORMAL;
+		lf.lfCharSet = DEFAULT_CHARSET;
+		lf.lfPitchAndFamily = DEFAULT_PITCH | FF_DONTCARE;
+		strcpy(lf.lfFaceName, faceName);
+		npdispwin.hFontCache[invalidIndex] = CreateFontIndirectA(&lf);
+		if (!npdispwin.hFontCache[invalidIndex]) {
+			strcpy(lf.lfFaceName, "MS Gothic");
+			npdispwin.hFontCache[invalidIndex] = CreateFontIndirectA(&lf);
+		}
+		if (npdispwin.hFontCache[invalidIndex]) {
+			npdispwin.logFontCache[invalidIndex] = lf;
+			strcpy(npdispwin.fontFaceCache[invalidIndex], faceName);
+
+			free(faceName);
+			return npdispwin.hFontCache[invalidIndex];
+		}
+	}
+
+	free(faceName);
+	return NULL;
+}
+
 // *** 排他制御用 *****************
 
 static int npdisp_cs_initialized = 0;
@@ -2134,6 +2217,7 @@ static UINT32 npdisp_func_ExtTextOut(UINT32 lpDestDevAddr, SINT16 wDestXOrg, SIN
 			//HGDIOBJ oldFont = SelectObject(tgtDC, npdispwin.hFont);
 			NPDISP_FONTINFO fontInfo;
 			if (npdisp_readMemory(&fontInfo, lpFontInfoAddr, sizeof(NPDISP_FONTINFO))) {
+				bool hasDBCS = (UINT8)fontInfo.dfCharSet == 0x80;
 				SIZE sz = { 0, fontInfo.dfPixHeight };
 				int maxCharWidth = 0;
 				int loopLen = wCount >= 0 ? wCount : -wCount;
@@ -2150,6 +2234,7 @@ static UINT32 npdisp_func_ExtTextOut(UINT32 lpDestDevAddr, SINT16 wDestXOrg, SIN
 				}
 				if (loopLen == 0 || (charOffsets && charRealWidths && charOffsets)) {
 					if (npdisp.longjmpnum == 0) {
+						bool is2Byte = false;
 						for (i = 0; i < loopLen; i++) {
 							NPDISP_FONTCHARINFO3 charInfo;
 							int charIdx = (int)lpText[i] - fontInfo.dfFirstChar;
@@ -2171,7 +2256,23 @@ static UINT32 npdisp_func_ExtTextOut(UINT32 lpDestDevAddr, SINT16 wDestXOrg, SIN
 								}
 							}
 							else {
-								if (npdisp_readMemory(&charInfo, lpFontInfoAddr + sizeof(NPDISP_FONTINFO) + sizeof(NPDISP_FONTCHARINFO3) * charIdx, sizeof(NPDISP_FONTCHARINFO3))) {
+								bool skipRender = false;
+								if (hasDBCS) {
+									if (is2Byte) {
+										is2Byte = false;
+										skipRender = true;
+									}
+									else {
+										if (0x81 <= lpText[i] && lpText[i] <= 0x9f || 0xe0 <= lpText[i] && lpText[i] <= 0xef) {
+											is2Byte = true;
+											skipRender = true;
+										}
+									}
+									if (skipRender) {
+										charWidth = fontInfo.dfMaxWidth / 2;
+									}
+								}
+								if (!skipRender && npdisp_readMemory(&charInfo, lpFontInfoAddr + sizeof(NPDISP_FONTINFO) + sizeof(NPDISP_FONTCHARINFO3) * charIdx, sizeof(NPDISP_FONTCHARINFO3))) {
 									charWidth = charInfo.width;
 									charOffsets[i] = charInfo.offset;
 									charRealWidths[i] = charInfo.width;
@@ -2323,32 +2424,48 @@ static UINT32 npdisp_func_ExtTextOut(UINT32 lpDestDevAddr, SINT16 wDestXOrg, SIN
 									// てんそう
 									int baseXbyte = 0;
 									int baseXbit = 0;
+									bool is2Byte = false;
 									for (i = 0; i < loopLen; i++) {
+										bool skipRender = false;
 										int charIdx = (int)lpText[i] - fontInfo.dfFirstChar;
 										if (charIdx < 0 || fontInfo.dfLastChar < charIdx) {
 											charIdx = fontInfo.dfDefaultChar;
 										}
-										int y, x;
-										int charXLen = (charRealWidths[i] + 7) / 8;
-										npdisp_readMemoryWith32Offset(srcBuf, fontInfo.dfBitsPointer >> 16, charOffsets[i], charXLen * sz.cy);
-										for (x = 0; x < charXLen; x++) {
-											int curWidth = charRealWidths[i] - x * 8;
-											if (curWidth > 8) curWidth = 8;
-											int bitMask = ((1 << curWidth) - 1) << (8 - curWidth);
-											int dstBitMask1 = (bitMask >> baseXbit) & 0xff;
-											int dstBitMask2 = (bitMask << (8 - baseXbit)) & 0xff;
-											char* buf = (char*)pBits + baseXbyte + x;
-											for (y = 0; y < sz.cy; y++) {
-												UINT8 data = srcBuf[x * sz.cy + y] & bitMask;
-												UINT8 data1 = (data >> baseXbit) & 0xff;
-												UINT8 data2 = (data << (8 - baseXbit)) & 0xff;
-												//*buf = (*buf & ~dstBitMask1) | (data1 & dstBitMask1);
-												*buf |= data1 & dstBitMask1;
-												if (dstBitMask2) {
-													//*(buf + 1) = (*(buf + 1) & ~dstBitMask2) | (data2 & dstBitMask2);
-													*(buf + 1) |= data2 & dstBitMask2;
+										if (hasDBCS) {
+											if (is2Byte) {
+												is2Byte = false;
+												skipRender = true;
+											}
+											else {
+												if (0x81 <= lpText[i] && lpText[i] <= 0x9f || 0xe0 <= lpText[i] && lpText[i] <= 0xef) {
+													is2Byte = true;
+													skipRender = true;
 												}
-												buf += stride;
+											}
+										}
+										if (!skipRender) {
+											int y, x;
+											int charXLen = (charRealWidths[i] + 7) / 8;
+											npdisp_readMemoryWith32Offset(srcBuf, fontInfo.dfBitsPointer >> 16, charOffsets[i], charXLen * sz.cy);
+											for (x = 0; x < charXLen; x++) {
+												int curWidth = charRealWidths[i] - x * 8;
+												if (curWidth > 8) curWidth = 8;
+												int bitMask = ((1 << curWidth) - 1) << (8 - curWidth);
+												int dstBitMask1 = (bitMask >> baseXbit) & 0xff;
+												int dstBitMask2 = (bitMask << (8 - baseXbit)) & 0xff;
+												char* buf = (char*)pBits + baseXbyte + x;
+												for (y = 0; y < sz.cy; y++) {
+													UINT8 data = srcBuf[x * sz.cy + y] & bitMask;
+													UINT8 data1 = (data >> baseXbit) & 0xff;
+													UINT8 data2 = (data << (8 - baseXbit)) & 0xff;
+													//*buf = (*buf & ~dstBitMask1) | (data1 & dstBitMask1);
+													*buf |= data1 & dstBitMask1;
+													if (dstBitMask2) {
+														//*(buf + 1) = (*(buf + 1) & ~dstBitMask2) | (data2 & dstBitMask2);
+														*(buf + 1) |= data2 & dstBitMask2;
+													}
+													buf += stride;
+												}
 											}
 										}
 										baseXbyte += (baseXbit + charWidths[i]) / 8;
@@ -2496,22 +2613,63 @@ static UINT32 npdisp_func_ExtTextOut(UINT32 lpDestDevAddr, SINT16 wDestXOrg, SIN
 														isTransparentBk = true;
 													}
 												}
-												if (isTransparentBk) {
-													// 背景透過 ROPが要るのでDDB経由
+												HFONT hFont = npdisp_getFont(&fontInfo, lpFontInfoAddr);
+												if (isTransparentBk || hFont) {
+													// 背景透過 or FONT指示あり ROPが要るor描画が必要なのでDDB経由
 													TRACEOUT(("FG:%08x BG:TRANS", drawMode.LTextColor));
 													HBITMAP hBmp = CreateBitmap(ddbWidth, sz.cy, 1, 1, pBits);
 													if (hBmp) {
 														HGDIOBJ hbmpOld;
 														hbmpOld = SelectObject(hdcText, hBmp);
+														HGDIOBJ hFontOld = hFont ? SelectObject(hdcText, hFont) : NULL;
+
+														if (hFont) {
+															// DBCSてんそう
+															int baseX = 0;
+															int dbcsX = 0;
+															bool is2Byte = false;
+															char dbcsBuf[2];
+															SetBkMode(hdcText, TRANSPARENT);
+															SetBkColor(hdcText, 0x000000);
+															SetTextColor(hdcText, 0xffffff);
+															for (i = 0; i < loopLen; i++) {
+																bool skipRender = false;
+																int charIdx = (int)lpText[i] - fontInfo.dfFirstChar;
+																if (charIdx < 0 || fontInfo.dfLastChar < charIdx) {
+																	charIdx = fontInfo.dfDefaultChar;
+																}
+																if (is2Byte) {
+																	dbcsBuf[1] = (char)lpText[i];
+																	TextOutA(hdcText, dbcsX, 0, dbcsBuf, 2);
+																	is2Byte = false;
+																}
+																else {
+																	if (hasDBCS && (0x81 <= lpText[i] && lpText[i] <= 0x9f || 0xe0 <= lpText[i] && lpText[i] <= 0xef)) {
+																		dbcsBuf[0] = (char)lpText[i];
+																		dbcsX = baseX;
+																		is2Byte = true;
+																	}
+																}
+																baseX += charWidths[i];
+															}
+														}
 
 														SetBkMode(tgtDC, OPAQUE);
-														SetBkColor(tgtDC, 0x000000);
-														SetTextColor(tgtDC, 0xffffff);
-														BitBlt(tgtDC, dstX, dstY, srcW, srcH, hdcText, srcX, srcY, SRCAND);
-														SetBkColor(tgtDC, drawMode.LTextColor);
-														SetTextColor(tgtDC, 0x000000);
-														BitBlt(tgtDC, dstX, dstY, srcW, srcH, hdcText, srcX, srcY, SRCPAINT);
+														if (isTransparentBk) {
+															SetBkColor(tgtDC, 0x000000);
+															SetTextColor(tgtDC, 0xffffff);
+															BitBlt(tgtDC, dstX, dstY, srcW, srcH, hdcText, srcX, srcY, SRCAND);
+															SetBkColor(tgtDC, drawMode.LTextColor);
+															SetTextColor(tgtDC, 0x000000);
+															BitBlt(tgtDC, dstX, dstY, srcW, srcH, hdcText, srcX, srcY, SRCPAINT);
+														}
+														else {
+															SetBkColor(tgtDC, drawMode.LTextColor);
+															SetTextColor(tgtDC, drawMode.LbkColor);
+															BitBlt(tgtDC, dstX, dstY, srcW, srcH, hdcText, srcX, srcY, SRCCOPY);
+														}
 
+														if (hFont) SelectObject(hdcText, hFontOld);
 														SelectObject(hdcText, hbmpOld);
 														DeleteObject(hBmp);
 													}
@@ -5724,6 +5882,14 @@ static void npdisp_releaseScreen(bool resize) {
 			}
 			npdispwin.bitmaps.clear();
 			npdispwin.bitmapsIdx = 1;
+
+			// DBCS用
+			for (int i = 0; i < NPDISP_FONT_CACHE_MAX; i++) {
+				if (npdispwin.hFontCache[i]) {
+					DeleteObject(npdispwin.hFontCache[i]);
+					npdispwin.hFontCache[i] = NULL;
+				}
+			}
 		}
 		SelectObject(npdispwin.hdc, npdispwin.hOldBmp);
 		DeleteObject(npdispwin.hBmp);
@@ -5944,6 +6110,7 @@ static void npdisp_createScreen(bool resize) {
 	npdispwin.hFont = CreateFontIndirect(&lf);
 	npdispwin.hOldhFont = SelectObject(npdispwin.hdc, npdispwin.hFont);
 
+
 	//// DDBの色数を変更
 	//for (auto it = npdispwin.bitmaps.begin(); it != npdispwin.bitmaps.end(); ++it) {
 	//	if (it->second.bmphdc.hBmp) {
@@ -6082,6 +6249,10 @@ void npdisp_reset(const NP2CFG* pConfig)
 
 	npdispwin.dirtyRect.left = npdispwin.dirtyRect.top = npdispwin.dirtyRect.right = npdispwin.dirtyRect.bottom = 0;
 	npdispwin.lastCursorRect.left = npdispwin.lastCursorRect.top = npdispwin.lastCursorRect.right = npdispwin.lastCursorRect.bottom = 0;
+
+	// DBCS用
+	memset(npdispwin.hFontCache, 0, sizeof(npdispwin.hFontCache));
+	memset(npdispwin.logFontCache, 0, sizeof(npdispwin.logFontCache));
 
 	npdisp.cursorHotSpotX = 0;
 	npdisp.cursorHotSpotY = 0;

@@ -98,6 +98,9 @@
 #ifdef SUPPORT_WAB_NPDISP
 #include "wab/npdisp.h"
 #endif
+#ifdef SUPPORT_WAB_GA1280A
+#include "wab/ga1280a.h"
+#endif
 #include "fmboard.h"
 #include "pcm86.h"
 #if defined(SUPPORT_PHYSICAL_CDDRV)
@@ -4953,6 +4956,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInst,
 #endif
 #ifdef SUPPORT_WAB_NPDISP
 	npdisp_shutdown();
+#endif
+#ifdef SUPPORT_WAB_GA1280A
+	ga1280a_shutdown();
 #endif
 #ifdef SUPPORT_NET
 	np2net_shutdown();

@@ -53,7 +53,7 @@ static const HDRVFILE hdd_volume = {{'_','H','O','S','T','D','R','I','V','E','_'
 
 // XXX: DTA単位の複数検索に対応　本当はステートセーブすべき
 #define HOSTDRV_FINDHANDLE_INVALID	0xffffffff
-#define HOSTDRV_FINDHANDLE_MAX	256 // さすがに同時に256検索出来れば十分でしょう…
+#define HOSTDRV_FINDHANDLE_MAX	1024 // さすがに同時に256検索出来れば十分でしょう… → 駄目なこともあるらしいと分かったため1024に緩和
 static UINT32 hostdrv_findhandle_currentindex = HOSTDRV_FINDHANDLE_INVALID; // 現在有効なハンドルが格納されているインデックス
 static HOSTDRV_FINDHANDLE hostdrv_findhandles[HOSTDRV_FINDHANDLE_MAX] = { 0 }; // 検索ハンドルリスト
 static UINT32 hostdrv_writepos = 0; // リストへの書き込み位置
@@ -1445,6 +1445,13 @@ static void find_next(INTRST intrst) {
 	fetch_sda_currcds(&sc);
 	setup_ptrs(intrst, &sc);
 
+	srchrec = intrst->srchrec_ptr;
+	if ((!(srchrec->drive_no & 0x40)) ||
+		((srchrec->drive_no & 0x1f) != hostdrv.stat.drive_no)) {
+		CPU_FLAG &= ~Z_FLAG;	// chain
+		return;
+	}
+
 	// DTAを読み取ってクラスタ番号を取得
 	flistidx = MEMR_READ16(LOADINTELWORD(sc.ver3.sda.current_dta.seg), LOADINTELWORD(sc.ver3.sda.current_dta.off) + 0x0f);
 	findHandle = hostdrv_findhandles_getcurrent();
@@ -1458,14 +1465,14 @@ static void find_next(INTRST intrst) {
 			hostdrv.flist = findHandle->flist;
 			hostdrv.stat.flistpos = findHandle->flistpos;
 		}
+		else {
+			// 異常
+			fail(intrst, ERR_NOMOREFILES);
+			store_sda_currcds(&sc);
+			return;
+		}
 	}
 
-	srchrec = intrst->srchrec_ptr;
-	if ((!(srchrec->drive_no & 0x40)) ||
-		((srchrec->drive_no & 0x1f) != hostdrv.stat.drive_no)) {
-		CPU_FLAG &= ~Z_FLAG;	// chain
-		return;
-	}
 	if (find_file(intrst) != SUCCESS) {
 		hostdrv_findhandles_close(); // 列挙が終わったならハンドル閉じる
 		fail(intrst, ERR_NOMOREFILES);
@@ -2032,6 +2039,9 @@ int hostdrv_sfload(STFLAGH sfh, const SFENTRY *tbl) {
 	HDRVHANDLE	hdf;
 	FILEH		fh;
 	HDRVLST		hdl;
+
+	hostdrv_deinitialize();
+	hostdrv_initialize();
 
 	listarray_clr(hostdrv.fhdl);
 	listarray_clr(hostdrv.flist);

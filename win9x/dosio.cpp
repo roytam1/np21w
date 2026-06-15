@@ -249,6 +249,30 @@ short DOSIOCALL file_rename(const OEMCHAR* lpExistFile, const OEMCHAR* lpNewFile
 }
 
 /**
+ * ファイルロックの確認
+ * @param[in] lpPathName ファイル名
+ * @retval 0 ロックされていない
+ * @retval それ以外 ロックされている
+ */
+short DOSIOCALL file_islocked(const OEMCHAR* lpPathName)
+{
+	FILEH hFile = ::CreateFile(lpPathName, GENERIC_READ, 0, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+	if (hFile == INVALID_HANDLE_VALUE)
+	{
+		const DWORD err = GetLastError();
+		if (err == ERROR_SHARING_VIOLATION)
+		{
+			return -1; // ファイルロック
+		}
+		else {
+			return 0; // ファイルロックではない
+		}
+	}
+	CloseHandle(hFile);
+	return 0; // 普通に開ける
+}
+
+/**
  * ディレクトリ作成
  * @param[in] lpPathName パス
  * @retval 0 成功

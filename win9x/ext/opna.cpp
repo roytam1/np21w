@@ -156,6 +156,14 @@ void opna_reset(POPNA opna, REG8 cCaps)
 		OPNA_SetVolumeADPCM(opna->fmgen, (int)LINEAR2DB((double)np2cfg.vol_adpcm / 128 * np2cfg.vol_master / 100));
 		OPNA_SetVolumeRhythmTotal(opna->fmgen, (int)LINEAR2DB((double)np2cfg.vol_rhythm / 128 * np2cfg.vol_master / 100));
 		OPNA_Reset(opna->fmgen);
+		if (cCaps & OPNA_HAS_ADPCM)
+		{
+			// fmgen ADPCM Reset
+			OPNA_SetReg(opna->fmgen, 0x104, 0x02);
+			OPNA_SetReg(opna->fmgen, 0x105, 0x00);
+			OPNA_SetReg(opna->fmgen, 0x10c, 0xff);
+			OPNA_SetReg(opna->fmgen, 0x10d, 0xff);
+		}
 		OPNA_SetReg(opna->fmgen, 0x07, 0xbf);
 		OPNA_SetReg(opna->fmgen, 0x0e, 0xff);
 		OPNA_SetReg(opna->fmgen, 0x0f, 0xff);
@@ -460,7 +468,16 @@ REG8 opna_readExtendedStatus(POPNA opna)
 
 	if (cCaps & OPNA_HAS_ADPCM)
 	{
-		ret = adpcm_status(&opna->adpcm);
+#if defined(SUPPORT_FMGEN)
+		if (opna->usefmgen)
+		{
+			ret = (REG8)(OPNA_ReadStatusEx(opna->fmgen) & 0x3c);
+		}
+		else
+#endif	/* SUPPORT_FMGEN */
+		{
+			ret = adpcm_status(&opna->adpcm);
+		}
 	}
 	else
 	{
@@ -756,7 +773,14 @@ REG8 opna_readExtendedRegister(POPNA opna, UINT nAddress)
 {
 	if ((opna->s.cCaps & OPNA_HAS_ADPCM) && (nAddress == 0x08))
 	{
-		return adpcm_readsample(&opna->adpcm);
+		REG8 ret = adpcm_readsample(&opna->adpcm);
+#if defined(SUPPORT_FMGEN)
+		if (opna->usefmgen)
+		{
+			ret = (REG8)OPNA_GetReg(opna->fmgen, 0x108);
+		}
+#endif	/* SUPPORT_FMGEN */
+		return ret;
 	}
 	return opna->s.reg[nAddress + 0x100];
 }

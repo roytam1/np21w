@@ -443,6 +443,12 @@ OPNABase::OPNABase()
 
 	adpcmvol = 0;
 	control2 = 0;
+	cpustream = false;
+	cpufiford = 0;
+	cpufifowr = 0;
+	cpufifocount = 0;
+	cpufifocur = 0;
+	cpufifolow = false;
 
 	MakeTable2();
 	BuildLFOTable();
@@ -514,6 +520,8 @@ void OPNABase::Reset()
 	adpcmx = 0;
 	lfocount = 0;
 	adpcmplay = false;
+	cpustream = false;
+	ResetCPUADPCM();
 	adplc = 0;
 	adpld = 0x100;
 	status = 0;
@@ -767,13 +775,22 @@ void OPNABase::SetADPCMBReg(uint addr, uint data)
 		if ((data & 0x80) && !adpcmplay)
 		{
 			adpcmplay = true;
-			memaddr = startaddr;
+			cpustream = ((data & 0xe0) == 0x80);
+			if (!cpustream)
+				memaddr = startaddr;
+			else
+				ResetCPUADPCM();
 			adpcmx = 0, adpcmd = 127;
+			adpcmout = 0;
+			apout0 = 0;
+			apout1 = 0;
 			adplc = 0;
 		}
 		if (data & 1)
 		{
 			adpcmplay = false;
+			cpustream = false;
+			ResetCPUADPCM();
 		}
 		control1 = data;
 		break;
@@ -803,6 +820,10 @@ void OPNABase::SetADPCMBReg(uint addr, uint data)
 		{
 //			LOG2("  Wr [0x%.5x] = %.2x", memaddr, data);
 			WriteRAM(data);
+		}
+		else if ((control1 & 0xe0) == 0x80)
+		{
+			WriteCPUADPCM(data);
 		}
 		break;
 
@@ -1024,9 +1045,51 @@ inline int OPNABase::DecodeADPCMBSample(uint data)
 // ---------------------------------------------------------------------------
 //	ADPCM RAM ����� nibble �ǂݍ��݋y�� ADPCM �W�J
 //
+void OPNABase::ResetCPUADPCM()
+{
+	cpufiford = 0;
+	cpufifowr = 0;
+	cpufifocount = 0;
+	cpufifocur = 0;
+	cpufifolow = false;
+}
+void OPNABase::WriteCPUADPCM(uint data)
+{
+	if (cpufifocount < 0x10000)
+	{
+		cpufifo[cpufifowr & 0xffff] = uint8(data);
+		cpufifowr++;
+		cpufifocount++;
+	}
+}
+bool OPNABase::ReadCPUADPCMN(uint* data)
+{
+	if (!cpufifolow)
+	{
+		if (cpufifocount == 0)
+			return false;
+		cpufifocur = cpufifo[cpufiford & 0xffff];
+		cpufiford++;
+		cpufifocount--;
+		*data = cpufifocur >> 4;
+		cpufifolow = true;
+	}
+	else
+	{
+		*data = cpufifocur & 0x0f;
+		cpufifolow = false;
+	}
+	return true;
+}
 int OPNABase::ReadRAMN()
 {
 	uint data;
+	if (cpustream)
+	{
+		if (!ReadCPUADPCMN(&data))
+			return adpcmx;
+		return DecodeADPCMBSample(data);
+	}
 	if (granuality > 0)
 	{
 #ifndef NO_BITTYPE_EMULATION
@@ -1101,7 +1164,10 @@ int OPNABase::ReadRAMN()
 //
 uint OPNABase::ReadStatusEx()
 {
-	uint r = ((status | 8) & stmask) | (adpcmplay ? 0x20 : 0);
+	uint brdy = 8;
+	if (cpustream)
+		brdy = (cpufifocount < (0x10000 - 16)) ? 8 : 0;
+	uint r = ((status | brdy) & stmask) | (adpcmplay ? 0x20 : 0);
 	status |= statusnext;
 	statusnext = 0;
 	return r;
@@ -1370,6 +1436,7 @@ bool OPNA::Init(uint c, uint r, bool ipflag, const char* path)
 		adpcmbuf = new uint8[0x40000];
 	if (!adpcmbuf)
 		return false;
+	memset(adpcmbuf, 0, 0x40000);
 
 	if (!SetRate(c, r, ipflag))
 		return false;

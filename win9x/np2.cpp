@@ -1727,28 +1727,33 @@ static void OnCommand(HWND hWnd, WPARAM wParam)
 
 #if defined(SUPPORT_PX)
 		case IDM_PX1:
-			np2cfg.SOUND_SW = 0x30;
+			np2cfg.SOUND_SW = SOUNDID_PX1;
 			update |= SYS_UPDATECFG | SYS_UPDATESBOARD;
 			break;
 
 		case IDM_PX2:
-			np2cfg.SOUND_SW = 0x50;
+			np2cfg.SOUND_SW = SOUNDID_PX2;
 			update |= SYS_UPDATECFG | SYS_UPDATESBOARD;
 			break;
 #endif	// defined(SUPPORT_PX)
 
 		case IDM_SOUNDORCHESTRA:
-			np2cfg.SOUND_SW = 0x32;
+			np2cfg.SOUND_SW = SOUNDID_SOUNDORCHESTRA;
 			update |= SYS_UPDATECFG | SYS_UPDATESBOARD;
 			break;
 
 		case IDM_SOUNDORCHESTRAV:
-			np2cfg.SOUND_SW = 0x82;
+			np2cfg.SOUND_SW = SOUNDID_SOUNDORCHESTRAV;
+			update |= SYS_UPDATECFG | SYS_UPDATESBOARD;
+			break;
+
+		case IDM_MULTIMEDIAORCHESTRA:
+			np2cfg.SOUND_SW = SOUNDID_MULTIMEDIAORCHESTRA;
 			update |= SYS_UPDATECFG | SYS_UPDATESBOARD;
 			break;
 
 		case IDM_AMD98:
-			np2cfg.SOUND_SW = 0x80;
+			np2cfg.SOUND_SW = SOUNDID_AMD98;
 			update |= SYS_UPDATECFG | SYS_UPDATESBOARD;
 			break;
 			

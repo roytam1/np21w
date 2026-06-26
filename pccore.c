@@ -367,6 +367,8 @@ static void sound_init(void)
 	rhythm_setvol(np2cfg.vol_rhythm * np2cfg.vol_master / 100);
 	adpcm_initialize(rate);
 	adpcm_setvol(np2cfg.vol_adpcm * np2cfg.vol_master / 100);
+	ymzadpcm_initialize(rate);
+	ymzadpcm_setvol(np2cfg.vol_adpcm * np2cfg.vol_master / 100);
 	pcm86gen_initialize(rate);
 	pcm86gen_setvol(np2cfg.vol_pcm * np2cfg.vol_master / 100);
 	cs4231_initialize(rate);

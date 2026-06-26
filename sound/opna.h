@@ -6,6 +6,7 @@
 #pragma once
 
 #include "adpcm.h"
+#include "ymzadpcm.h" // Žb’è
 #include "opngen.h"
 #include "psggen.h"
 #include "rhythm.h"

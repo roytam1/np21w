@@ -384,7 +384,7 @@ static void np2sysp_getconfig(const void *arg1, long arg2) {
 			break;
 #endif
 		case NP21W_SWITCH_SETDEVICEIRQ_SND_SO:
-			if (g_nSoundID == SOUNDID_SOUNDORCHESTRA || g_nSoundID == SOUNDID_SOUNDORCHESTRAV) {
+			if (g_nSoundID == SOUNDID_SOUNDORCHESTRA || g_nSoundID == SOUNDID_SOUNDORCHESTRAV || g_nSoundID == SOUNDID_MULTIMEDIAORCHESTRA) {
 				configvalue = g_opna[0].s.irq;
 			}
 			break;
@@ -626,7 +626,7 @@ static void np2sysp_cngconfig(const void *arg1, long arg2) {
 #endif
 		case NP21W_SWITCH_SETDEVICEIRQ_SND_SO:
 			if (irqvalue == 0x03 || irqvalue == 0x0d || irqvalue == 0x0a || irqvalue == 0x0c || irqvalue == 0xff) {
-				if (g_nSoundID == SOUNDID_SOUNDORCHESTRA || g_nSoundID == SOUNDID_SOUNDORCHESTRAV) {
+				if (g_nSoundID == SOUNDID_SOUNDORCHESTRA || g_nSoundID == SOUNDID_SOUNDORCHESTRAV || g_nSoundID == SOUNDID_MULTIMEDIAORCHESTRA) {
 					g_opna[0].s.irq = irqvalue;
 					retvalue = irqvalue; // Žó•t‚³‚ê‚½‚ç‚»‚Ì’l‚ð•Ô‚·
 				}

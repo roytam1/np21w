@@ -65,6 +65,7 @@ enum tagSoundId
 	SOUNDID_AMD98				= 0x80,		/*!< AMD-98 */
 	SOUNDID_SOUNDORCHESTRA		= 0x32,		/*!< SOUND ORCHESTRA */
 	SOUNDID_SOUNDORCHESTRAV		= 0x82,		/*!< SOUND ORCHESTRA-V */
+	SOUNDID_MULTIMEDIAORCHESTRA = 0x83,		/*!< Multimedia Orchestra */
 
 #if defined(SUPPORT_PX)
 	SOUNDID_PX1					= 0x30,

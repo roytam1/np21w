@@ -194,6 +194,7 @@ void SndOptMixerPage::OnOK()
 		for (UINT i = 0; i < _countof(g_opna); i++)
 		{
 			adpcm_update(&g_opna[i].adpcm);
+			ymzadpcm_update(&g_opna[i].adpcm);
 		}
 		bUpdated = true;
 	}

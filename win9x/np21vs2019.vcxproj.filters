@@ -2427,6 +2427,15 @@
     <ClCompile Include="..\wab\ga1280a.cpp">
       <Filter>ソース ファイル\wab</Filter>
     </ClCompile>
+    <ClCompile Include="..\cbus\boardmo.c">
+      <Filter>ソース ファイル\cbus</Filter>
+    </ClCompile>
+    <ClCompile Include="..\sound\ymzadpcmc.c">
+      <Filter>ソース ファイル\sound</Filter>
+    </ClCompile>
+    <ClCompile Include="..\sound\ymzadpcmg.c">
+      <Filter>ソース ファイル\sound</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\calendar.h">
@@ -3631,6 +3640,12 @@
     </ClInclude>
     <ClInclude Include="..\wab\ga1280adef.h">
       <Filter>ヘッダー ファイル\wab</Filter>
+    </ClInclude>
+    <ClInclude Include="..\cbus\boardmo.h">
+      <Filter>ヘッダー ファイル\cbus</Filter>
+    </ClInclude>
+    <ClInclude Include="..\sound\ymzadpcm.h">
+      <Filter>ヘッダー ファイル\sound</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

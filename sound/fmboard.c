@@ -14,6 +14,7 @@
 #include	"boardpx.h"
 #endif	// defined(SUPPORT_PX)
 #include	"boardso.h"
+#include	"boardmo.h"
 #include	"amd98.h"
 #if defined(SUPPORT_SOUND_SB16)
 #include	"boardsb16.h"
@@ -107,12 +108,14 @@ void fmboard_updatevolume(){
 #endif	/* SUPPORT_FMGEN */
 
 	adpcm_setvol(np2cfg.vol_adpcm * np2cfg.vol_master / 100);
+	ymzadpcm_setvol(np2cfg.vol_adpcm * np2cfg.vol_master / 100);
 #if defined(SUPPORT_FMGEN)
 	opna_fmgen_setallvolumeADPCM_linear(np2cfg.vol_adpcm * np2cfg.vol_master / 100);
 #endif	/* SUPPORT_FMGEN */
 	for (i = 0; i < _countof(g_opna); i++)
 	{
 		adpcm_update(&g_opna[i].adpcm);
+		ymzadpcm_update(&g_opna[i].adpcm);
 	}
 
 	pcm86gen_setvol(np2cfg.vol_pcm * np2cfg.vol_master / 100);
@@ -292,7 +295,11 @@ void fmboard_reset(const NP2CFG *pConfig, SOUNDID nSoundID)
 		case SOUNDID_SOUNDORCHESTRAV:
 			boardso_reset(pConfig, TRUE);
 			break;
-			
+
+		case SOUNDID_MULTIMEDIAORCHESTRA:
+			boardmo_reset(pConfig);
+			break;
+
 #if defined(SUPPORT_SOUND_SB16)
 		case SOUNDID_SB16:
 			boardsb16_reset(pConfig);
@@ -414,7 +421,11 @@ void fmboard_bind(void) {
 		case SOUNDID_SOUNDORCHESTRAV:
 			boardso_bind();
 			break;
-			
+
+		case SOUNDID_MULTIMEDIAORCHESTRA:
+			boardmo_bind();
+			break;
+
 #if defined(SUPPORT_SOUND_SB16)
 		case SOUNDID_SB16:
 			boardsb16_bind();
@@ -533,7 +544,11 @@ void fmboard_unbind(void) {
 		case SOUNDID_SOUNDORCHESTRAV:
 			boardso_unbind();
 			break;
-			
+
+		case SOUNDID_MULTIMEDIAORCHESTRA:
+			boardmo_unbind();
+			break;
+
 #if defined(SUPPORT_SOUND_SB16)
 		case SOUNDID_SB16:
 			boardsb16_unbind();

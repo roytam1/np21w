@@ -301,7 +301,11 @@ static void info_sound(OEMCHAR *str, int maxlen, const NP2INFOEX *ex)
 		case SOUNDID_SOUNDORCHESTRAV:
 			lpBoard = OEMTEXT("SOUND ORCHESTRA-V");
 			break;
-			
+
+		case SOUNDID_MULTIMEDIAORCHESTRA:
+			lpBoard = OEMTEXT("MULTIMEDIA ORCHESTRA");
+			break;
+
 #if defined(SUPPORT_SOUND_SB16)
 		case SOUNDID_SB16:
 			lpBoard = OEMTEXT("Sound Blaster 16");

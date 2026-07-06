@@ -160,7 +160,7 @@ void lio_updatedraw(GLIO lio) {
 	lio->draw.x2 = min(tmp, 639);
 	tmp = (SINT16)LOADINTELWORD(lio->work.viewy2);
 	lio->draw.y2 = min(tmp, maxline);
-	if (!gdcs.access) {
+	if (!lio->work.access) {
 		lio->draw.base = 0;
 		lio->draw.bank = 0;
 		lio->draw.sbit = 0x01;
@@ -239,7 +239,6 @@ void lio_pset(const _GLIO *lio, SINT16 x, SINT16 y, REG8 pal) {
 	pixed8(lio, addr, bit, pal);
 }
 
-#if 0
 void lio_line(const _GLIO *lio, SINT16 x1, SINT16 x2, SINT16 y, REG8 pal) {
 
 	UINT	addr;
@@ -289,5 +288,4 @@ void lio_line(const _GLIO *lio, SINT16 x1, SINT16 x2, SINT16 y, REG8 pal) {
 		pixed8(lio, addr, dbit, pal);
 	}
 }
-#endif
 

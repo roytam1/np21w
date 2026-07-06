@@ -194,8 +194,6 @@ static void gline(const _GLIO *lio, const LINEPT *lp, UINT16 pat) {
 	int		height;
 	int		d1;
 	int		d2;
-	UINT32	csrw;
-	GDCVECT	vect;
 
 	x1 = lp->x1;
 	y1 = lp->y1;
@@ -286,28 +284,47 @@ gline_clipped:
 	d1 = max(d1, d2) & 15;
 	pat = (UINT16)((pat >> d1) | (pat << (16 - d1)));
 
-	csrw = (y1 * 40) + (x1 >> 4) + ((x1 & 0xf) << 20);
-	if (lio->draw.flag & LIODRAW_UPPER) {
-		csrw += 16000 >> 1;
-	}
-	gdcsub_setvectl(&vect, x1, y1, x2, y2);
-	if (!(lio->draw.flag & LIODRAW_MONO)) {
-		gdcsub_vectl(csrw + 0x4000, &vect, pat,
-							(REG8)((lp->pal & 1)?GDCOPE_SET:GDCOPE_CLEAR));
-		gdcsub_vectl(csrw + 0x8000, &vect, pat,
-							(REG8)((lp->pal & 2)?GDCOPE_SET:GDCOPE_CLEAR));
-		gdcsub_vectl(csrw + 0xc000, &vect, pat,
-							(REG8)((lp->pal & 4)?GDCOPE_SET:GDCOPE_CLEAR));
-		if (lio->draw.flag & LIODRAW_4BPP) {
-			gdcsub_vectl(csrw, &vect, pat,
-							(REG8)((lp->pal & 8)?GDCOPE_SET:GDCOPE_CLEAR));
+	{
+		int dx;
+		int dy;
+		int sx;
+		int sy;
+		int err;
+		int e2;
+		UINT16 lpat;
+
+		dx = x2 - x1;
+		if (dx < 0) {
+			dx = -dx;
+		}
+		dy = y2 - y1;
+		if (dy < 0) {
+			dy = -dy;
+		}
+		sx = (x1 < x2) ? 1 : -1;
+		sy = (y1 < y2) ? 1 : -1;
+		err = dx - dy;
+		lpat = pat;
+		for (;;) {
+			if (lpat & 1) {
+				lio_pset(lio, (SINT16)x1, (SINT16)y1, lp->pal);
+			}
+			lpat = (UINT16)((lpat >> 1) | (lpat << 15));
+			if ((x1 == x2) && (y1 == y2)) {
+				break;
+			}
+			e2 = err << 1;
+			if (e2 > -dy) {
+				err -= dy;
+				x1 += sx;
+			}
+			if (e2 < dx) {
+				err += dx;
+				y1 += sy;
+			}
 		}
 	}
-	else {
-		csrw += ((lio->draw.flag + 1) & LIODRAW_PMASK) << 12;
-		gdcsub_vectl(csrw, &vect, pat,
-								(REG8)((lp->pal)?GDCOPE_SET:GDCOPE_CLEAR));
-	}
+
 }
 
 static void glineb(const _GLIO *lio, const LINEPT *lp, UINT16 pat) {
@@ -335,6 +352,30 @@ static void glineb(const _GLIO *lio, const LINEPT *lp, UINT16 pat) {
 
 // ----
 
+static REG8 gbox_tilepal(const _GLIO *lio, const UINT8 *tile, UINT leng,
+												int x, int y, UINT planes) {
+
+	UINT	row;
+	UINT	idx;
+	UINT	pl;
+	UINT	bit;
+	REG8	pal;
+
+	row = ((UINT)(y - lio->draw.y1) * planes) % leng;
+	bit = 0x80 >> ((x - lio->draw.x1) & 7);
+	pal = 0;
+	for (pl=0; pl<planes; pl++) {
+		idx = row + pl;
+		if (idx >= leng) {
+			idx -= leng;
+		}
+		if (tile[idx] & bit) {
+			pal |= (REG8)(1 << pl);
+		}
+	}
+	return(pal);
+}
+
 static void gbox(const _GLIO *lio, const LINEPT *lp, UINT8 *tile, UINT leng) {
 
 	int		x1;
@@ -342,14 +383,9 @@ static void gbox(const _GLIO *lio, const LINEPT *lp, UINT8 *tile, UINT leng) {
 	int		x2;
 	int		y2;
 	int		tmp;
-	UINT32	csrw;
-	GDCVECT	vect;
+	int		x;
 	UINT	planes;
-	UINT	adrs[4];
-	UINT8	ope[4];
-	UINT16	pat;
-	UINT8	*tterm;
-	UINT	r;
+	REG8	pal;
 
 	x1 = lp->x1;
 	y1 = lp->y1;
@@ -375,60 +411,24 @@ static void gbox(const _GLIO *lio, const LINEPT *lp, UINT8 *tile, UINT leng) {
 	x2 = min(x2, lio->draw.x2);
 	y2 = min(y2, lio->draw.y2);
 
-	csrw = 0;
-	if (lio->draw.flag & LIODRAW_UPPER) {
-		csrw += 16000 >> 1;
-	}
-	if (!(lio->draw.flag & LIODRAW_MONO)) {
-		planes = (lio->draw.flag & LIODRAW_4BPP)?4:3;
-		adrs[0] = csrw + 0x4000;
-		adrs[1] = csrw + 0x8000;
-		adrs[2] = csrw + 0xc000;
-		adrs[3] = csrw + 0x0000;
-		ope[0] = (lp->pal & 1)?GDCOPE_SET:GDCOPE_CLEAR;
-		ope[1] = (lp->pal & 2)?GDCOPE_SET:GDCOPE_CLEAR;
-		ope[2] = (lp->pal & 4)?GDCOPE_SET:GDCOPE_CLEAR;
-		ope[3] = (lp->pal & 8)?GDCOPE_SET:GDCOPE_CLEAR;
-	}
-	else {
-		planes = 1;
-		adrs[0] = csrw + (((lio->draw.flag + 1) & LIODRAW_PMASK) << 12);
-		ope[0] = (lp->pal)?GDCOPE_SET:GDCOPE_CLEAR;
-	}
-
 	if (leng == 0) {
-		tile = NULL;
-		tterm = NULL;
-	}
-	else {
-		tterm = tile + leng;
-		tmp = (x1 - lio->draw.x1) & 7;
-		do {
-			r = GDCPATREVERSE(*tile);
-			*tile = (UINT8)((r << tmp) | (r >> (8 - tmp)));
-		} while(++tile < tterm);
-		tile -= leng;
-		tmp = (y1 - lio->draw.y1) * planes;
-		tile += tmp % leng;
+		while(y1 <= y2) {
+			lio_line(lio, (SINT16)x1, (SINT16)x2, (SINT16)y1, lp->pal);
+			y1++;
+		}
+		return;
 	}
 
-	pat = 0xffff;
+	planes = gettileplanes(lio);
 	while(y1 <= y2) {
-		gdcsub_setvectl(&vect, x1, y1, x2, y1);
-		csrw = (y1 * 40) + (x1 >> 4) + ((x1 & 0xf) << 20);
-		r = 0;
-		do {
-			if (tile) {
-				pat = (*tile << 8) | *tile;
-				if (++tile >= tterm) {
-					tile -= leng;
-				}
-			}
-			gdcsub_vectl(csrw + adrs[r], &vect, pat, ope[r]);
-		} while(++r < planes);
+		for (x=x1; x<=x2; x++) {
+			pal = gbox_tilepal(lio, tile, leng, x, y1, planes);
+			lio_pset(lio, (SINT16)x, (SINT16)y1, pal);
+		}
 		y1++;
 	}
 }
+
 
 
 // ---- CLS

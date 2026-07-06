@@ -1033,6 +1033,7 @@ END
 IDR_SYSDEBUG MENU
 BEGIN
     MENUITEM "Memory dump",                 IDM_MEMORYDUMP
+    MENUITEM "Full Memory dump",            IDM_MEMORYDUMPALL
     MENUITEM "Debug utility",               IDM_DEBUGUTY
     MENUITEM SEPARATOR
 END

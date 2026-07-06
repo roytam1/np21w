@@ -1,6 +1,11 @@
 #include	"compiler.h"
 #include	"cpucore.h"
 #include	"lio.h"
+#include	<math.h>
+
+#ifndef M_PI
+#define M_PI	3.14159265358979323846
+#endif
 
 #define GCIRCLE_F_START       0x01
 #define GCIRCLE_F_STARTLINE   0x02
@@ -32,6 +37,12 @@ typedef struct {
 	long	y;
 } LIOVEC;
 
+typedef struct {
+	SINT16	x1;
+	SINT16	x2;
+	UINT8	used;
+} GCSPAN;
+
 
 // ---- ヘルパー
 
@@ -44,46 +55,6 @@ static int gc_posmod(int v, int m) {
 		r += m;
 	}
 	return(r);
-}
-
-static int gc_ellipse_inside(SINT16 cx, SINT16 cy, SINT16 rx, SINT16 ry,
-														SINT16 x, SINT16 y) {
-
-	double	dx;
-	double	dy;
-	double	rxd;
-	double	ryd;
-	double	v;
-	double	limit;
-
-	if ((rx == 0) && (ry == 0)) {
-		return((x == cx) && (y == cy));
-	}
-	if (rx == 0) {
-		return((x == cx) && (y >= (cy - ry)) && (y <= (cy + ry)));
-	}
-	if (ry == 0) {
-		return((y == cy) && (x >= (cx - rx)) && (x <= (cx + rx)));
-	}
-	dx = (double)x - (double)cx;
-	dy = (double)y - (double)cy;
-	rxd = (double)rx;
-	ryd = (double)ry;
-	v = (dx * dx * ryd * ryd) + (dy * dy * rxd * rxd);
-	limit = rxd * rxd * ryd * ryd;
-	return(v <= (limit + 0.0001));
-}
-
-static int gc_ellipse_border(SINT16 cx, SINT16 cy, SINT16 rx, SINT16 ry,
-														SINT16 x, SINT16 y) {
-
-	if (!gc_ellipse_inside(cx, cy, rx, ry, x, y)) {
-		return(0);
-	}
-	return(!gc_ellipse_inside(cx, cy, rx, ry, (SINT16)(x - 1), y) ||
-			!gc_ellipse_inside(cx, cy, rx, ry, (SINT16)(x + 1), y) ||
-			!gc_ellipse_inside(cx, cy, rx, ry, x, (SINT16)(y - 1)) ||
-			!gc_ellipse_inside(cx, cy, rx, ry, x, (SINT16)(y + 1)));
 }
 
 // 座標系は数学と同じ右上が正
@@ -202,6 +173,282 @@ static void gc_drawline(const _GLIO *lio, SINT16 x1, SINT16 y1,
 	}
 }
 
+
+#define GCIRC_RND(v)   (((v) >= 0.0) ? (SINT16)((v) + 0.5) : (SINT16)((v) - 0.5))
+
+static void gc_draw4(const _GLIO *lio, SINT16 x, SINT16 y,
+                                            SINT16 d1, SINT16 d2, REG8 pal,
+                                            UINT32 *waitcnt) {
+
+    SINT16  x1;
+    SINT16  x2;
+    SINT16  y1;
+    SINT16  y2;
+
+    x1 = (SINT16)(x - d1);
+    x2 = (SINT16)(x + d1);
+    y1 = (SINT16)(y - d2);
+    y2 = (SINT16)(y + d2);
+    lio_pset(lio, x1, y1, pal);
+    lio_pset(lio, x1, y2, pal);
+    lio_pset(lio, x2, y1, pal);
+    lio_pset(lio, x2, y2, pal);
+    *waitcnt += 4;
+}
+
+static void gc_draw_circle_outline(const _GLIO *lio, SINT16 cx, SINT16 cy,
+                                            SINT16 r, REG8 pal,
+                                            UINT32 *waitcnt) {
+
+    SINT16  d1;
+    SINT16  d2;
+    SINT16  d3;
+
+    d1 = 0;
+    d2 = r;
+    d3 = (SINT16)(0 - r);
+    while (d1 <= d2) {
+        gc_draw4(lio, cx, cy, d1, d2, pal, waitcnt);
+        gc_draw4(lio, cx, cy, d2, d1, pal, waitcnt);
+        d1++;
+        d3 = (SINT16)(d3 + (d1 * 2) - 1);
+        if (d3 >= 0) {
+            d2--;
+            d3 = (SINT16)(d3 - (d2 * 2));
+        }
+    }
+}
+
+static double gc_angle_from_point(SINT16 cx, SINT16 cy, SINT16 rx, SINT16 ry,
+                                            SINT16 x, SINT16 y) {
+
+    double  ax;
+    double  ay;
+
+    if ((rx == 0) || (ry == 0)) {
+        return(0.0);
+    }
+    ax = (double)(x - cx) * (double)ry;
+    ay = (double)(0 - (y - cy)) * (double)rx;
+    return(atan2(ay, ax));
+}
+
+static void gc_draw_parametric_outline(const _GLIO *lio,
+                                            SINT16 cx, SINT16 cy,
+                                            SINT16 rx, SINT16 ry,
+                                            SINT16 sx, SINT16 sy,
+                                            SINT16 ex, SINT16 ey,
+                                            int usearc, int fullarc,
+                                            REG8 pal, UINT32 *waitcnt) {
+
+    int     maxr;
+    int     n;
+    int     i;
+    double  a0;
+    double  a1;
+    double  a;
+    SINT16  px;
+    SINT16  py;
+
+    if ((rx == 0) && (ry == 0)) {
+        lio_pset(lio, cx, cy, pal);
+        (*waitcnt)++;
+        return;
+    }
+    if (rx == 0) {
+        gc_drawline(lio, cx, (SINT16)(cy - ry), cx, (SINT16)(cy + ry), pal);
+        *waitcnt += (UINT32)(ry * 2 + 1);
+        return;
+    }
+    if (ry == 0) {
+        gc_drawline(lio, (SINT16)(cx - rx), cy, (SINT16)(cx + rx), cy, pal);
+        *waitcnt += (UINT32)(rx * 2 + 1);
+        return;
+    }
+
+    a0 = 0.0;
+    a1 = 2.0 * M_PI;
+    if (usearc && !fullarc) {
+        a0 = gc_angle_from_point(cx, cy, rx, ry, sx, sy);
+        a1 = gc_angle_from_point(cx, cy, rx, ry, ex, ey);
+        while (a1 < (a0 + 1e-9)) {
+            a1 += 2.0 * M_PI;
+        }
+    }
+
+    maxr = (rx > ry) ? rx : ry;
+    n = (int)((a1 - a0) * (double)maxr) + 1;
+    if (n < 1) {
+        n = 1;
+    }
+    for (i=0; i<=n; i++) {
+        a = a0 + (a1 - a0) * (double)i / (double)n;
+        px = (SINT16)(cx + GCIRC_RND((double)rx * cos(a)));
+        py = (SINT16)(cy - GCIRC_RND((double)ry * sin(a)));
+        lio_pset(lio, px, py, pal);
+        (*waitcnt)++;
+    }
+}
+
+static void gc_span_clear(GCSPAN *spans, int height) {
+
+	int		i;
+
+	for (i=0; i<height; i++) {
+		spans[i].x1 = 0;
+		spans[i].x2 = 0;
+		spans[i].used = 0;
+	}
+}
+
+static void gc_span_add(GCSPAN *spans, int ytop, int ybottom,
+											SINT16 x, SINT16 y) {
+
+	int		idx;
+
+	if ((y < ytop) || (y > ybottom)) {
+		return;
+	}
+	idx = (int)y - ytop;
+	if (!spans[idx].used) {
+		spans[idx].x1 = x;
+		spans[idx].x2 = x;
+		spans[idx].used = 1;
+	}
+	else {
+		if (x < spans[idx].x1) {
+			spans[idx].x1 = x;
+		}
+		if (x > spans[idx].x2) {
+			spans[idx].x2 = x;
+		}
+	}
+}
+
+static void gc_span_add4(GCSPAN *spans, int ytop, int ybottom,
+					SINT16 x, SINT16 y, SINT16 d1, SINT16 d2) {
+
+	gc_span_add(spans, ytop, ybottom, (SINT16)(x - d1), (SINT16)(y - d2));
+	gc_span_add(spans, ytop, ybottom, (SINT16)(x - d1), (SINT16)(y + d2));
+	gc_span_add(spans, ytop, ybottom, (SINT16)(x + d1), (SINT16)(y - d2));
+	gc_span_add(spans, ytop, ybottom, (SINT16)(x + d1), (SINT16)(y + d2));
+}
+
+static void gc_make_circle_spans(GCSPAN *spans, int ytop, int ybottom,
+									SINT16 cx, SINT16 cy, SINT16 r) {
+
+	SINT16	d1;
+	SINT16	d2;
+	SINT16	d3;
+
+	d1 = 0;
+	d2 = r;
+	d3 = (SINT16)(0 - r);
+	while (d1 <= d2) {
+		gc_span_add4(spans, ytop, ybottom, cx, cy, d1, d2);
+		gc_span_add4(spans, ytop, ybottom, cx, cy, d2, d1);
+		d1++;
+		d3 = (SINT16)(d3 + (d1 * 2) - 1);
+		if (d3 >= 0) {
+			d2--;
+			d3 = (SINT16)(d3 - (d2 * 2));
+		}
+	}
+}
+
+static void gc_span_line(GCSPAN *spans, int ytop, int ybottom,
+								SINT16 x1, SINT16 y1, SINT16 x2, SINT16 y2) {
+
+	int		dx;
+	int		dy;
+	int		sx;
+	int		sy;
+	int		err;
+	int		e2;
+
+	dx = x2 - x1;
+	if (dx < 0) {
+		dx = 0 - dx;
+	}
+	dy = y2 - y1;
+	if (dy < 0) {
+		dy = 0 - dy;
+	}
+	sx = (x1 < x2) ? 1 : -1;
+	sy = (y1 < y2) ? 1 : -1;
+	err = dx - dy;
+	for (;;) {
+		gc_span_add(spans, ytop, ybottom, x1, y1);
+		if ((x1 == x2) && (y1 == y2)) {
+			break;
+		}
+		e2 = err << 1;
+		if (e2 > -dy) {
+			err -= dy;
+			x1 = (SINT16)(x1 + sx);
+		}
+		if (e2 < dx) {
+			err += dx;
+			y1 = (SINT16)(y1 + sy);
+		}
+	}
+}
+
+static void gc_make_parametric_spans(GCSPAN *spans, int ytop, int ybottom,
+                                            SINT16 cx, SINT16 cy,
+                                            SINT16 rx, SINT16 ry,
+                                            SINT16 sx, SINT16 sy,
+                                            SINT16 ex, SINT16 ey,
+                                            int usearc, int fullarc) {
+
+    int     maxr;
+    int     n;
+    int     i;
+    double  a0;
+    double  a1;
+    double  a;
+    SINT16  px;
+    SINT16  py;
+
+    if ((rx == 0) && (ry == 0)) {
+        gc_span_add(spans, ytop, ybottom, cx, cy);
+        return;
+    }
+    if (rx == 0) {
+        for (py=(SINT16)(cy - ry); py<=(SINT16)(cy + ry); py++) {
+            gc_span_add(spans, ytop, ybottom, cx, py);
+        }
+        return;
+    }
+    if (ry == 0) {
+        gc_span_add(spans, ytop, ybottom, (SINT16)(cx - rx), cy);
+        gc_span_add(spans, ytop, ybottom, (SINT16)(cx + rx), cy);
+        return;
+    }
+
+    a0 = 0.0;
+    a1 = 2.0 * M_PI;
+    if (usearc && !fullarc) {
+        a0 = gc_angle_from_point(cx, cy, rx, ry, sx, sy);
+        a1 = gc_angle_from_point(cx, cy, rx, ry, ex, ey);
+        while (a1 < (a0 + 1e-9)) {
+            a1 += 2.0 * M_PI;
+        }
+    }
+
+    maxr = (rx > ry) ? rx : ry;
+    n = (int)((a1 - a0) * (double)maxr) + 1;
+    if (n < 1) {
+        n = 1;
+    }
+    for (i=0; i<=n; i++) {
+        a = a0 + (a1 - a0) * (double)i / (double)n;
+        px = (SINT16)(cx + GCIRC_RND((double)rx * cos(a)));
+        py = (SINT16)(cy - GCIRC_RND((double)ry * sin(a)));
+        gc_span_add(spans, ytop, ybottom, px, py);
+    }
+}
+
 static REG8 gc_tilepal(const _GLIO *lio, const GCIRCLE *dat,
 								SINT16 x, SINT16 y, UINT planes) {
 
@@ -258,7 +505,6 @@ REG8 lio_gcircle(GLIO lio) {
 	SINT16	sy;
 	SINT16	ex;
 	SINT16	ey;
-	SINT16	x;
 	SINT16	y;
 	REG8	pal;
 	REG8	fpal;
@@ -331,16 +577,97 @@ REG8 lio_gcircle(GLIO lio) {
 	waitcnt = 0;
 	fill = (dat.flag & GCIRCLE_F_FILL) && !onepoint;
 	if (fill) {
-		for (y=(SINT16)(cy - ry); y<=(SINT16)(cy + ry); y++) {
-			for (x=(SINT16)(cx - rx); x<=(SINT16)(cx + rx); x++) {
-				if (gc_ellipse_inside(cx, cy, rx, ry, x, y) &&
-					gc_arc_contains(cx, cy, x, y, &sv, &ev, usearc,
-														fullarc, onepoint)) {
-					fpal = gc_fillpal(lio, &dat, x, y, pal);
-					lio_pset(lio, x, y, fpal);
-					waitcnt++;
+		int		ytop;
+		int		ybottom;
+		int		height;
+		int		idx;
+		SINT16	x1;
+		SINT16	x2;
+		SINT16	fx;
+		GCSPAN	*spans;
+
+		ytop = cy - ry;
+		ybottom = cy + ry;
+		if (ytop < lio->draw.y1) {
+			ytop = lio->draw.y1;
+		}
+		if (ybottom > lio->draw.y2) {
+			ybottom = lio->draw.y2;
+		}
+		if (ytop <= ybottom) {
+			height = ybottom - ytop + 1;
+			spans = (GCSPAN *)malloc(sizeof(GCSPAN) * height);
+			if (spans == NULL) {
+				return(LIO_OUTOFMEMORY);
+			}
+			gc_span_clear(spans, height);
+			if (!usearc && (rx == ry)) {
+				gc_make_circle_spans(spans, ytop, ybottom, cx, cy, rx);
+			}
+			else {
+				gc_make_parametric_spans(spans, ytop, ybottom, cx, cy,
+											rx, ry, sx, sy, ex, ey, usearc, fullarc);
+				if (usearc && !fullarc) {
+					gc_span_line(spans, ytop, ybottom, cx, cy, sx, sy);
+					gc_span_line(spans, ytop, ybottom, cx, cy, ex, ey);
 				}
 			}
+			for (idx=0; idx<height; idx++) {
+				if (!spans[idx].used) {
+					continue;
+				}
+				y = (SINT16)(ytop + idx);
+				x1 = spans[idx].x1;
+				x2 = spans[idx].x2;
+				if (x1 > x2) {
+					continue;
+				}
+				if (!usearc || fullarc) {
+					if (!(dat.flag & GCIRCLE_F_TILE)) {
+						fpal = gc_fillpal(lio, &dat, x1, y, pal);
+						lio_line(lio, x1, x2, y, fpal);
+						if (x1 < lio->draw.x1) {
+							x1 = lio->draw.x1;
+						}
+						if (x2 > lio->draw.x2) {
+							x2 = lio->draw.x2;
+						}
+						if (x1 <= x2) {
+							waitcnt += (UINT32)(x2 - x1 + 1);
+						}
+					}
+					else {
+						if (x1 < lio->draw.x1) {
+							x1 = lio->draw.x1;
+						}
+						if (x2 > lio->draw.x2) {
+							x2 = lio->draw.x2;
+						}
+						for (fx=x1; fx<=x2; fx++) {
+							fpal = gc_fillpal(lio, &dat, fx, y, pal);
+							lio_pset(lio, fx, y, fpal);
+							waitcnt++;
+						}
+					}
+				}
+				else {
+					if (x1 < lio->draw.x1) {
+						x1 = lio->draw.x1;
+					}
+					if (x2 > lio->draw.x2) {
+						x2 = lio->draw.x2;
+					}
+					for (fx=x1; fx<=x2; fx++) {
+						if (gc_arc_contains(cx, cy, fx, y, &sv, &ev, usearc,
+														fullarc, onepoint)) {
+							fpal = gc_fillpal(lio, &dat, fx, y, pal);
+							lio_pset(lio, fx, y, fpal);
+							waitcnt++;
+						}
+					}
+				}
+			}
+			free(spans);
 		}
 	}
 
@@ -348,18 +675,14 @@ REG8 lio_gcircle(GLIO lio) {
 		lio_pset(lio, sx, sy, pal);
 		waitcnt++;
 	}
-	else {
-		for (y=(SINT16)(cy - ry); y<=(SINT16)(cy + ry); y++) {
-			for (x=(SINT16)(cx - rx); x<=(SINT16)(cx + rx); x++) {
-				if (gc_ellipse_border(cx, cy, rx, ry, x, y) &&
-					gc_arc_contains(cx, cy, x, y, &sv, &ev, usearc,
-														fullarc, onepoint)) {
-					lio_pset(lio, x, y, pal);
-					waitcnt++;
-				}
-			}
-		}
+	else if (!usearc && (rx == ry)) {
+		gc_draw_circle_outline(lio, cx, cy, rx, pal, &waitcnt);
 	}
+	else {
+		gc_draw_parametric_outline(lio, cx, cy, rx, ry, sx, sy, ex, ey,
+										usearc, fullarc, pal, &waitcnt);
+	}
+
 
 	if ((dat.flag & GCIRCLE_F_STARTLINE) && !fullarc) {
 		gc_drawline(lio, cx, cy, sx, sy, pal);

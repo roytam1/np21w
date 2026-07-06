@@ -1026,6 +1026,7 @@ END
 IDR_SYSDEBUG MENU
 BEGIN
     MENUITEM "メモリダンプ",                IDM_MEMORYDUMP
+    MENUITEM "フルメモリダンプ",            IDM_MEMORYDUMPALL
     MENUITEM "デバッグユーティリティ",      IDM_DEBUGUTY
     MENUITEM SEPARATOR
 END

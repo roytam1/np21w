@@ -399,6 +399,7 @@ REG8 lio_gview(GLIO lio) {
 	STOREINTELWORD(lio->work.viewy2, (UINT16)y2);
 	MEMR_WRITES(CPU_DS, 0x0620, &lio->work, sizeof(lio->work));
 
+	// View‚Ì‹éŒ`—ÖŠsE“h‚è‚Â‚Ô‚µ•`‰æ
 	if ((dat.vdraw_bg != 0xff) || (dat.vdraw_ln != 0xff)) {
 		lio_updatedraw(lio);
 		if (dat.vdraw_bg != 0xff) {
@@ -464,6 +465,7 @@ REG8 lio_gcolor2(GLIO lio) {
 	}
 	if (!lio->palmode) {
 		if ((lio->work.scrnmode == 1) || (lio->work.scrnmode == 2)) {
+			// ƒ‚ƒmƒNƒƒpƒŒƒbƒg ª‹’–³‚µ
 			dat.color1 = (dat.color1 & 1) ? 7 : 0;
 			lio->work.color[dat.pal] = dat.color1;
 			gdc_setdegitalpal(dat.pal, dat.color1);

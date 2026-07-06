@@ -1,6 +1,11 @@
 /**
  * @file	lio.c
  * @brief	Implementation of LIO
+ * 
+ * 参考文献
+ * ・PC-9800シリーズテクニカルデータブック
+ * ・PC-9801プログラマーズBible : 98を98%使う本
+ * ・PC-Techknow 98V : PC-9801シリーズテクニカルノウハウ
  */
 
 #include "compiler.h"

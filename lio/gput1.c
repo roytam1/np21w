@@ -381,12 +381,6 @@ static REG8 putsub(GLIO lio, const LIOPUT *lput) {
 	flag = getputplanemask(lio);
 	if (lio->draw.flag & LIODRAW_MONO) {
 		UINT pmask;
-
-		/*
-		 * In monochrome LIO modes only the active bit-plane is written.
-		 * fg/bg are logical 0/1 values here; do not let their original
-		 * colour bit pattern select other planes.
-		 */
 		pmask = flag;
 		if (lput->fg) {
 			flag |= pmask << 4;
@@ -446,7 +440,7 @@ static REG8 putsub(GLIO lio, const LIOPUT *lput) {
 						writecnt += 2;
 						break;
 
-					case 2:		// OR
+					case 2:		// OR （注：PC-9801プログラマーズBibleで誤植あり）
 						if (flag & (8 << 4)) {
 							putor(&pt);
 							writecnt++;
@@ -457,7 +451,7 @@ static REG8 putsub(GLIO lio, const LIOPUT *lput) {
 						}
 						break;
 
-					case 3:		// AND
+					case 3:		// AND （注：PC-9801プログラマーズBibleで誤植あり）
 						if (!(flag & (8 << 4))) {
 							putandn(&pt);
 							writecnt++;

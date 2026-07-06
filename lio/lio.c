@@ -28,6 +28,7 @@ void bios_lio(REG8 cmd) {
 	MEMR_READS(CPU_DS, 0x0620, &lio.work, sizeof(lio.work));
 	lio.palmode = MEMR_READ8(CPU_DS, 0x0a08);
 	lio.wait = 0;
+
 	switch(cmd) {
 		case 0x00:			// a0: GINIT
 			ret = lio_ginit(&lio);
@@ -65,11 +66,13 @@ void bios_lio(REG8 cmd) {
 			ret = lio_gcircle(&lio);
 			break;
 
-//		case 0x09:			// a9: GPAINT1
-//			break;
+		case 0x09:			// a9: GPAINT1
+			ret = lio_gpaint1(&lio);
+			break;
 
-//		case 0x0a:			// aa: GPAINT2
-//			break;
+		case 0x0a:			// aa: GPAINT2
+			ret = lio_gpaint2(&lio);
+			break;
 
 		case 0x0b:			// ab: GGET
 			ret = lio_gget(&lio);
@@ -83,15 +86,17 @@ void bios_lio(REG8 cmd) {
 			ret = lio_gput2(&lio);
 			break;
 
-//		case 0x0e:			// ae: GROLL
-//			break;
+		case 0x0e:			// ae: GROLL
+			ret = lio_groll(&lio);
+			break;
 
 		case 0x0f:			// af: GPOINT2
 			ret = lio_gpoint2(&lio);
 			break;
 
-//		case 0x10:			// ce: GCOPY
-//			break;
+		//case 0x10:			// ce: GCOPY
+		//	ret = lio_gcopy(&lio);
+		//	break;
 
 		default:
 			ret = LIO_SUCCESS;

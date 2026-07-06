@@ -617,6 +617,7 @@
 #define IDM_SOFTKBD_X2                  40015
 #define IDM_SOFTKBD_X3                  40016
 #define IDM_SOFTKBD_XEND                40019
+#define IDM_MEMORYDUMPALL               40020
 #define IDM_ALLOWRESIZE					40048
 #define IDM_SAVEWINDOWSIZE				40049
 #define IDM_SCRNMUL                     40050

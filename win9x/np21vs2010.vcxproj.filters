@@ -2412,6 +2412,15 @@
     <ClCompile Include="..\cbus\boardmo.c">
       <Filter>ソース ファイル\cbus</Filter>
     </ClCompile>
+    <ClCompile Include="..\lio\groll.c">
+      <Filter>ソース ファイル\lio</Filter>
+    </ClCompile>
+    <ClCompile Include="..\lio\gcopy.c">
+      <Filter>ソース ファイル\lio</Filter>
+    </ClCompile>
+    <ClCompile Include="..\lio\gpaint.c">
+      <Filter>ソース ファイル\lio</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\calendar.h">

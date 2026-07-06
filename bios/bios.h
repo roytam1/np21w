@@ -61,7 +61,8 @@ typedef struct {
 } BIOSIOEMU_IODATA;
 
 typedef struct {
-	UINT8	enable; // BIOS I/O エミュレーション有効
+	UINT8	enable : 4; // BIOS I/O エミュレーション有効
+	UINT8	active : 4; // BIOS I/O エミュレーション稼働中
 	UINT8	count; // 出力データ数
 	UINT32	oldEAX; // EAX退避用
 	UINT32	oldEDX; // EDX退避用

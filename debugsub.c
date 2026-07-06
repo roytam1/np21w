@@ -61,6 +61,7 @@ static const OEMCHAR file_i286ds[] = OEMTEXT("i286_ds.%.3u");
 static const OEMCHAR file_i286es[] = OEMTEXT("i286_es.%.3u");
 static const OEMCHAR file_i286ss[] = OEMTEXT("i286_ss.%.3u");
 static const OEMCHAR file_memorybin[] = OEMTEXT("memory.bin");
+static const OEMCHAR file_extmemorybin[] = OEMTEXT("extmemory.bin");
 
 static const OEMCHAR str_register[] =								\
 				OEMTEXT("AX=%.4x  BX=%.4x  CX=%.4x  DX=%.4x  ")		\
@@ -180,4 +181,28 @@ void debugsub_memorydump(void) {
 		file_close(fh);
 	}
 }
+
+void debugsub_memorydumpall(void) {
+
+	FILEH	fh;
+	int		i;
+
+	fh = file_create_c(file_memorybin);
+	if (fh != FILEH_INVALID) {
+		for (i = 0; i < 34; i++)
+		{
+			file_write(fh, mem + i * 0x8000, 0x8000);
+		}
+		file_close(fh);
+	}
+
+	fh = file_create_c(file_extmemorybin);
+	if (fh != FILEH_INVALID) {
+		UINT8* extmem = CPU_EXTMEM;
+		UINT32 extsize = CPU_EXTMEMSIZE;
+		file_write(fh, extmem, extsize);
+		file_close(fh);
+	}
+}
+
 

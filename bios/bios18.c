@@ -139,7 +139,7 @@ const CRTDATA	*crt;
 	bios0x18_10(0);
 //#if defined(BIOS_IO_EMULATION) && defined(CPUCORE_IA32)
 //	// np21w ver0.86 rev62 BIOS I/O emulation
-//	if (CPU_STAT_PM && CPU_STAT_VM86 && biosioemu.enable) {
+//	if (CPU_STAT_PM && CPU_STAT_VM86 && biosioemu.enable && biosioemu.active) {
 //		if (!(pccore.dipsw[0] & 1)) {
 //			biosioemu_enq8(0x68, 0x08|0x01);
 //		}else{
@@ -351,7 +351,7 @@ const CRTDATA	*p;
 		if (rate & 0xc) { // np21w ver0.86 rev47 workaround
 //#if defined(BIOS_IO_EMULATION) && defined(CPUCORE_IA32)
 //			// XXX: Windows3.1 DOSプロンプト用 無理やり
-//			if (CPU_STAT_PM && CPU_STAT_VM86) {
+//			if (CPU_STAT_PM && CPU_STAT_VM86 && biosioemu.active) {
 //				biosioemu_enq8(0x6a, 0x21);
 //				mem[MEMB_PRXDUPD] |= 0x80;
 //				crt = 4;
@@ -399,7 +399,7 @@ const CRTDATA	*p;
 		else {
 //#if defined(BIOS_IO_EMULATION) && defined(CPUCORE_IA32)
 //			// XXX: Windows3.1 DOSプロンプト用 無理やり
-//			if (CPU_STAT_PM && CPU_STAT_VM86 && biosioemu.enable) {
+//			if (CPU_STAT_PM && CPU_STAT_VM86 && biosioemu.enable && biosioemu.active) {
 //				biosioemu_enq8(0x6a, 0x20); // これは駄目
 //			}else
 //#endif	
@@ -410,7 +410,7 @@ const CRTDATA	*p;
 		}
 #if defined(BIOS_IO_EMULATION) && defined(CPUCORE_IA32)
 		// XXX: Windows3.1 DOSプロンプト用 無理やり
-		if (CPU_STAT_PM && CPU_STAT_VM86 && biosioemu.enable) {
+		if (CPU_STAT_PM && CPU_STAT_VM86 && biosioemu.enable && biosioemu.active) {
 			biosioemu_enq8(0x6a, 0x68);
 		}else
 #endif	
@@ -461,7 +461,7 @@ const CRTDATA	*p;
 	if (slave & 1) {
 #if defined(BIOS_IO_EMULATION) && defined(CPUCORE_IA32)
 		// XXX: Windows3.1 DOSプロンプト用 無理やり
-		if (CPU_STAT_PM && CPU_STAT_VM86 && biosioemu.enable) {
+		if (CPU_STAT_PM && CPU_STAT_VM86 && biosioemu.enable && biosioemu.active) {
 			biosioemu_enq8(0xa2, CMD_PITCH);
 			biosioemu_enq8(0xa0, 80);
 		}else
@@ -476,7 +476,7 @@ const CRTDATA	*p;
 	else {
 #if defined(BIOS_IO_EMULATION) && defined(CPUCORE_IA32)
 		// XXX: Windows3.1 DOSプロンプト用 無理やり
-		if (CPU_STAT_PM && CPU_STAT_VM86 && biosioemu.enable) {
+		if (CPU_STAT_PM && CPU_STAT_VM86 && biosioemu.enable && biosioemu.active) {
 			biosioemu_enq8(0xa2, CMD_PITCH);
 			biosioemu_enq8(0xa0, 40);
 		}else
@@ -502,7 +502,7 @@ const CRTDATA	*p;
 
 #if defined(BIOS_IO_EMULATION) && defined(CPUCORE_IA32)
 	// XXX: Windows3.1 DOSプロンプト用 無理やり
-	if (CPU_STAT_PM && CPU_STAT_VM86 && biosioemu.enable) {
+	if (CPU_STAT_PM && CPU_STAT_VM86 && biosioemu.enable && biosioemu.active) {
 		biosioemu_enq8(0x6a, 0x40 | ((gdc.display & (1 << GDCDISP_PLAZMA)) ? 1 : 0)); // gdcs.textdisp |= GDCSCRN_EXT; の代わり・・・
 		biosioemu_enq8(0x6a, 0x82 | (gdc.clock & 1)); // gdcs.grphdisp |= GDCSCRN_EXT;
 		biosioemu_enq8(0x62, CMD_STOP); // gdcs.textdisp &= ~GDCSCRN_ENABLE; pcstat.screenupdate |= 2;
@@ -609,7 +609,7 @@ void bios0x18_42(REG8 mode) {
 				mem[MEMB_PRXDUPD] |= 0x08;
 			}
 //#if defined(BIOS_IO_EMULATION) && defined(CPUCORE_IA32)
-//			if (CPU_STAT_PM && CPU_STAT_VM86 && biosioemu.enable) {
+//			if (CPU_STAT_PM && CPU_STAT_VM86 && biosioemu.enable && biosioemu.active) {
 //				biosioemu_enq8(0x6a, 0x83);
 //				biosioemu_enq8(0x6a, 0x85);
 //			}
@@ -629,7 +629,7 @@ void bios0x18_42(REG8 mode) {
 				gdcs.grphdisp |= GDCSCRN_EXT;
 				mem[MEMB_PRXDUPD] |= 0x08;
 //#if defined(BIOS_IO_EMULATION) && defined(CPUCORE_IA32)
-//				if (CPU_STAT_PM && CPU_STAT_VM86 && biosioemu.enable) {
+//				if (CPU_STAT_PM && CPU_STAT_VM86 && biosioemu.enable && biosioemu.active) {
 //					biosioemu_enq8(0x6a, 0x82);
 //					biosioemu_enq8(0x6a, 0x84);
 //				}
@@ -645,12 +645,12 @@ void bios0x18_42(REG8 mode) {
 		}
 		if ((crtmode == 2) || (!(mem[MEMB_PRXCRT] & 0x40))) {
 #if defined(BIOS_IO_EMULATION) && defined(CPUCORE_IA32)
-			if (CPU_STAT_PM && CPU_STAT_VM86 && biosioemu.enable) {
+			if (CPU_STAT_PM && CPU_STAT_VM86 && biosioemu.enable && biosioemu.active) {
 				biosioemu_enq8(0x68, 0x08);
 				biosioemu_enq8(0xa2, CMD_CSRFORM);
-				biosioemu_enq8(0xa0, 0x40);
 				biosioemu_enq8(0xa0, 0x00);
-				biosioemu_enq8(0xa0, 0x00);
+				biosioemu_enq8(0xa0, gdc.s.para[GDC_CSRFORM + 1]);
+				biosioemu_enq8(0xa0, gdc.s.para[GDC_CSRFORM + 2]);
 			}else
 #endif	
 			{
@@ -660,12 +660,12 @@ void bios0x18_42(REG8 mode) {
 		}
 		else {
 #if defined(BIOS_IO_EMULATION) && defined(CPUCORE_IA32)
-			if (CPU_STAT_PM && CPU_STAT_VM86 && biosioemu.enable) {
+			if (CPU_STAT_PM && CPU_STAT_VM86 && biosioemu.enable && biosioemu.active) {
 				biosioemu_enq8(0x68, 0x09);
 				biosioemu_enq8(0xa2, CMD_CSRFORM);
-				biosioemu_enq8(0xa0, 0x41);
-				biosioemu_enq8(0xa0, 0x00);
-				biosioemu_enq8(0xa0, 0x00);
+				biosioemu_enq8(0xa0, 0x01);
+				biosioemu_enq8(0xa0, gdc.s.para[GDC_CSRFORM + 1]);
+				biosioemu_enq8(0xa0, gdc.s.para[GDC_CSRFORM + 2]);
 			}else
 #endif	
 			{
@@ -682,7 +682,7 @@ void bios0x18_42(REG8 mode) {
 		gdcs.disp = (mode >> 4) & 1;
 //#if defined(BIOS_IO_EMULATION) && defined(CPUCORE_IA32)
 //		// np21w ver0.86 rev62 BIOS I/O emulation
-//		if (CPU_STAT_PM && CPU_STAT_VM86 && biosioemu.enable) {
+//		if (CPU_STAT_PM && CPU_STAT_VM86 && biosioemu.enable && biosioemu.active) {
 //			biosioemu_enq8(0xa4, (mode >> 4));
 //		}
 //#endif
@@ -691,9 +691,10 @@ void bios0x18_42(REG8 mode) {
 		gdc.mode1 &= ~0x02;
 		gdc.mode2 &= ~0x04;
 #if defined(BIOS_IO_EMULATION) && defined(CPUCORE_IA32)
-		if (CPU_STAT_PM && CPU_STAT_VM86 && biosioemu.enable)
+		if (CPU_STAT_PM && CPU_STAT_VM86 && biosioemu.enable && biosioemu.active)
 		{
 			biosioemu_enq8(0x68, 0x02);
+			biosioemu_enq8(0x6a, 0x04);
 		}
 #endif
 	}
@@ -701,9 +702,10 @@ void bios0x18_42(REG8 mode) {
 		gdc.mode1 |= 0x02;
 		gdc.mode2 |= 0x04;
 #if defined(BIOS_IO_EMULATION) && defined(CPUCORE_IA32)
-		if (CPU_STAT_PM && CPU_STAT_VM86 && biosioemu.enable)
+		if (CPU_STAT_PM && CPU_STAT_VM86 && biosioemu.enable && biosioemu.active)
 		{
 			biosioemu_enq8(0x68, 0x03);
+			biosioemu_enq8(0x6a, 0x05);
 		}
 #endif
 	}
@@ -1056,7 +1058,7 @@ void bios0x18(void) {
    		case 0x03:						// キーボード・インタフェイスの初期化
 #if defined(BIOS_IO_EMULATION) && defined(CPUCORE_IA32)
 			// np21w ver0.86 rev47 BIOS I/O emulation
-			if (CPU_STAT_PM && CPU_STAT_VM86 && biosioemu.enable) {
+			if (CPU_STAT_PM && CPU_STAT_VM86 && biosioemu.enable && biosioemu.active) {
 				biosioemu_enq8(0x43, 0x3a);
 				biosioemu_enq8(0x43, 0x32);
 				biosioemu_enq8(0x43, 0x16);
@@ -1099,7 +1101,7 @@ void bios0x18(void) {
    		case 0x0c:						// テキスト画面の表示開始
 #if defined(BIOS_IO_EMULATION) && defined(CPUCORE_IA32)
 			// np21w ver0.86 rev47 BIOS I/O emulation
-			if (CPU_STAT_PM && CPU_STAT_VM86 && biosioemu.enable) {
+			if (CPU_STAT_PM && CPU_STAT_VM86 && biosioemu.enable && biosioemu.active) {
 				if (!(gdcs.textdisp & GDCSCRN_ENABLE)) {
 					pcstat.screenupdate |= 2;
  				}
@@ -1114,7 +1116,7 @@ void bios0x18(void) {
    		case 0x0d:						// テキスト画面の表示終了
 #if defined(BIOS_IO_EMULATION) && defined(CPUCORE_IA32)
 			// np21w ver0.86 rev47 BIOS I/O emulation
-			if (CPU_STAT_PM && CPU_STAT_VM86 && biosioemu.enable) {
+			if (CPU_STAT_PM && CPU_STAT_VM86 && biosioemu.enable && biosioemu.active) {
 				if (gdcs.textdisp & GDCSCRN_ENABLE) {
 					pcstat.screenupdate |= 2;
 				}
@@ -1249,7 +1251,7 @@ void bios0x18(void) {
    		case 0x40:						// グラフィック画面の表示開始
 #if defined(BIOS_IO_EMULATION) && defined(CPUCORE_IA32)
 			// np21w ver0.86 rev47 BIOS I/O emulation
-			if (CPU_STAT_PM && CPU_STAT_VM86 && biosioemu.enable) {
+			if (CPU_STAT_PM && CPU_STAT_VM86 && biosioemu.enable && biosioemu.active) {
 				gdc_forceready(GDCWORK_SLAVE);
 				if (!(gdcs.grphdisp & GDCSCRN_ENABLE)) {
 					pcstat.screenupdate |= 2;
@@ -1266,7 +1268,7 @@ void bios0x18(void) {
    		case 0x41:						// グラフィック画面の表示終了
 #if defined(BIOS_IO_EMULATION) && defined(CPUCORE_IA32)
 			// np21w ver0.86 rev47 BIOS I/O emulation
-			if (CPU_STAT_PM && CPU_STAT_VM86 && biosioemu.enable) {
+			if (CPU_STAT_PM && CPU_STAT_VM86 && biosioemu.enable && biosioemu.active) {
 				gdc_forceready(GDCWORK_SLAVE);
 				if (gdcs.grphdisp & GDCSCRN_ENABLE) {
 					pcstat.screenupdate |= 2;

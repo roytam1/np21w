@@ -2563,6 +2563,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 					debugsub_memorydump();
 					break;
 
+				case IDM_MEMORYDUMPALL:
+					debugsub_memorydumpall();
+					break;
+
 				case IDM_DEBUGUTY:
 					CDebugUtyView::New();
 					break;

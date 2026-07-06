@@ -28,6 +28,159 @@ typedef struct {
 	UINT8	pal;
 } LINEPT;
 
+static UINT gettileplanes(const _GLIO *lio) {
+
+	if (lio->draw.flag & LIODRAW_MONO) {
+		return(1);
+	}
+	return((lio->draw.flag & LIODRAW_4BPP)?4:3);
+}
+
+static BOOL checktileleng(const _GLIO *lio, UINT leng) {
+
+	UINT planes;
+
+	if (leng == 0) {
+		return(FALSE);
+	}
+	planes = gettileplanes(lio);
+	return((leng >= planes) && ((leng % planes) == 0));
+}
+
+
+
+static int divfloor_int(int num, int den) {
+
+	int		q;
+	int		r;
+
+	q = num / den;
+	r = num % den;
+	if ((r != 0) && ((r < 0) != (den < 0))) {
+		q--;
+	}
+	return(q);
+}
+
+static UINT clipcode(const _GLIO *lio, int x, int y) {
+
+	UINT	code;
+
+	code = 0;
+	if (x < lio->draw.x1) {
+		code |= 1;
+	}
+	else if (x > lio->draw.x2) {
+		code |= 2;
+	}
+	if (y < lio->draw.y1) {
+		code |= 4;
+	}
+	else if (y > lio->draw.y2) {
+		code |= 8;
+	}
+	return(code);
+}
+
+static BOOL clipline_directional_floor(const _GLIO *lio, LINEPT *lp) {
+
+	int		x1;
+	int		y1;
+	int		x2;
+	int		y2;
+	UINT	code1;
+	UINT	code2;
+	UINT	code;
+	int		dx;
+	int		dy;
+	int		i;
+
+	x1 = lp->x1;
+	y1 = lp->y1;
+	x2 = lp->x2;
+	y2 = lp->y2;
+	for (i=0; i<16; i++) {
+		code1 = clipcode(lio, x1, y1);
+		code2 = clipcode(lio, x2, y2);
+		if (!(code1 | code2)) {
+			lp->x1 = x1;
+			lp->y1 = y1;
+			lp->x2 = x2;
+			lp->y2 = y2;
+			return(TRUE);
+		}
+		if (code1 & code2) {
+			return(FALSE);
+		}
+		if (code1) {
+			code = code1;
+			dx = x2 - x1;
+			dy = y2 - y1;
+			if (code & 1) {
+				if (!dx) {
+					return(FALSE);
+				}
+				y1 += divfloor_int(dy * (lio->draw.x1 - x1), dx);
+				x1 = lio->draw.x1;
+			}
+			else if (code & 2) {
+				if (!dx) {
+					return(FALSE);
+				}
+				y1 += divfloor_int(dy * (lio->draw.x2 - x1), dx);
+				x1 = lio->draw.x2;
+			}
+			else if (code & 4) {
+				if (!dy) {
+					return(FALSE);
+				}
+				x1 += divfloor_int(dx * (lio->draw.y1 - y1), dy);
+				y1 = lio->draw.y1;
+			}
+			else {
+				if (!dy) {
+					return(FALSE);
+				}
+				x1 += divfloor_int(dx * (lio->draw.y2 - y1), dy);
+				y1 = lio->draw.y2;
+			}
+		}
+		else {
+			code = code2;
+			dx = x1 - x2;
+			dy = y1 - y2;
+			if (code & 1) {
+				if (!dx) {
+					return(FALSE);
+				}
+				y2 += divfloor_int(dy * (lio->draw.x1 - x2), dx);
+				x2 = lio->draw.x1;
+			}
+			else if (code & 2) {
+				if (!dx) {
+					return(FALSE);
+				}
+				y2 += divfloor_int(dy * (lio->draw.x2 - x2), dx);
+				x2 = lio->draw.x2;
+			}
+			else if (code & 4) {
+				if (!dy) {
+					return(FALSE);
+				}
+				x2 += divfloor_int(dx * (lio->draw.y1 - y2), dy);
+				y2 = lio->draw.y1;
+			}
+			else {
+				if (!dy) {
+					return(FALSE);
+				}
+				x2 += divfloor_int(dx * (lio->draw.y2 - y2), dy);
+				y2 = lio->draw.y2;
+			}
+		}
+	}
+	return(FALSE);
+}
 
 static void gline(const _GLIO *lio, const LINEPT *lp, UINT16 pat) {
 
@@ -52,13 +205,16 @@ static void gline(const _GLIO *lio, const LINEPT *lp, UINT16 pat) {
 	// びゅーぽいんと
 	swap = 0;
 	if (x1 > x2) {
-		tmp = x1;
-		x1 = x2;
-		x2 = tmp;
-		tmp = y1;
-		y1 = y2;
-		y2 = tmp;
-		swap = 1;
+		LINEPT clp;
+		clp = *lp;
+		if (!clipline_directional_floor(lio, &clp)) {
+			return;
+		}
+		x1 = clp.x1;
+		y1 = clp.y1;
+		x2 = clp.x2;
+		y2 = clp.y2;
+		goto gline_clipped;
 	}
 	if ((x1 > lio->draw.x2) || (x2 < lio->draw.x1)) {
 		return;
@@ -118,6 +274,7 @@ static void gline(const _GLIO *lio, const LINEPT *lp, UINT16 pat) {
 	}
 
 	// 進んだ距離計算
+gline_clipped:
 	d1 = x1 - lp->x1;
 	if (d1 < 0) {
 		d1 = 0 - d1;
@@ -314,12 +471,16 @@ REG8 lio_gline(GLIO lio) {
 	if (dat.pal == 0xff) {
 		dat.pal = lio->work.fgcolor;
 	}
-	if (dat.pal >= lio->draw.palmax) {
+	if ((dat.pal >= lio->draw.palmax) || (dat.sw > 2)) {
 		goto gline_err;
 	}
 	pat = 0xffff;
 	if (dat.type < 2) {
-		if (dat.sw) {
+		/* sw=2（タイルパターン）は塗りつぶしの時のみ有効 */
+		if (dat.sw == 2) {
+			goto gline_err;
+		}
+		if (dat.sw == 1) {
 			pat = (GDCPATREVERSE(dat.style[0]) << 8) +
 											GDCPATREVERSE(dat.style[1]);
 		}
@@ -335,21 +496,34 @@ REG8 lio_gline(GLIO lio) {
 		leng = 0;
 		if (dat.sw == 2) {
 			leng = dat.patleng;
-			if (leng == 0) {
+			if (!checktileleng(lio, leng)) {
 				goto gline_err;
 			}
 			MEMR_READS(LOADINTELWORD(dat.seg), LOADINTELWORD(dat.off),
-																tile, leng);
+												tile, leng);
 		}
 		if (dat.sw != 1) {
 			lp.pal = dat.pal;
 			gbox(lio, &lp, tile, leng);
 		}
 		else {
-			lp.pal = dat.style[0];
-			gbox(lio, &lp, tile, leng);
-			lp.pal = dat.pal;
-			glineb(lio, &lp, 0xffff);
+			if (dat.style[0] == 0xff) {
+				dat.style[0] = lio->work.fgcolor;
+				if (dat.style[0] >= lio->draw.palmax) {
+					dat.style[0] &= (UINT8)(lio->draw.palmax - 1);
+				}
+				lp.pal = dat.style[0];
+				gbox(lio, &lp, tile, leng);
+			}
+			else {
+				if (dat.style[0] >= lio->draw.palmax) {
+					goto gline_err;
+				}
+				lp.pal = dat.style[0];
+				gbox(lio, &lp, tile, leng);
+				lp.pal = dat.pal;
+				glineb(lio, &lp, 0xffff);
+			}
 		}
 	}
 	else {

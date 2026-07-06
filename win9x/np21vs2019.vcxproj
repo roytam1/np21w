@@ -464,6 +464,7 @@
     <ClCompile Include="..\generic\hostdrvnt.c">
       <InlineFunctionExpansion Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">OnlyExplicitInline</InlineFunctionExpansion>
       <InlineFunctionExpansion Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">OnlyExplicitInline</InlineFunctionExpansion>
+      <Optimization Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Disabled</Optimization>
     </ClCompile>
     <ClCompile Include="..\generic\hostdrvs.c" />
     <ClCompile Include="..\generic\keydisp.c" />
@@ -874,9 +875,12 @@
     <ClCompile Include="..\io\upd4990.c" />
     <ClCompile Include="..\keystat.c" />
     <ClCompile Include="..\lio\gcircle.c" />
+    <ClCompile Include="..\lio\gcopy.c" />
     <ClCompile Include="..\lio\gline.c" />
+    <ClCompile Include="..\lio\gpaint.c" />
     <ClCompile Include="..\lio\gpset.c" />
     <ClCompile Include="..\lio\gput1.c" />
+    <ClCompile Include="..\lio\groll.c" />
     <ClCompile Include="..\lio\gscreen.c" />
     <ClCompile Include="..\lio\lio.c" />
     <ClCompile Include="..\mem\dmax86.c" />

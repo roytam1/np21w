@@ -707,6 +707,7 @@ static void bios_itfcall(void) {
 
 // np21w ver0.86 rev46-69 BIOS I/O emulation
 #if defined(BIOS_IO_EMULATION)
+int biosioemu_active = 0;
 // LIFOÅié·ä±çÇë¨ÇæÇ™ãtèáÇÃÇΩÇﬂíçà”Åj
 void biosioemu_push8(UINT16 port, UINT8 data) {
 	
@@ -1077,6 +1078,7 @@ UINT MEMCALL biosfunc(UINT32 adrs) {
 #if defined(BIOS_IO_EMULATION)
 			oldEIP = CPU_EIP;
 			biosioemu.count = 0; 
+			biosioemu.active = 1;
 #endif
 			bios0x18();
 #if defined(BIOS_IO_EMULATION)
@@ -1086,6 +1088,7 @@ UINT MEMCALL biosfunc(UINT32 adrs) {
 			}else{
 				biosioemu.count = 0; 
 			}
+			biosioemu.active = 0;
 #endif
 			return(1);
 			
@@ -1125,6 +1128,7 @@ UINT MEMCALL biosfunc(UINT32 adrs) {
 #if defined(BIOS_IO_EMULATION)
 			oldEIP = CPU_EIP;
 			biosioemu.count = 0;
+			biosioemu.active = 1;
 #endif
 			bios0x1b();
 #if defined(BIOS_IO_EMULATION)
@@ -1134,6 +1138,7 @@ UINT MEMCALL biosfunc(UINT32 adrs) {
 			}else{
 				biosioemu.count = 0; 
 			}
+			biosioemu.active = 0;
 #endif
 			return(1);
 			
@@ -1147,7 +1152,8 @@ UINT MEMCALL biosfunc(UINT32 adrs) {
 			CPU_REMCLOCK -= 200;
 #if defined(BIOS_IO_EMULATION)
 			oldEIP = CPU_EIP;
-			biosioemu.count = 0; 
+			biosioemu.count = 0;
+			biosioemu.active = 1;
 #endif
 			bios0x1c();
 #if defined(BIOS_IO_EMULATION)
@@ -1157,6 +1163,7 @@ UINT MEMCALL biosfunc(UINT32 adrs) {
 			}else{
 				biosioemu.count = 0; 
 			}
+			biosioemu.active = 0;
 #endif
 			return(1);
 			

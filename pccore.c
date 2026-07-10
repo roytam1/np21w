@@ -171,6 +171,9 @@ const OEMCHAR np2version[] = OEMTEXT(NP2VER_CORE);
 #if defined(SUPPORT_WAB_NPDISP)
 				0,
 #endif
+#if defined(SUPPORT_WAB_GA1280A)
+				0,
+#endif
 #if defined(SUPPORT_VGA_MODEX)
 				0,
 #endif

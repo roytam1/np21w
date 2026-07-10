@@ -1377,9 +1377,10 @@ static void atapi_cmd_readtoc(IDEDRV drv) {
 	leng = (drv->buf[6] << 8) + drv->buf[7];
 #else
 	time = (drv->buf[1] & 0x02) >> 0x01;
-	// format = (drv->buf[2] & 0x0f);
-	// if (format == 0)		// "When Format in Byte 2 is zero, then Byte 9 is used" (SFF8020)
-	format = (drv->buf[9] >> 6);
+	format = (drv->buf[2] & 0x0f);
+	if (format == 0) {		// "When Format in Byte 2 is zero, then Byte 9 is used" (SFF8020)
+		format = (drv->buf[9] >> 6);
+	}
 	leng = (drv->buf[7] << 8) + drv->buf[8];
 #endif
 	TRACEOUT(("ATAPI CMD: read TOC : time=%d fmt=%d leng=%d", time, format, leng));
@@ -1391,7 +1392,10 @@ static void atapi_cmd_readtoc(IDEDRV drv) {
 
 #else /* SUPPORT_KAI_IMAGES */
 	leng = (drv->buf[7] << 8) + drv->buf[8];
-	format = (drv->buf[9] >> 6);
+	format = (drv->buf[2] & 0x0f);
+	if (format == 0) {
+		format = (drv->buf[9] >> 6);
+	}
 	//TRACEOUT(("atapi_cmd_readtoc fmt=%d leng=%d", format, leng));
 #endif /* SUPPORT_KAI_IMAGES */
 	strack = drv->buf[6];
@@ -1399,7 +1403,16 @@ static void atapi_cmd_readtoc(IDEDRV drv) {
 	switch (format) {
 	case 0: // track info
 		//datasize = (tracks * 8) + 10;
-		strack = min(max(1U, strack), (tracks+1));		// special case: 0 = 1sttrack, 0xaa = leadout
+		if (strack == 0) {
+			strack = 1;
+		}
+		else if (strack == 0xaa) {
+			strack = (UINT8)(tracks + 1);
+		}
+		else if ((strack < 1) || (strack > tracks + 1)) {
+			senderror(drv);
+			return;
+		}
 		datasize = ((tracks - strack + 1U) * 8U) + 10;
 		drv->buf[0] = (UINT8)(datasize >> 8);
 		drv->buf[1] = (UINT8)(datasize >> 0);

@@ -259,6 +259,9 @@ struct tagNP2Config
 #if defined(SUPPORT_WAB_NPDISP)
 	UINT8	usenpdisp;
 #endif
+#if defined(SUPPORT_WAB_GA1280A)
+	UINT8	usega1280a;
+#endif
 #if defined(SUPPORT_VGA_MODEX)
 	UINT8	usemodex;
 #endif

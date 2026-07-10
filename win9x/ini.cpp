@@ -631,6 +631,9 @@ static const PFTBL s_IniItems[] =
 #if defined(SUPPORT_WAB_NPDISP)
 	PFVAL("USENPDSP", PFTYPE_BOOL,		&np2cfg.usenpdisp),
 #endif
+#if defined(SUPPORT_WAB_GA1280A)
+	PFVAL("USEGADSP", PFTYPE_BOOL,		&np2cfg.usega1280a),
+#endif
 #if defined(SUPPORT_VGA_MODEX)
 	PFVAL("USEMODEX", PFTYPE_BOOL,		&np2cfg.usemodex),
 #endif

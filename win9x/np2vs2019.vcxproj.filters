@@ -1344,6 +1344,9 @@
     <ClCompile Include="..\lio\groll.c">
       <Filter>ソース ファイル\lio</Filter>
     </ClCompile>
+    <ClCompile Include="..\wab\ga1280a.cpp">
+      <Filter>ソース ファイル\wab</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\calendar.h">
@@ -2392,6 +2395,12 @@
     </ClInclude>
     <ClInclude Include="..\sound\ymzadpcm.h">
       <Filter>ヘッダー ファイル\sound</Filter>
+    </ClInclude>
+    <ClInclude Include="..\wab\ga1280a.h">
+      <Filter>ヘッダー ファイル\wab</Filter>
+    </ClInclude>
+    <ClInclude Include="..\wab\ga1280adef.h">
+      <Filter>ヘッダー ファイル\wab</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

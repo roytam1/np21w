@@ -39,6 +39,7 @@
 #define IDD_GD5430                      190
 #define IDD_WAB                         191
 #define IDD_NPDISP                      192
+#define IDD_GA1280A                     193
 #define IDD_PCI                         197
 #define IDD_HOSTDRV                     198
 #define IDD_IDE                         199
@@ -343,6 +344,7 @@
 #define IDC_WABMULTHREAD                19016
 #define IDC_GD5430FAKECURSOR            19017
 #define IDC_NPDISPENABLED               19020
+#define IDC_GA1280AENABLED              19030
 #define IDC_PCIENABLE                   19070
 #define IDC_PCIPCMCTYPE                 19071
 #define IDC_PCIBIOS32                   19072

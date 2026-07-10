@@ -22,8 +22,17 @@
 #if defined(SUPPORT_IDEIO)
 #include	"cbus/ideio.h"
 #endif
-#if defined(SUPPORT_WAB) && defined(SUPPORT_CL_GD5430)
+#if defined(SUPPORT_WAB)
+#if defined(SUPPORT_CL_GD5430)
 #include	"wab/cirrus_vga_extern.h"
+#include	"wab/wab.h"
+#endif
+#if defined(SUPPORT_WAB_NPDISP)
+#include	"wab/npdisp.h"
+#endif
+#if defined(SUPPORT_WAB_GA1280A)
+#include	"wab/ga1280a.h"
+#endif
 #include	"wab/wab.h"
 #endif
 #include	"np2.h"
@@ -124,6 +133,8 @@ static const OEMCHAR str_mhz[] = OEMTEXT("%uMHz");
 #define NP21W_SWITCH_SETIDEWAIT_W		8
 #define NP21W_SWITCH_AUTOHIDECURSOR		9
 #define NP21W_SWITCH_SETDEVICEIRQ		10
+#define NP21W_SWITCH_NPDISPENABLE		11
+#define NP21W_SWITCH_GA1280AENABLE		12
 
 #define NP21W_SWITCH_SETDEVICEIRQ_SUPPORTED		0
 #define NP21W_SWITCH_SETDEVICEIRQ_SND_26		1
@@ -394,6 +405,16 @@ static void np2sysp_getconfig(const void *arg1, long arg2) {
 		}
 		break;
 	}
+	case NP21W_SWITCH_NPDISPENABLE:
+#if defined(SUPPORT_WAB) && defined(SUPPORT_WAB_NPDISP)
+		configvalue = npdisp.ioenabled ? 1 : 0;
+#endif
+		return;
+	case NP21W_SWITCH_GA1280AENABLE:
+#if defined(SUPPORT_WAB) && defined(SUPPORT_WAB_GA1280A)
+		configvalue = ga1280a.enabled ? 1 : 0;
+#endif
+		return;
 	case NP21W_SWITCH_DUMMY:
 	default:
 		break;
@@ -639,6 +660,32 @@ static void np2sysp_cngconfig(const void *arg1, long arg2) {
 		configvalue = retvalue;
 		break;
 	}
+	case NP21W_SWITCH_NPDISPENABLE:
+#if defined(SUPPORT_WAB) && defined(SUPPORT_WAB_NPDISP)
+		if (configvalue) {
+			npdisp.ioenabled = 1;
+			npdisp_bind();
+		}
+		else {
+			npdisp.ioenabled = 0;
+			npdisp_unbind();
+		}
+		configvalue = npdisp.ioenabled ? 1 : 0;
+#endif
+		return;
+	case NP21W_SWITCH_GA1280AENABLE:
+#if defined(SUPPORT_WAB) && defined(SUPPORT_WAB_GA1280A)
+		if (configvalue) {
+			ga1280a.enabled = 1;
+			ga1280a_bind();
+		}
+		else {
+			ga1280a.enabled = 0;
+			ga1280a_unbind();
+		}
+		configvalue = ga1280a.enabled ? 1 : 0;
+#endif
+		return;
 	case NP21W_SWITCH_DUMMY:
 	default:
 		break;

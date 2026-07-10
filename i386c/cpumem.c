@@ -527,6 +527,12 @@ REG8 MEMCALL memp_read8(UINT32 address) {
 		return(mem[address]);
 	}
 	else {
+#if defined(SUPPORT_WAB_GA1280A)
+		{
+			REG8 retValue;
+			if (ga1280a_memp_try_read8(address, &retValue)) return retValue;
+		}
+#endif
 #if defined(SUPPORT_CL_GD5430)
 		if(np2clvga.enabled && cirrusvga_opaque && (cirrusvga_wab_46e8 & 0x08)){
 			UINT32 vramWndAddr = np2clvga.VRAMWindowAddr;
@@ -576,12 +582,6 @@ REG8 MEMCALL memp_read8(UINT32 address) {
 					}
 				}
 			}
-		}
-#endif
-#if defined(SUPPORT_WAB_GA1280A)
-		if (ga1280a.active) {
-			REG8 retValue;
-			if (ga1280a_memp_read8(address, &retValue)) return retValue;
 		}
 #endif
 		address = address & CPU_ADRSMASK;
@@ -650,6 +650,12 @@ REG16 MEMCALL memp_read16(UINT32 address) {
 	}
 	else {
 		if ((address + 1) & 0x7fff) {			// non 32kb boundary
+#if defined(SUPPORT_WAB_GA1280A)
+			{
+				REG16 retValue;
+				if (ga1280a_memp_try_read16(address, &retValue)) return retValue;
+			}
+#endif
 #if defined(SUPPORT_CL_GD5430)
 			if(np2clvga.enabled && cirrusvga_opaque && (cirrusvga_wab_46e8 & 0x08)){
 				UINT32 vramWndAddr = np2clvga.VRAMWindowAddr;
@@ -699,12 +705,6 @@ REG16 MEMCALL memp_read16(UINT32 address) {
 						}
 					}
 				}
-			}
-#endif
-#if defined(SUPPORT_WAB_GA1280A)
-			if (ga1280a.active) {
-				REG16 retValue;
-				if (ga1280a_memp_read16(address, &retValue)) return retValue;
 			}
 #endif
 			address = address & CPU_ADRSMASK;
@@ -780,6 +780,12 @@ UINT32 MEMCALL memp_read32(UINT32 address) {
 	}
 	else{
 		if ((address & 0x7fff) <= 0x8000 - 4) {			// non 32kb boundary
+#if defined(SUPPORT_WAB_GA1280A)
+			{
+				UINT32 retValue;
+				if (ga1280a_memp_try_read32(address, &retValue)) return retValue;
+			}
+#endif
 #if defined(SUPPORT_CL_GD5430)
 			if(np2clvga.enabled && cirrusvga_opaque && (cirrusvga_wab_46e8 & 0x08)){
 				UINT32 vramWndAddr = np2clvga.VRAMWindowAddr;
@@ -829,12 +835,6 @@ UINT32 MEMCALL memp_read32(UINT32 address) {
 						}
 					}
 				}
-			}
-#endif
-#if defined(SUPPORT_WAB_GA1280A)
-			if (ga1280a.active) {
-				UINT32 retValue;
-				if (ga1280a_memp_read32(address, &retValue)) return retValue;
 			}
 #endif
 			address = address & CPU_ADRSMASK;
@@ -1068,6 +1068,9 @@ void MEMCALL memp_write8(UINT32 address, REG8 value) {
 		mem[address] = (UINT8)value;
 	}
 	else {
+#if defined(SUPPORT_WAB_GA1280A)
+		if (ga1280a_memp_try_write8(address, value)) return;
+#endif
 #if defined(SUPPORT_CL_GD5430)
 		if(np2clvga.enabled && cirrusvga_opaque && (cirrusvga_wab_46e8 & 0x08)){
 			UINT32 vramWndAddr = np2clvga.VRAMWindowAddr;
@@ -1140,11 +1143,6 @@ void MEMCALL memp_write8(UINT32 address, REG8 value) {
 			}
 		}
 #endif
-#if defined(SUPPORT_WAB_GA1280A)
-		if (ga1280a.active) {
-			if (ga1280a_memp_write8(address, value)) return;
-		}
-#endif
 		address = address & CPU_ADRSMASK;
 		if (address < USE_HIMEM) {
 			memfn0.wr8[address >> 15](address, value);
@@ -1204,6 +1202,9 @@ void MEMCALL memp_write16(UINT32 address, REG16 value) {
 	}
 	else{
 		if (((address + 1) & 0x7fff) && ((address + 2) & 0x7fff) && ((address + 3) & 0x7fff)) {			// non 32kb boundary
+#if defined(SUPPORT_WAB_GA1280A)
+			if (ga1280a_memp_try_write16(address, value)) return;
+#endif
 #if defined(SUPPORT_CL_GD5430)
 			if(np2clvga.enabled && cirrusvga_opaque && (cirrusvga_wab_46e8 & 0x08)){
 				UINT32 vramWndAddr = np2clvga.VRAMWindowAddr;
@@ -1276,11 +1277,6 @@ void MEMCALL memp_write16(UINT32 address, REG16 value) {
 				}
 			}
 #endif
-#if defined(SUPPORT_WAB_GA1280A)
-			if (ga1280a.active) {
-				if (ga1280a_memp_write16(address, value)) return;
-			}
-#endif
 			address = address & CPU_ADRSMASK;
 			if (address < USE_HIMEM) {
 				memfn0.wr16[address >> 15](address, value);
@@ -1347,6 +1343,9 @@ void MEMCALL memp_write32(UINT32 address, UINT32 value) {
 	}
 	else{
 		if ((address + 1) & 0x7fff) {			// non 32kb boundary
+#if defined(SUPPORT_WAB_GA1280A)
+			if (ga1280a_memp_try_write32(address, value)) return;
+#endif
 #if defined(SUPPORT_CL_GD5430)
 			if(np2clvga.enabled && cirrusvga_opaque && (cirrusvga_wab_46e8 & 0x08)){
 				UINT32 vramWndAddr = np2clvga.VRAMWindowAddr;
@@ -1417,11 +1416,6 @@ void MEMCALL memp_write32(UINT32 address, UINT32 value) {
 						}
 					}
 				}
-			}
-#endif
-#if defined(SUPPORT_WAB_GA1280A)
-			if (ga1280a.active) {
-				if (ga1280a_memp_write32(address, value)) return;
 			}
 #endif
 			address = address & CPU_ADRSMASK;

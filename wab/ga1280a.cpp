@@ -15,9 +15,18 @@
 
 #include    "pccore.h"
 #include    "wab.h"
-#include    "statsave.h"
+#include	"statsave.h"
+#ifdef __cplusplus
+extern "C" {
+#endif
+    int ga1280a_sfsave(STFLAGH sfh, const SFENTRY* tbl);
+    int ga1280a_sfload(STFLAGH sfh, const SFENTRY* tbl);
+#ifdef __cplusplus
+}
+#endif
 #include    "dosio.h"
 #include    "cpucore.h"
+#include    "cpumem.h"
 #include    "iocore.h"
 #include    "soundmng.h"
 
@@ -44,12 +53,39 @@ static void trace_fmt_ex(const char* fmt, ...)
 #define TRACEOUT(s) trace_fmt_ex s
 #endif
 
+#define GA1280A_MEMWAIT 16
+#define GA1280A_MEMWAIT_LINE 32
+
 GA1280A     ga1280a;
 
 static GA1280A_STATE s_ga;
 static GA1280A_MMIOCache s_mmio;
 static std::vector<LinePoint> s_line_points;
 static std::vector<UINT32> s_framebuf;
+
+static bool s_ga1280a_memp_map_registered;
+
+static void ga1280a_unregister_memp_map(void)
+{
+    if (!s_ga1280a_memp_map_registered) return;
+    memp_mmio_range_remove(GA1280A_CONVENTIONAL_WINDOW_BASE,
+        GA1280A_CONVENTIONAL_WINDOW_END - GA1280A_CONVENTIONAL_WINDOW_BASE);
+    memp_mmio_range_remove(GA1280A_FLAT_APERTURE_BASE,
+        GA1280A_FLAT_APERTURE_END - GA1280A_FLAT_APERTURE_BASE);
+    s_ga1280a_memp_map_registered = false;
+}
+
+static void ga1280a_update_memp_map(void)
+{
+    ga1280a_unregister_memp_map();
+    if (ga1280a.enabled) {
+        memp_mmio_range_add(GA1280A_CONVENTIONAL_WINDOW_BASE,
+            GA1280A_CONVENTIONAL_WINDOW_END - GA1280A_CONVENTIONAL_WINDOW_BASE);
+        memp_mmio_range_add(GA1280A_FLAT_APERTURE_BASE,
+            GA1280A_FLAT_APERTURE_END - GA1280A_FLAT_APERTURE_BASE);
+        s_ga1280a_memp_map_registered = true;
+    }
+}
 
 static UINT32 clampu32(UINT32 value, UINT32 minv, UINT32 maxv)
 {
@@ -79,6 +115,8 @@ static UINT32 logical_mask_from_plane_mask(UINT32 plane_mask);
 static UINT32 pack_color_to_plane_mask(UINT32 color, UINT32 plane_mask);
 static UINT32 unpack_color_from_plane_mask(UINT32 pixel, UINT32 plane_mask);
 static bool indexed8_linear_window_selected(void);
+static bool uses_packed_indexed_host_read_pixels(void);
+static bool uses_packed_direct16_host_read_pixels(void);
 static bool write_bit_mask_allows(UINT32 x);
 static UINT32 read_pixel_color(UINT32 x, UINT32 y);
 static void write_pixel_mixed(UINT32 x, UINT32 y, UINT32 color, PixelMix mix);
@@ -1016,7 +1054,7 @@ static bool write_byte(UINT8 selector, UINT8 offset, UINT8 value)
     case (SELECTOR_CRTC_POP1 << 8) | OFFSET_BASE: s_ga.crtc_index = value; break;
     case (SELECTOR_CRTC_POP2 << 8) | OFFSET_BASE: write_crtc_data_low_byte(s_ga.crtc_index & 0x7f, value); break;
     case (SELECTOR_MIX << 8) | OFFSET_PLUS_TWO: write_rop_pattern_byte(value); break;
-    case (SELECTOR_CWB_UNKNOWN << 8) | OFFSET_PLUS_TWO: reset_rop_pattern_stream(value); break;
+    case (SELECTOR_CWB_UNKNOWN << 8) | OFFSET_PLUS_TWO: reset_rop_pattern_stream(0); break;
     default:
         UINT8 base;
         UINT16 previous;
@@ -1182,11 +1220,20 @@ static void update_plane_mode_after_vdac_mask_write(UINT8)
     if (crtc_matches_full_color_mode()) enter_full_color_mode();
 }
 
-static bool raster_line(UINT16 start, UINT32 line_offset, UINT32* line)
+static bool raster_line_checked(UINT16 start, UINT32 line_offset, UINT32* line)
 {
     UINT32 height = pixel_map_height();
     if (!height) return false;
-    *line = ((UINT32)start + line_offset) % height;
+
+    if (s_ga.active_width > 1024) {
+        // 1280x1024‚ÍÜ‚è•Ô‚·iª‹’‚È‚µj
+        *line = ((UINT32)start + line_offset) % height;
+    }
+    else {
+        UINT32 y = (UINT32)start + line_offset;
+        if (y >= height) return false;
+        *line = y;
+    }
     return true;
 }
 
@@ -1199,7 +1246,7 @@ static bool host_window_position(UINT32 offset, UINT16 start_line, UINT32* line,
 {
     UINT32 bpl = host_bytes_per_line();
     if (!bpl) return false;
-    if (!raster_line(start_line, offset / bpl, line)) return false;
+    if (!raster_line_checked(start_line, offset / bpl, line)) return false;
     *byte_in_line = offset % bpl;
     return true;
 }
@@ -1310,7 +1357,7 @@ static bool vram_read_plane_byte(int plane, UINT32 line, UINT32 byte_in_line, UI
         if (x >= pixel_map_width()) break;
         if (read_packed_pixel(x, line) & plane_bit) result |= (UINT8)(0x80 >> bit_index);
     }
-    CPU_REMCLOCK -= 8 * 32;
+    CPU_REMCLOCK -= 8 * GA1280A_MEMWAIT;
     *ret = result;
     return true;
 }
@@ -1331,7 +1378,7 @@ static void vram_write_plane_byte_masked(int plane, UINT32 line, UINT32 byte_in_
         else pixel &= ~plane_bit;
         write_packed_pixel(x, line, pixel);
     }
-    CPU_REMCLOCK -= 8 * 32;
+    CPU_REMCLOCK -= 8 * GA1280A_MEMWAIT;
 }
 
 static bool uses_packed_host_pixels(void)
@@ -1346,12 +1393,12 @@ static bool uses_packed_indexed_host_pixels(void)
     if (s_ga.wbm != 0xffff) return false;
     if ((s_ga.wpm & 0x00ff) != 0x00ff) return false;
 
-    if (s_ga.mod1 == 0) return true;
-    if (s_ga.mod1 == HOST_WRITE_PIXEL_MASK_MODE) return true;
+    return true;
+}
 
-    return false;
-    //return indexed8_linear_window_selected() && s_ga.mod1 == 0 && s_ga.wbm == 0xffff &&
-    //    (s_ga.wpm & 0x00ff) == 0x00ff;
+static bool uses_packed_indexed_host_read_pixels(void)
+{
+    return indexed8_linear_window_selected();
 }
 
 static bool uses_packed_direct16_host_pixels(void)
@@ -1368,12 +1415,20 @@ static bool uses_packed_direct16_host_pixels(void)
     return false;
 }
 
+static bool uses_packed_direct16_host_read_pixels(void)
+{
+    if (s_ga.plane_mode != PLANE_DIRECTCOLOR16) return false;
+    if (window_size_from(s_ga.wba1) != WINSIZE_DISABLED) return false;
+    if (window_size_from(s_ga.wba2) == WINSIZE_DISABLED) return false;
+    return true;
+}
+
 static bool packed_indexed_position(UINT32 offset, UINT16 start, UINT32* x, UINT32* y)
 {
     UINT32 width = pixel_map_width();
     if (!width) return false;
     *x = offset % width;
-    return raster_line(start, offset / width, y);
+    return raster_line_checked(start, offset / width, y);
 }
 
 static bool packed_direct16_position(UINT32 offset, UINT16 start, UINT32* x, UINT32* y, UINT32* component)
@@ -1383,7 +1438,7 @@ static bool packed_direct16_position(UINT32 offset, UINT16 start, UINT32* x, UIN
     UINT32 pixel_offset = offset / 2;
     *x = pixel_offset % width;
     *component = offset & 1;
-    return raster_line(start, pixel_offset / width, y);
+    return raster_line_checked(start, pixel_offset / width, y);
 }
 
 static bool packed_full_color_position(UINT32 offset, UINT16 start, UINT32* x, UINT32* y, UINT32* component)
@@ -1393,7 +1448,7 @@ static bool packed_full_color_position(UINT32 offset, UINT16 start, UINT32* x, U
     UINT32 pixel_offset = offset / 3;
     *x = pixel_offset % width;
     *component = offset % 3;
-    return raster_line(start, pixel_offset / width, y);
+    return raster_line_checked(start, pixel_offset / width, y);
 }
 
 static bool flat_aperture_position(UINT16 start, UINT32 offset, UINT32 bpp, UINT32* x, UINT32* y, UINT32* component)
@@ -1403,7 +1458,7 @@ static bool flat_aperture_position(UINT16 start, UINT32 offset, UINT32 bpp, UINT
     UINT32 pixel_offset = offset / bpp;
     *x = pixel_offset % width;
     *component = offset % bpp;
-    return raster_line(start, pixel_offset / width, y);
+    return raster_line_checked(start, pixel_offset / width, y);
 }
 
 static UINT32 flat_window_size(void)
@@ -1462,11 +1517,6 @@ static void host_window_write_packed_indexed(UINT32 offset, UINT8 palette_index)
     UINT32 x, y;
     if (!packed_indexed_position(offset, s_ga.srw, &x, &y)) return;
 
-    if (y >= 2040) {
-        TRACEOUT(("PACKED8 WRITE off=%05X srw=%u -> (%u,%u) val=%02X WBA1=%04X WBA2=%04X MOD=%02X WPM=%04X WBM=%04X",
-            offset, s_ga.srw, x, y, palette_index,
-            s_ga.wba1, s_ga.wba2, s_ga.mod1, s_ga.wpm, s_ga.wbm));
-    }
 
     write_packed_pixel(x, y, palette_index);
 }
@@ -1492,7 +1542,7 @@ static void host_window_rotate_word(UINT32 offset)
         vram_write_plane_byte_masked(plane, line, byte_in_line, (UINT8)rotated, low_mask);
         vram_write_plane_byte_masked(plane, line, byte_in_line + 1, (UINT8)(rotated >> 8), high_mask);
     }
-    CPU_REMCLOCK -= active_plane_count() * 32;
+    CPU_REMCLOCK -= active_plane_count() * GA1280A_MEMWAIT;
 }
 
 static void host_window_write_raw(UINT32 line, UINT32 byte_in_line, UINT8 value, UINT8 bit_mask)
@@ -1502,7 +1552,7 @@ static void host_window_write_raw(UINT32 line, UINT32 byte_in_line, UINT8 value,
         if ((plane_mask & (1u << plane)) == 0) continue;
         vram_write_plane_byte_masked(plane, line, byte_in_line, value, bit_mask);
     }
-    CPU_REMCLOCK -= active_plane_count() * 32;
+    CPU_REMCLOCK -= active_plane_count() * GA1280A_MEMWAIT;
 }
 
 static void host_window_write_color_expand(UINT32 line, UINT32 byte_in_line, UINT8 source_bits, UINT8 bit_mask)
@@ -1515,7 +1565,7 @@ static void host_window_write_color_expand(UINT32 line, UINT32 byte_in_line, UIN
         UINT8 mix = (source_bits & bit) ? s_ga.fmix : s_ga.bmix;
         write_pixel_rop(x_base + bit_index, line, color, mix);
     }
-    CPU_REMCLOCK -= 8 * 32;
+    CPU_REMCLOCK -= 8 * GA1280A_MEMWAIT;
 }
 
 static UINT8 host_window_read_pixel_mask(UINT32 line, UINT32 byte_in_line)
@@ -1532,7 +1582,7 @@ static UINT8 host_window_read_pixel_mask(UINT32 line, UINT32 byte_in_line)
         vram_read_plane_byte(plane, line, byte_in_line, &b);
         value |= b;
     }
-    CPU_REMCLOCK -= active_plane_count() * 32;
+    CPU_REMCLOCK -= active_plane_count() * GA1280A_MEMWAIT;
     return value;
 }
 
@@ -1546,7 +1596,7 @@ static void host_window_write_pixel_mask(UINT32 line, UINT32 byte_in_line, UINT8
         UINT8 value = (color & (1u << plane)) ? 0xff : 0;
         vram_write_plane_byte_masked(plane, line, byte_in_line, value, pixel_mask);
     }
-    CPU_REMCLOCK -= active_plane_count() * 32;
+    CPU_REMCLOCK -= active_plane_count() * GA1280A_MEMWAIT;
 }
 
 static UINT8 host_window_read(UINT32 offset)
@@ -1554,8 +1604,8 @@ static UINT8 host_window_read(UINT32 offset)
     if (uses_packed_host_pixels()) {
         if (s_ga.plane_mode == PLANE_FULLCOLOR24) return host_window_read_packed_full_color(offset);
     }
-    if (uses_packed_indexed_host_pixels()) return host_window_read_packed_indexed(offset);
-    if (uses_packed_direct16_host_pixels()) return host_window_read_packed_direct16(offset);
+    if (uses_packed_indexed_host_read_pixels()) return host_window_read_packed_indexed(offset);
+    if (uses_packed_direct16_host_read_pixels()) return host_window_read_packed_direct16(offset);
 
     UINT32 line, byte_in_line;
     if (!host_window_position(offset, s_ga.srr, &line, &byte_in_line)) return 0xff;
@@ -1587,17 +1637,6 @@ static void host_window_write_data(UINT32 offset, UINT8 value)
     if (s_ga.mod1 == HOST_WRITE_ROTATE_WORD_MODE) {
         host_window_rotate_word(offset);
         return;
-    }
-
-    if (s_ga.plane_mode == PLANE_INDEXED8 && indexed8_high_color_context()) {
-        UINT32 px, py;
-        if (packed_indexed_position(offset, s_ga.srw, &px, &py) && py >= 2040) {
-            TRACEOUT(("FALLBACK PLANAR? off=%05X packed=(%u,%u) val=%02X "
-                "MOD=%02X WPM=%04X WBM=%04X WBA1=%04X WBA2=%04X SRW=%04X",
-                offset, px, py, value,
-                s_ga.mod1, s_ga.wpm, s_ga.wbm,
-                s_ga.wba1, s_ga.wba2, s_ga.srw));
-        }
     }
 
 
@@ -1952,7 +1991,7 @@ static void execute_solid_rectangle_color(UINT32 color, PixelMix mix)
     for (UINT32 y = start_y; y < start_y + height; y++) {
         for (UINT32 x = start_x; x < start_x + width; x++) write_pixel_mixed(x, y, color, mix);
     }
-    CPU_REMCLOCK -= width * height * 32;
+    CPU_REMCLOCK -= width * height * GA1280A_MEMWAIT;
 }
 
 static void execute_solid_rectangle(void)
@@ -1967,7 +2006,7 @@ static void execute_rop_solid_rectangle_foreground(void)
     for (UINT32 y = s_ga.dsty; y < (UINT32)s_ga.dsty + height; y++) {
         for (UINT32 x = s_ga.dstx; x < (UINT32)s_ga.dstx + width; x++) write_pixel_rop(x, y, s_ga.fcol, s_ga.fmix);
     }
-    CPU_REMCLOCK -= width * height * 32;
+    CPU_REMCLOCK -= width * height * GA1280A_MEMWAIT;
 }
 
 static void execute_rop_rectangle_foreground(void)
@@ -1982,7 +2021,7 @@ static void execute_rop_rectangle_foreground(void)
             write_pixel_rop((UINT32)s_ga.dstx + col, (UINT32)s_ga.dsty + row, bit ? s_ga.fcol : s_ga.bcol, bit ? s_ga.fmix : s_ga.bmix);
         }
     }
-    CPU_REMCLOCK -= width * height * 32;
+    CPU_REMCLOCK -= width * height * GA1280A_MEMWAIT;
 }
 
 static void execute_dstphase_rop_rectangle_foreground(void)
@@ -2012,7 +2051,7 @@ static void execute_copy_rectangle(UINT8 direction)
             write_pixel_mixed_signed(dx, dy, read_pixel_color_signed(sx, sy), PIXEL_MIX_SOURCE);
         }
     }
-    CPU_REMCLOCK -= width * height * 32;
+    CPU_REMCLOCK -= width * height * GA1280A_MEMWAIT;
 }
 
 static void execute_copy_rectangle_with_mix(UINT8 direction)
@@ -2028,7 +2067,7 @@ static void execute_copy_rectangle_with_mix(UINT8 direction)
             write_pixel_rop_signed(dx, dy, read_pixel_color_signed(sx, sy), s_ga.fmix);
         }
     }
-    CPU_REMCLOCK -= width * height * 32;
+    CPU_REMCLOCK -= width * height * GA1280A_MEMWAIT;
 }
 
 static bool is_shadow_glyph_mask_copy(void)
@@ -2074,7 +2113,7 @@ static void execute_hga_copy_rectangle_alt_with_mix(UINT8 direction)
             write_pixel_rop_signed(dx, dy, src, (src & mask_for_active_color()) ? (16 - s_ga.fmix) : (16 - s_ga.bmix));
         }
     }
-    CPU_REMCLOCK -= width * height * 32;
+    CPU_REMCLOCK -= width * height * GA1280A_MEMWAIT;
 }
 
 static void execute_shadow_glyph_mask_copy_with_mix(UINT8 direction)
@@ -2098,7 +2137,7 @@ static void execute_shadow_glyph_mask_copy_with_mix(UINT8 direction)
             }
         }
     }
-    CPU_REMCLOCK -= width * height * 32;
+    CPU_REMCLOCK -= width * height * GA1280A_MEMWAIT;
 }
 
 static void execute_tiled_rectangle(void)
@@ -2122,7 +2161,7 @@ static void execute_tiled_rectangle(void)
     for (UINT32 row = 0; row < height; row++) {
         for (UINT32 col = 0; col < width; col++) {
             UINT32 tile_col = (source_x + col) % TILE_WIDTH;
-            UINT32 tile_row = (dest_y + row) % TILE_HEIGHT;
+            UINT32 tile_row = (source_y + row) % TILE_HEIGHT;
             UINT32 x = (tile_base_x + tile_row * TILE_WIDTH + tile_col) % pmw;
 
             write_pixel_mixed(dest_x + col, dest_y + row,
@@ -2130,7 +2169,7 @@ static void execute_tiled_rectangle(void)
                 PIXEL_MIX_SOURCE);
         }
     }
-    CPU_REMCLOCK -= width * height * 32;
+    CPU_REMCLOCK -= width * height * GA1280A_MEMWAIT;
 }
 
 static void compute_line_points(UINT8 direction)
@@ -2166,7 +2205,7 @@ static void compute_line_points(UINT8 direction)
         else x += x_step;
     }
 
-    CPU_REMCLOCK -= (major_len + 1) * 32;
+    CPU_REMCLOCK -= (major_len + 1) * GA1280A_MEMWAIT;
 }
 
 static void execute_solid_line(UINT8 direction)
@@ -2174,7 +2213,7 @@ static void execute_solid_line(UINT8 direction)
     compute_line_points(direction);
     PixelMix mix = foreground_mix();
     for (size_t i = 0; i < s_line_points.size(); i++) write_pixel_mixed_signed(s_line_points[i].x, s_line_points[i].y, s_ga.col, mix);
-    CPU_REMCLOCK -= s_line_points.size() * 128;
+    CPU_REMCLOCK -= s_line_points.size() * GA1280A_MEMWAIT_LINE;
 }
 
 static void execute_styled_line(UINT8 direction)
@@ -2184,7 +2223,7 @@ static void execute_styled_line(UINT8 direction)
     for (size_t i = 0; i < s_line_points.size(); i++) {
         if (line_style_bit(s_ga.lins, s_line_points[i].step)) write_pixel_mixed_signed(s_line_points[i].x, s_line_points[i].y, s_ga.col, mix);
     }
-    CPU_REMCLOCK -= s_line_points.size() * 128;
+    CPU_REMCLOCK -= s_line_points.size() * GA1280A_MEMWAIT_LINE;
 }
 
 static void execute_rop_line(UINT8 direction)
@@ -2194,7 +2233,7 @@ static void execute_rop_line(UINT8 direction)
         if (line_style_bit(s_ga.lins, s_line_points[i].step)) write_pixel_rop_signed(s_line_points[i].x, s_line_points[i].y, s_ga.fcol, s_ga.fmix);
         else write_pixel_rop_signed(s_line_points[i].x, s_line_points[i].y, s_ga.bcol, s_ga.bmix);
     }
-    CPU_REMCLOCK -= s_line_points.size() * 128;
+    CPU_REMCLOCK -= s_line_points.size() * GA1280A_MEMWAIT_LINE;
 }
 
 static void execute_host_color_expand(void)
@@ -2408,7 +2447,6 @@ static void execute_rect_pixel_read(void)
     st.height = (UINT32)s_ga.opd2 + 1;
     st.row = 0;
     st.column = 0;
-    st.bound4k = 0;
 
     s_ga.stream.kind = STREAM_PIXEL_READ;
     s_ga.pdt_read_phase = 0;
@@ -2507,10 +2545,7 @@ static UINT16 read_pixel_read_direct16_word(void)
     //    st.width = st.width;
     //    //TRACEOUT(("V:%04x", value));
     //}
-    if (st.bound4k != 0) {
-        advance_pixel_read_columns(st, 1, input_width);
-    }
-    st.bound4k = (st.bound4k + 1) % 2049; // “ä‚Ì’²®
+    advance_pixel_read_columns(st, 1, input_width);
     return value;
 }
 
@@ -2658,6 +2693,17 @@ static void execute_pop2(UINT16 opcode)
         execute_rop_solid_rectangle_foreground();
     }
     else if (opcode == OPCODE_ROP_RECTANGLE_FOREGROUND) {
+        //for (UINT32 r = 0; r < 8; r++) {
+        //    char buf[256];
+        //    char* p = buf;
+        //    p += sprintf(p, "PATTERN sampled row %u:", r);
+        //    for (UINT32 c = 0; c < 8; c++) {
+        //        bool bit = rop_pattern_bit((UINT32)s_ga.dstx + c, (UINT32)s_ga.dsty + r);
+        //        p += sprintf(p, " %d", bit ? 1 : 0);
+        //    }
+
+        //    TRACEOUT(("%s", buf));
+        //}
         execute_rop_rectangle_foreground();
     }
     else if (opcode == OPCODE_DSTPHASE_ROP_RECTANGLE_FOREGROUND) {
@@ -2667,26 +2713,26 @@ static void execute_pop2(UINT16 opcode)
         execute_host_color_expand();
     }
     else if (opcode == OPCODE_TILED_RECTANGLE) {
-        //TRACEOUT(("TILE50E8 src=(%u,%u) dst=(%u,%u) size=(%u,%u)",
-        //    s_ga.srcx, s_ga.srcy, s_ga.dstx, s_ga.dsty,
-        //    (UINT32)s_ga.opd1 + 1, (UINT32)s_ga.opd2 + 1));
-        //UINT32 source_x = s_ga.srcx;
-        //UINT32 source_y = s_ga.srcy;
-        //UINT32 tile_base_x = source_x & ~(TILE_WIDTH - 1);
+        TRACEOUT(("TILE50E8 src=(%u,%u) dst=(%u,%u) size=(%u,%u)",
+            s_ga.srcx, s_ga.srcy, s_ga.dstx, s_ga.dsty,
+            (UINT32)s_ga.opd1 + 1, (UINT32)s_ga.opd2 + 1));
+        UINT32 source_x = s_ga.srcx;
+        UINT32 source_y = s_ga.srcy;
+        UINT32 tile_base_x = source_x & ~(TILE_WIDTH - 1);
 
-        //for (UINT32 r = 0; r < 8; r++) {
-        //    char buf[256];
-        //    char* p = buf;
-        //    p += sprintf(p, "TILE sampled row %u:", r);
+        for (UINT32 r = 0; r < 8; r++) {
+            char buf[256];
+            char* p = buf;
+            p += sprintf(p, "TILE sampled row %u:", r);
 
-        //    for (UINT32 c = 0; c < 8; c++) {
-        //        UINT32 sx = tile_base_x + r * 8 + ((source_x + c) & 7);
-        //        UINT32 v = read_packed_pixel(sx, source_y) & 0xff;
-        //        p += sprintf(p, " %02X", v);
-        //    }
+            for (UINT32 c = 0; c < 8; c++) {
+                UINT32 sx = tile_base_x + r * 8 + ((source_x + c) & 7);
+                UINT32 v = read_packed_pixel(sx, source_y) & 0xff;
+                p += sprintf(p, " %02X", v);
+            }
 
-        //    TRACEOUT(("%s", buf));
-        //}
+            TRACEOUT(("%s", buf));
+        }
         execute_tiled_rectangle();
     }
     else if (opcode == OPCODE_PATTERN_EXPAND_RECTANGLE) {
@@ -3001,6 +3047,7 @@ void ga1280a_reset(const NP2CFG* pConfig)
     ga1280a.width = DEFAULT_WIDTH;
     ga1280a.height = DEFAULT_HEIGHT;
     init_state();
+    ga1280a_update_memp_map();
     if (ga1280a.enabled && pConfig->uselgy98 && (pConfig->lgy98io >> 8) <= 0x20) {
         msgbox("I/O port conflict", "I/O port conflict between the GA-1280A and the LGY-98 has been detected.");
     }
@@ -3008,6 +3055,7 @@ void ga1280a_reset(const NP2CFG* pConfig)
 
 void ga1280a_bind(void)
 {
+    ga1280a_update_memp_map();
     if (ga1280a.enabled) {
         for (int i = 1; i < 0x20; i++) {
             for (int j = 0xd8; j <= 0xdb; j++) {
@@ -3024,6 +3072,7 @@ void ga1280a_bind(void)
 
 void ga1280a_unbind(void)
 {
+    ga1280a_unregister_memp_map();
     for (int i = 1; i < 0x20; i++) {
         for (int j = 0xd8; j <= 0xdb; j++) {
             iocore_detachout(j | (i << 8));
@@ -3038,8 +3087,185 @@ void ga1280a_unbind(void)
 
 void ga1280a_shutdown()
 {
+    ga1280a_unregister_memp_map();
     s_line_points.clear();
     s_framebuf.clear();
 }
+
+
+
+// ---------- state save
+
+#define GA1280A_SF_VERSION 1
+
+/*
+ * GA-1280A state-save payload format.
+ *
+ *   UINT32 version
+ *   UINT32 payload_size
+ *
+ * If ga1280a.enabled is zero, payload_size is zero and no structure blocks
+ * follow.  Loading such a state resets GA-1280A to the disabled reset state.
+ *
+ * If ga1280a.enabled is non-zero, the payload is:
+ *
+ *     UINT32 ga1280a_size
+ *     UINT8  ga1280a_data[ga1280a_size]
+ *     UINT32 s_ga_size
+ *     UINT8  s_ga_data[s_ga_size]
+ *
+ * The top-level payload_size allows this module to skip future appended data.
+ * Each structure also has its own size field so older states can zero-fill
+ * missing tail fields and newer states can discard extra tail fields per
+ * structure without shifting the following block.
+ */
+
+static void ga1280a_sfappend(std::vector<UINT8>& buffer, const void* data, UINT32 size)
+{
+    const UINT8* p = (const UINT8*)data;
+    if (size) buffer.insert(buffer.end(), p, p + size);
+}
+
+static void ga1280a_sfappend_block(std::vector<UINT8>& buffer, const void* data, UINT32 size)
+{
+    ga1280a_sfappend(buffer, &size, sizeof(size));
+    ga1280a_sfappend(buffer, data, size);
+}
+
+static int ga1280a_sfread_discard(STFLAGH sfh, UINT32 size)
+{
+    UINT8 discard[1024];
+    while (size) {
+        UINT32 step = (size < (UINT32)sizeof(discard)) ? size : (UINT32)sizeof(discard);
+        int ret = statflag_read(sfh, discard, step);
+        if (ret != STATFLAG_SUCCESS) return ret;
+        size -= step;
+    }
+    return STATFLAG_SUCCESS;
+}
+
+static void ga1280a_sfload_disabled_state(void)
+{
+    ZeroMemory(&ga1280a, sizeof(ga1280a));
+    ga1280a.width = DEFAULT_WIDTH;
+    ga1280a.height = DEFAULT_HEIGHT;
+    ga1280a.enabled = 0;
+    init_state();
+    s_line_points.clear();
+    s_framebuf.clear();
+    ga1280a_update_memp_map();
+}
+
+static int ga1280a_sfread_block(STFLAGH sfh, UINT32* remaining, void* data, UINT32 size)
+{
+    UINT32 saved_size = 0;
+    UINT32 copy_size;
+    int ret;
+
+    ZeroMemory(data, size);
+    if (*remaining == 0) {
+        return STATFLAG_SUCCESS;
+    }
+    if (*remaining < sizeof(saved_size)) {
+        return STATFLAG_FAILURE;
+    }
+
+    ret = statflag_read(sfh, &saved_size, sizeof(saved_size));
+    if (ret != STATFLAG_SUCCESS) return ret;
+    *remaining -= sizeof(saved_size);
+
+    if (saved_size > *remaining) return STATFLAG_FAILURE;
+
+    copy_size = (saved_size < size) ? saved_size : size;
+    if (copy_size) {
+        ret = statflag_read(sfh, data, copy_size);
+        if (ret != STATFLAG_SUCCESS) return ret;
+        *remaining -= copy_size;
+    }
+    if (saved_size > copy_size) {
+        ret = ga1280a_sfread_discard(sfh, saved_size - copy_size);
+        if (ret != STATFLAG_SUCCESS) return ret;
+        *remaining -= saved_size - copy_size;
+    }
+    return STATFLAG_SUCCESS;
+}
+
+int ga1280a_sfsave(STFLAGH sfh, const SFENTRY* tbl)
+{
+    UINT32 sfVersion = GA1280A_SF_VERSION;
+    UINT32 statLen;
+    int ret;
+    std::vector<UINT8> buffer;
+
+    (void)tbl;
+
+    if (ga1280a.enabled) {
+        ga1280a_sfappend_block(buffer, &ga1280a, (UINT32)sizeof(ga1280a));
+        ga1280a_sfappend_block(buffer, &s_ga, (UINT32)sizeof(s_ga));
+    }
+
+    statLen = (UINT32)buffer.size();
+
+    ret = statflag_write(sfh, &sfVersion, sizeof(sfVersion));
+    if (ret != STATFLAG_SUCCESS) return ret;
+    ret = statflag_write(sfh, &statLen, sizeof(statLen));
+    if (ret != STATFLAG_SUCCESS) return ret;
+    if (statLen) {
+        ret = statflag_write(sfh, &buffer[0], statLen);
+        if (ret != STATFLAG_SUCCESS) return ret;
+    }
+    return STATFLAG_SUCCESS;
+}
+
+int ga1280a_sfload(STFLAGH sfh, const SFENTRY* tbl)
+{
+    UINT32 sfVersion = 0;
+    UINT32 statLen = 0;
+    UINT32 remaining;
+    int ret;
+
+    (void)tbl;
+
+    ret = statflag_read(sfh, &sfVersion, sizeof(sfVersion));
+    if (ret != STATFLAG_SUCCESS) return ret;
+    ret = statflag_read(sfh, &statLen, sizeof(statLen));
+    if (ret != STATFLAG_SUCCESS) return ret;
+    if (statLen == 0) {
+        ga1280a_sfload_disabled_state();
+        return STATFLAG_SUCCESS;
+    }
+
+    if (sfVersion != GA1280A_SF_VERSION) {
+        return STATFLAG_VERSION;
+    }
+
+    remaining = statLen;
+
+    ret = ga1280a_sfread_block(sfh, &remaining, &ga1280a, (UINT32)sizeof(ga1280a));
+    if (ret != STATFLAG_SUCCESS) return ret;
+    ret = ga1280a_sfread_block(sfh, &remaining, &s_ga, (UINT32)sizeof(s_ga));
+    if (ret != STATFLAG_SUCCESS) return ret;
+
+    if (remaining) {
+        ret = ga1280a_sfread_discard(sfh, remaining);
+        if (ret != STATFLAG_SUCCESS) return ret;
+    }
+
+    if (!ga1280a.enabled) {
+        ga1280a_sfload_disabled_state();
+        return STATFLAG_SUCCESS;
+    }
+
+    s_line_points.clear();
+    s_framebuf.clear();
+    rebuild_mmio_cache();
+    update_public_state();
+    ga1280a.updated = 1;
+    ga1280a.paletteUpdated = 1;
+    ga1280a_update_memp_map();
+
+    return STATFLAG_SUCCESS;
+}
+
 
 #endif

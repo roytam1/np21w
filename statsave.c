@@ -57,6 +57,17 @@
 #if defined(SUPPORT_WAB_NPDISP)
 #include "wab/npdisp_statsave.h"
 #endif
+#if defined(SUPPORT_WAB_GA1280A)
+#include "wab/ga1280a.h"
+#ifdef __cplusplus
+extern "C" {
+#endif
+int ga1280a_sfsave(STFLAGH sfh, const SFENTRY* tbl);
+int ga1280a_sfload(STFLAGH sfh, const SFENTRY* tbl);
+#ifdef __cplusplus
+}
+#endif
+#endif
 #if defined(SUPPORT_NET)
 #include "network/net.h"
 #endif
@@ -141,6 +152,7 @@ enum
 	STATFLAG_SXSI,
 	STATFLAG_HDRVNT,
 	STATFLAG_NPDISP,
+	STATFLAG_GA1280A,
 	STATFLAG_MASK				= 0x3fff,
 	
 	STATFLAG_BWD_COMPATIBLE			= 0x4000, // このフラグが立っているとき、古いバージョンのステートセーブと互換性がある（足りないデータは0で埋められるので注意する）いまのところSTATFLAG_BINのみサポート
@@ -1605,6 +1617,11 @@ const SFENTRY	*tblterm;
 				ret |= npdisp_sfsave(&sffh->sfh, tbl);
 				break;
 #endif
+#if defined(SUPPORT_WAB_GA1280A)
+			case STATFLAG_GA1280A:
+				ret |= ga1280a_sfsave(&sffh->sfh, tbl);
+				break;
+#endif
 
 			case STATFLAG_MEM:
 				ret |= flagsave_mem(&sffh->sfh, tbl);
@@ -1683,6 +1700,11 @@ const SFENTRY	*tblterm;
 
 #if defined(SUPPORT_WAB_NPDISP)
 				case STATFLAG_NPDISP:
+					ret |= flagcheck_veronly(&sffh->sfh, tbl);
+					break;
+#endif
+#if defined(SUPPORT_WAB_GA1280A)
+				case STATFLAG_GA1280A:
 					ret |= flagcheck_veronly(&sffh->sfh, tbl);
 					break;
 #endif
@@ -1833,6 +1855,11 @@ const SFENTRY	*tblterm;
 					ret |= npdisp_sfload(&sffh->sfh, tbl);
 					break;
 #endif
+#if defined(SUPPORT_WAB_GA1280A)
+				case STATFLAG_GA1280A:
+					ret |= ga1280a_sfload(&sffh->sfh, tbl);
+					break;
+#endif
 
 				case STATFLAG_MEM:
 					ret |= flagload_mem(&sffh->sfh, tbl);
@@ -1932,6 +1959,9 @@ const SFENTRY	*tblterm;
 #if defined(SUPPORT_CL_GD5430)
 	pc98_cirrus_vga_bind();
 	pc98_cirrus_vga_load();
+#endif
+#if defined(SUPPORT_WAB_GA1280A)
+	ga1280a_bind();
 #endif
 	
 	// OPNAボリューム再設定

@@ -114,6 +114,8 @@ ia32reset(void)
 		ia32hax_copyregHAXtoNP2();
 	}
 #endif
+	// MMIOマップリセット
+	memp_mmio_map_reset();
 }
 
 void
@@ -137,8 +139,12 @@ ia32shut(void)
 void
 ia32a20enable(BOOL enable)
 {
+	UINT32 newmask = (enable) ? 0xffffffff : 0x000fffff;
 
-	CPU_ADRSMASK = (enable)?0xffffffff:0x00ffffff;
+	if (CPU_ADRSMASK != newmask) {
+		CPU_ADRSMASK = newmask;
+		tlb_flush_all();
+	}
 }
 
 //#pragma optimize("", off)

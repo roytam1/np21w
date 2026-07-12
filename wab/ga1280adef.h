@@ -173,7 +173,6 @@ struct PixelReadState {
     UINT32 height;
     UINT32 row;
     UINT32 column;
-    UINT32 bound4k;
 };
 
 struct PatternExpandState {

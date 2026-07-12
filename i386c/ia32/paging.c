@@ -201,11 +201,208 @@ struct tlb_entry {
 #define	TLB_ENTRY_TAG_GLOBAL		CPU_PTE_GLOBAL_PAGE	/* (1 << 8) */
 #define	TLB_ENTRY_TAG_MAX_SHIFT		12
 	UINT32	paddr;	/* physical address */
+	UINT8	*host_page;	/* direct host pointer for ordinary RAM page */
+	UINT32	fast_flags;	/* predecoded access/direct flags */
 };
+/*
+ * TLB fast path
+ */
+#define	TLB_TAG_SHIFT		TLB_ENTRY_TAG_MAX_SHIFT
+#define	TLB_TAG_MASK		(~((1 << TLB_TAG_SHIFT) - 1))
+#define	TLB_GET_TAG_ADDR(ep)	((ep)->tag & TLB_TAG_MASK)
+#define	TLB_SET_TAG_ADDR(ep, addr) \
+do { \
+	(ep)->tag &= ~TLB_TAG_MASK; \
+	(ep)->tag |= (addr) & TLB_TAG_MASK; \
+} while (/*CONSTCOND(*/ 0)
+
+#define	TLB_IS_VALID(ep)	((ep)->tag & TLB_ENTRY_TAG_VALID)
+#define	TLB_SET_VALID(ep)	((ep)->tag = TLB_ENTRY_TAG_VALID)
+#define	TLB_SET_INVALID(ep)	((ep)->tag = 0)
+
+#define	TLB_IS_WRITABLE(ep)	((ep)->tag & CPU_PTE_WRITABLE)
+#define	TLB_IS_USERMODE(ep)	((ep)->tag & CPU_PTE_USER_MODE)
+#define	TLB_IS_DIRTY(ep)	((ep)->tag & TLB_ENTRY_TAG_DIRTY)
+#if (CPU_FEATURES_ALL & CPU_FEATURE_PGE) == CPU_FEATURE_PGE
+#define	TLB_IS_GLOBAL(ep)	((ep)->tag & TLB_ENTRY_TAG_GLOBAL)
+#else
+#define	TLB_IS_GLOBAL(ep)	0
+#endif
+
+#define	TLB_SET_TAG_FLAGS(ep, entry, bit) \
+do { \
+	(ep)->tag |= (entry) & (CPU_PTE_GLOBAL_PAGE|CPU_PTE_DIRTY); \
+	(ep)->tag |= (bit) & (CPU_PTE_WRITABLE|CPU_PTE_USER_MODE); \
+} while (/*CONSTCOND*/ 0)
+
+#define	TLBF_SUPER_READ		0x00000001UL
+#define	TLBF_USER_READ		0x00000002UL
+#define	TLBF_SUPER_WRITE	0x00000004UL	/* valid when CR0.WP=0 */
+#define	TLBF_SUPER_WRITE_WP	0x00000008UL	/* valid when CR0.WP=1 */
+#define	TLBF_USER_WRITE		0x00000010UL
+#define	TLBF_CODE_SUPER		0x00000020UL
+#define	TLBF_CODE_USER		0x00000040UL
+#define	TLBF_DIRECT_READ	0x00000100UL
+#define	TLBF_DIRECT_WRITE	0x00000200UL
+
+#define	NTLB		2	/* 0: DTLB, 1: ITLB */
+#define	NENTRY		(1 << 6)
+#define	TLB_ENTRY_SHIFT	12
+#define	TLB_ENTRY_MASK	(NENTRY - 1)
+
+typedef struct {
+	struct tlb_entry entry[NENTRY];
+} tlb_t;
+static tlb_t tlb[NTLB];
+
+#if defined(__GNUC__)
+#define TLB_FAST_INLINE static __inline__ __attribute__((always_inline))
+#elif defined(_MSC_VER)
+#define TLB_FAST_INLINE static __inline
+#else
+#define TLB_FAST_INLINE static INLINE
+#endif
+
+TLB_FAST_INLINE UINT32
+tlb_access_fast_flag(int ucrw)
+{
+	if (ucrw & CPU_PAGE_WRITE) {
+		if (ucrw & CPU_PAGE_USER_MODE) {
+			return TLBF_USER_WRITE;
+		}
+		return CPU_STAT_WP ? TLBF_SUPER_WRITE_WP : TLBF_SUPER_WRITE;
+	}
+	if (ucrw & CPU_PAGE_CODE) {
+		return (ucrw & CPU_PAGE_USER_MODE) ? TLBF_CODE_USER : TLBF_CODE_SUPER;
+	}
+	return (ucrw & CPU_PAGE_USER_MODE) ? TLBF_USER_READ : TLBF_SUPER_READ;
+}
+
+TLB_FAST_INLINE struct tlb_entry *
+tlb_lookup_fast(UINT32 laddr, int ucrw)
+{
+	struct tlb_entry *ep;
+	UINT32 flag;
+	int idx;
+	int n;
+
+	n = (ucrw & CPU_PAGE_CODE) ? 1 : 0;
+	idx = (laddr >> TLB_ENTRY_SHIFT) & TLB_ENTRY_MASK;
+	ep = &tlb[n].entry[idx];
+
+	if (TLB_IS_VALID(ep) && ((laddr & TLB_TAG_MASK) == TLB_GET_TAG_ADDR(ep))) {
+		flag = tlb_access_fast_flag(ucrw);
+		if (ep->fast_flags & flag) {
+			return ep;
+		}
+	}
+	return NULL;
+}
+
+
+TLB_FAST_INLINE UINT32
+tlb_make_fast_flags(UINT entry, int bit, int n, int direct)
+{
+	UINT32 flags;
+	int writable;
+	int user;
+
+	flags = TLBF_SUPER_READ;
+	writable = (bit & CPU_PTE_WRITABLE) != 0;
+	user = (bit & CPU_PTE_USER_MODE) != 0;
+
+	if (user) {
+		flags |= TLBF_USER_READ;
+	}
+	if (n == 1) {
+		flags |= TLBF_CODE_SUPER;
+		if (user) {
+			flags |= TLBF_CODE_USER;
+		}
+	}
+
+	if (entry & CPU_PTE_DIRTY) {
+		flags |= TLBF_SUPER_WRITE;
+		if (writable) {
+			flags |= TLBF_SUPER_WRITE_WP;
+			if (user) {
+				flags |= TLBF_USER_WRITE;
+			}
+		}
+	}
+
+	if (direct) {
+		flags |= TLBF_DIRECT_READ;
+		if (flags & (TLBF_SUPER_WRITE|TLBF_SUPER_WRITE_WP|TLBF_USER_WRITE)) {
+			flags |= TLBF_DIRECT_WRITE;
+		}
+	}
+	return flags;
+}
+
 static void MEMCALL tlb_update(UINT32 laddr, UINT entry, int ucrw);
 
 /* paging */
 static UINT32 MEMCALL paging(UINT32 laddr, int ucrw);
+
+struct tlb_entry* MEMCALL tlb_lookup(UINT32 laddr, int ucrw);
+
+#if !defined(SUPPORT_IA32_HAXM)
+#define TLB_PAGE_OFFSET(laddr)	((laddr) & CPU_PAGE_MASK)
+#define TLB_PAGE_BASE(laddr)	((laddr) & ~CPU_PAGE_MASK)
+
+typedef struct codefetch_cache_entry {
+	UINT32	lpage;		/* linear page base */
+	int	ucrw;		/* permission key used to create this cache */
+	UINT8	*host_page;	/* direct host pointer for this linear page */
+} codefetch_cache_entry_t;
+
+static codefetch_cache_entry_t codefetch_cache;
+
+static void MEMCALL
+codefetch_cache_invalidate(void)
+{
+	codefetch_cache.host_page = NULL;
+}
+
+static void MEMCALL
+codefetch_cache_invalidate_page(UINT32 laddr)
+{
+	if (codefetch_cache.host_page != NULL &&
+	    codefetch_cache.lpage == TLB_PAGE_BASE(laddr)) {
+		codefetch_cache.host_page = NULL;
+	}
+}
+
+TLB_FAST_INLINE struct tlb_entry *
+tlb_lookup_linear(UINT32 laddr, int ucrw)
+{
+	return tlb_lookup_fast(laddr, ucrw);
+}
+
+static UINT8 * MEMCALL
+codefetch_cache_lookup(UINT32 laddr, int ucrw)
+{
+	if (codefetch_cache.host_page != NULL &&
+	    codefetch_cache.lpage == TLB_PAGE_BASE(laddr) &&
+	    codefetch_cache.ucrw == ucrw) {
+		return codefetch_cache.host_page;
+	}
+	return NULL;
+}
+
+static UINT8 * MEMCALL
+codefetch_cache_update(UINT32 laddr, int ucrw, struct tlb_entry *ep)
+{
+	if (ep != NULL && (ep->fast_flags & TLBF_DIRECT_READ)) {
+		codefetch_cache.lpage = TLB_PAGE_BASE(laddr);
+		codefetch_cache.ucrw = ucrw;
+		codefetch_cache.host_page = ep->host_page;
+		return ep->host_page;
+	}
+	return NULL;
+}
+#endif
 
 /*
  * linear memory access
@@ -311,11 +508,44 @@ cpu_memory_access_la_RMW_d(UINT32 laddr, UINT32 (CPUCALL *func)(UINT32, void *),
 UINT8 MEMCALL
 cpu_linear_memory_read_b(UINT32 laddr, int ucrw)
 {
+#if !defined(SUPPORT_IA32_HAXM)
+	struct tlb_entry *ep;
+	UINT offset;
+
+	ep = tlb_lookup_linear(laddr, ucrw);
+	if (ep != NULL) {
+		offset = TLB_PAGE_OFFSET(laddr);
+		if (ep->fast_flags & TLBF_DIRECT_READ) {
+			return ep->host_page[offset];
+		}
+		return cpu_memoryread(ep->paddr + offset);
+	}
+#endif
 	return cpu_memoryread(paging(laddr, ucrw));
 }
 PF_UINT8 MEMCALL
 cpu_linear_memory_read_b_codefetch(UINT32 laddr, int ucrw)
 {
+#if !defined(SUPPORT_IA32_HAXM)
+	struct tlb_entry *ep;
+	UINT offset;
+	UINT8 *host_page;
+
+	offset = TLB_PAGE_OFFSET(laddr);
+	host_page = codefetch_cache_lookup(laddr, ucrw);
+	if (host_page != NULL) {
+		return host_page[offset];
+	}
+
+	ep = tlb_lookup_linear(laddr, ucrw);
+	if (ep != NULL) {
+		host_page = codefetch_cache_update(laddr, ucrw, ep);
+		if (host_page != NULL) {
+			return host_page[offset];
+		}
+		return cpu_memoryread_codefetch(ep->paddr + offset);
+	}
+#endif
 	return cpu_memoryread_codefetch(paging(laddr, ucrw));
 }
 
@@ -324,10 +554,29 @@ cpu_linear_memory_read_w(UINT32 laddr, int ucrw)
 {
 	UINT32 paddr[2];
 	UINT16 value;
+#if !defined(SUPPORT_IA32_HAXM)
+	struct tlb_entry *ep;
+	UINT offset;
+#endif
 
-	paddr[0] = paging(laddr, ucrw);
-	if ((laddr + 1) & CPU_PAGE_MASK)
-		return cpu_memoryread_w(paddr[0]);
+#if !defined(SUPPORT_IA32_HAXM)
+	ep = tlb_lookup_linear(laddr, ucrw);
+	if (ep != NULL) {
+		offset = TLB_PAGE_OFFSET(laddr);
+		if ((laddr + 1) & CPU_PAGE_MASK) {
+			if (ep->fast_flags & TLBF_DIRECT_READ) {
+				return LOADINTELWORD(ep->host_page + offset);
+			}
+			return cpu_memoryread_w(ep->paddr + offset);
+		}
+		paddr[0] = ep->paddr + offset;
+	} else
+#endif
+	{
+		paddr[0] = paging(laddr, ucrw);
+		if ((laddr + 1) & CPU_PAGE_MASK)
+			return cpu_memoryread_w(paddr[0]);
+	}
 
 	paddr[1] = paging(laddr + 1, ucrw);
 	value = cpu_memoryread_b(paddr[0]);
@@ -339,10 +588,38 @@ cpu_linear_memory_read_w_codefetch(UINT32 laddr, int ucrw)
 {
 	UINT32 paddr[2];
 	PF_UINT16 value;
+#if !defined(SUPPORT_IA32_HAXM)
+	struct tlb_entry *ep;
+	UINT offset;
+	UINT8 *host_page;
+#endif
 	
-	paddr[0] = paging(laddr, ucrw);
-	if ((laddr + 1) & CPU_PAGE_MASK)
-		return cpu_memoryread_w_codefetch(paddr[0]);
+#if !defined(SUPPORT_IA32_HAXM)
+	offset = TLB_PAGE_OFFSET(laddr);
+	if ((laddr + 1) & CPU_PAGE_MASK) {
+		host_page = codefetch_cache_lookup(laddr, ucrw);
+		if (host_page != NULL) {
+			return LOADINTELWORD(host_page + offset);
+		}
+	}
+
+	ep = tlb_lookup_linear(laddr, ucrw);
+	if (ep != NULL) {
+		if ((laddr + 1) & CPU_PAGE_MASK) {
+			host_page = codefetch_cache_update(laddr, ucrw, ep);
+			if (host_page != NULL) {
+				return LOADINTELWORD(host_page + offset);
+			}
+			return cpu_memoryread_w_codefetch(ep->paddr + offset);
+		}
+		paddr[0] = ep->paddr + offset;
+	} else
+#endif
+	{
+		paddr[0] = paging(laddr, ucrw);
+		if ((laddr + 1) & CPU_PAGE_MASK)
+			return cpu_memoryread_w_codefetch(paddr[0]);
+	}
 
 	paddr[1] = paging(laddr + 1, ucrw);
 	value = cpu_memoryread_b_codefetch(paddr[0]);
@@ -358,10 +635,35 @@ cpu_linear_memory_read_d(UINT32 laddr, int ucrw)
 	UINT32 value;
 	UINT remain;
 
+#if !defined(SUPPORT_IA32_HAXM)
+	{
+		struct tlb_entry *ep;
+		UINT offset;
+
+		ep = tlb_lookup_linear(laddr, ucrw);
+		if (ep != NULL) {
+			offset = TLB_PAGE_OFFSET(laddr);
+			remain = CPU_PAGE_SIZE - offset;
+			if (remain >= sizeof(value)) {
+				if (ep->fast_flags & TLBF_DIRECT_READ) {
+					return LOADINTELDWORD(ep->host_page + offset);
+				}
+				return cpu_memoryread_d(ep->paddr + offset);
+			}
+			paddr[0] = ep->paddr + offset;
+		} else {
+			paddr[0] = paging(laddr, ucrw);
+			remain = CPU_PAGE_SIZE - (laddr & CPU_PAGE_MASK);
+			if (remain >= sizeof(value))
+				return cpu_memoryread_d(paddr[0]);
+		}
+	}
+#else
 	paddr[0] = paging(laddr, ucrw);
 	remain = CPU_PAGE_SIZE - (laddr & CPU_PAGE_MASK);
 	if (remain >= sizeof(value))
 		return cpu_memoryread_d(paddr[0]);
+#endif
 
 	paddr[1] = paging(laddr + remain, ucrw);
 	switch (remain) {
@@ -396,10 +698,43 @@ cpu_linear_memory_read_d_codefetch(UINT32 laddr, int ucrw)
 	UINT32 value;
 	UINT remain;
 
+#if !defined(SUPPORT_IA32_HAXM)
+	{
+		struct tlb_entry *ep;
+		UINT offset;
+		UINT8 *host_page;
+
+		offset = TLB_PAGE_OFFSET(laddr);
+		remain = CPU_PAGE_SIZE - offset;
+		if (remain >= sizeof(value)) {
+			host_page = codefetch_cache_lookup(laddr, ucrw);
+			if (host_page != NULL) {
+				return LOADINTELDWORD(host_page + offset);
+			}
+		}
+
+		ep = tlb_lookup_linear(laddr, ucrw);
+		if (ep != NULL) {
+			if (remain >= sizeof(value)) {
+				host_page = codefetch_cache_update(laddr, ucrw, ep);
+				if (host_page != NULL) {
+					return LOADINTELDWORD(host_page + offset);
+				}
+				return cpu_memoryread_d_codefetch(ep->paddr + offset);
+			}
+			paddr[0] = ep->paddr + offset;
+		} else {
+			paddr[0] = paging(laddr, ucrw);
+			if (remain >= sizeof(value))
+				return cpu_memoryread_d_codefetch(paddr[0]);
+		}
+	}
+#else
 	paddr[0] = paging(laddr, ucrw);
 	remain = CPU_PAGE_SIZE - (laddr & CPU_PAGE_MASK);
 	if (remain >= sizeof(value))
 		return cpu_memoryread_d_codefetch(paddr[0]);
+#endif
 
 	paddr[1] = paging(laddr + remain, ucrw);
 	switch (remain) {
@@ -505,7 +840,7 @@ cpu_linear_memory_read_f(UINT32 laddr, int ucrw)
 
 	paddr[0] = paging(laddr, ucrw);
 	remain = CPU_PAGE_SIZE - (laddr & CPU_PAGE_MASK);
-	if (remain >= sizeof(value))
+	if (remain >= sizeof(REG80))
 		return cpu_memoryread_f(paddr[0]);
 
 	paddr[1] = paging(laddr + remain, ucrw);
@@ -528,8 +863,28 @@ cpu_linear_memory_reads(UINT32 laddr, void* dat, UINT leng, int ucrw)
 	while (leng > 0) {
 		UINT32 inPageSize = CPU_PAGE_SIZE - (laddr & CPU_PAGE_MASK);
 		inPageSize = min(inPageSize, leng);
+#if !defined(SUPPORT_IA32_HAXM)
+		{
+			struct tlb_entry *ep;
+			UINT offset;
+
+			ep = tlb_lookup_linear(laddr, ucrw);
+			if (ep != NULL) {
+				offset = TLB_PAGE_OFFSET(laddr);
+				if (ep->fast_flags & TLBF_DIRECT_READ) {
+					CopyMemory(p, ep->host_page + offset, inPageSize);
+				} else {
+					memp_reads(ep->paddr + offset, p, inPageSize);
+				}
+			} else {
+				paddr = paging(laddr, ucrw);
+				memp_reads(paddr, p, inPageSize);
+			}
+		}
+#else
 		paddr = paging(laddr, ucrw);
 		memp_reads(paddr, p, inPageSize);
+#endif
 		p += inPageSize;
 		laddr += inPageSize;
 		leng -= inPageSize;
@@ -540,7 +895,21 @@ cpu_linear_memory_reads(UINT32 laddr, void* dat, UINT leng, int ucrw)
 void MEMCALL
 cpu_linear_memory_write_b(UINT32 laddr, UINT8 value, int ucrw)
 {
+#if !defined(SUPPORT_IA32_HAXM)
+	struct tlb_entry *ep;
+	UINT offset;
 
+	ep = tlb_lookup_linear(laddr, ucrw);
+	if (ep != NULL) {
+		offset = TLB_PAGE_OFFSET(laddr);
+		if (ep->fast_flags & TLBF_DIRECT_WRITE) {
+			ep->host_page[offset] = value;
+			return;
+		}
+		cpu_memorywrite(ep->paddr + offset, value);
+		return;
+	}
+#endif
 	cpu_memorywrite(paging(laddr, ucrw), value);
 }
 
@@ -549,11 +918,38 @@ cpu_linear_memory_write_w(UINT32 laddr, UINT16 value, int ucrw)
 {
 	UINT32 paddr[2];
 
+#if !defined(SUPPORT_IA32_HAXM)
+	{
+		struct tlb_entry *ep;
+		UINT offset;
+
+		ep = tlb_lookup_linear(laddr, ucrw);
+		if (ep != NULL) {
+			offset = TLB_PAGE_OFFSET(laddr);
+			if ((laddr + 1) & CPU_PAGE_MASK) {
+				if (ep->fast_flags & TLBF_DIRECT_WRITE) {
+					STOREINTELWORD(ep->host_page + offset, value);
+					return;
+				}
+				cpu_memorywrite_w(ep->paddr + offset, value);
+				return;
+			}
+			paddr[0] = ep->paddr + offset;
+		} else {
+			paddr[0] = paging(laddr, ucrw);
+			if ((laddr + 1) & CPU_PAGE_MASK) {
+				cpu_memorywrite_w(paddr[0], value);
+				return;
+			}
+		}
+	}
+#else
 	paddr[0] = paging(laddr, ucrw);
 	if ((laddr + 1) & CPU_PAGE_MASK) {
 		cpu_memorywrite_w(paddr[0], value);
 		return;
 	}
+#endif
 
 	paddr[1] = paging(laddr + 1, ucrw);
 	cpu_memorywrite(paddr[0], (UINT8)value);
@@ -566,12 +962,41 @@ cpu_linear_memory_write_d(UINT32 laddr, UINT32 value, int ucrw)
 	UINT32 paddr[2];
 	UINT remain;
 
+#if !defined(SUPPORT_IA32_HAXM)
+	{
+		struct tlb_entry *ep;
+		UINT offset;
+
+		ep = tlb_lookup_linear(laddr, ucrw);
+		if (ep != NULL) {
+			offset = TLB_PAGE_OFFSET(laddr);
+			remain = CPU_PAGE_SIZE - offset;
+			if (remain >= sizeof(value)) {
+				if (ep->fast_flags & TLBF_DIRECT_WRITE) {
+					STOREINTELDWORD(ep->host_page + offset, value);
+					return;
+				}
+				cpu_memorywrite_d(ep->paddr + offset, value);
+				return;
+			}
+			paddr[0] = ep->paddr + offset;
+		} else {
+			paddr[0] = paging(laddr, ucrw);
+			remain = CPU_PAGE_SIZE - (laddr & CPU_PAGE_MASK);
+			if (remain >= sizeof(value)) {
+				cpu_memorywrite_d(paddr[0], value);
+				return;
+			}
+		}
+	}
+#else
 	paddr[0] = paging(laddr, ucrw);
 	remain = CPU_PAGE_SIZE - (laddr & CPU_PAGE_MASK);
 	if (remain >= sizeof(value)) {
 		cpu_memorywrite_d(paddr[0], value);
 		return;
 	}
+#endif
 
 	paddr[1] = paging(laddr + remain, ucrw);
 	switch (remain) {
@@ -673,7 +1098,7 @@ cpu_linear_memory_write_f(UINT32 laddr, const REG80 *value, int ucrw)
 
 	paddr[0] = paging(laddr, ucrw);
 	remain = CPU_PAGE_SIZE - (laddr & CPU_PAGE_MASK);
-	if (remain >= sizeof(value)) {
+	if (remain >= sizeof(REG80)) {
 		cpu_memorywrite_f(paddr[0], value);
 		return;
 	}
@@ -697,8 +1122,28 @@ cpu_linear_memory_writes(UINT32 laddr, void* dat, UINT leng, int ucrw)
 	while (leng > 0) {
 		UINT32 inPageSize = CPU_PAGE_SIZE - (laddr & CPU_PAGE_MASK);
 		inPageSize = min(inPageSize, leng);
+#if !defined(SUPPORT_IA32_HAXM)
+		{
+			struct tlb_entry *ep;
+			UINT offset;
+
+			ep = tlb_lookup_linear(laddr, ucrw);
+			if (ep != NULL) {
+				offset = TLB_PAGE_OFFSET(laddr);
+				if (ep->fast_flags & TLBF_DIRECT_WRITE) {
+					CopyMemory(ep->host_page + offset, p, inPageSize);
+				} else {
+					memp_writes(ep->paddr + offset, p, inPageSize);
+				}
+			} else {
+				paddr = paging(laddr, ucrw);
+				memp_writes(paddr, p, inPageSize);
+			}
+		}
+#else
 		paddr = paging(laddr, ucrw);
 		memp_writes(paddr, p, inPageSize);
+#endif
 		p += inPageSize;
 		laddr += inPageSize;
 		leng -= inPageSize;
@@ -759,7 +1204,7 @@ paging(UINT32 laddr, int ucrw)
 	UINT err;
 
 #if !defined(SUPPORT_IA32_HAXM) // HAXMはエミュレーションTLBを使わない
-	ep = tlb_lookup(laddr, ucrw);
+	ep = tlb_lookup_fast(laddr, ucrw);
 	if (ep != NULL)
 		return ep->paddr + (laddr & CPU_PAGE_MASK);
 #endif
@@ -847,48 +1292,13 @@ pf_exception:
 /* 
  * TLB
  */
-#define	TLB_TAG_SHIFT		TLB_ENTRY_TAG_MAX_SHIFT
-#define	TLB_TAG_MASK		(~((1 << TLB_TAG_SHIFT) - 1))
-#define	TLB_GET_TAG_ADDR(ep)	((ep)->tag & TLB_TAG_MASK)
-#define	TLB_SET_TAG_ADDR(ep, addr) \
-do { \
-	(ep)->tag &= ~TLB_TAG_MASK; \
-	(ep)->tag |= (addr) & TLB_TAG_MASK; \
-} while (/*CONSTCOND(*/ 0)
-
-#define	TLB_IS_VALID(ep)	((ep)->tag & TLB_ENTRY_TAG_VALID)
-#define	TLB_SET_VALID(ep)	((ep)->tag = TLB_ENTRY_TAG_VALID)
-#define	TLB_SET_INVALID(ep)	((ep)->tag = 0)
-
-#define	TLB_IS_WRITABLE(ep)	((ep)->tag & CPU_PTE_WRITABLE)
-#define	TLB_IS_USERMODE(ep)	((ep)->tag & CPU_PTE_USER_MODE)
-#define	TLB_IS_DIRTY(ep)	((ep)->tag & TLB_ENTRY_TAG_DIRTY)
-#if (CPU_FEATURES_ALL & CPU_FEATURE_PGE) == CPU_FEATURE_PGE
-#define	TLB_IS_GLOBAL(ep)	((ep)->tag & TLB_ENTRY_TAG_GLOBAL)
-#else
-#define	TLB_IS_GLOBAL(ep)	0
-#endif
-
-#define	TLB_SET_TAG_FLAGS(ep, entry, bit) \
-do { \
-	(ep)->tag |= (entry) & (CPU_PTE_GLOBAL_PAGE|CPU_PTE_DIRTY); \
-	(ep)->tag |= (bit) & (CPU_PTE_WRITABLE|CPU_PTE_USER_MODE); \
-} while (/*CONSTCOND*/ 0)
-
-#define	NTLB		2	/* 0: DTLB, 1: ITLB */
-#define	NENTRY		(1 << 6)
-#define	TLB_ENTRY_SHIFT	12
-#define	TLB_ENTRY_MASK	(NENTRY - 1)
-
-typedef struct {
-	struct tlb_entry entry[NENTRY];
-} tlb_t;
-static tlb_t tlb[NTLB];
-
 void
 tlb_init(void)
 {
 	memset(tlb, 0, sizeof(tlb));
+#if !defined(SUPPORT_IA32_HAXM)
+	codefetch_cache_invalidate();
+#endif
 }
 
 void MEMCALL
@@ -897,6 +1307,10 @@ tlb_flush()
 	struct tlb_entry *ep;
 	int i;
 	int n;
+
+#if !defined(SUPPORT_IA32_HAXM)
+	codefetch_cache_invalidate();
+#endif
 
 	for (n = 0; n < NTLB; n++) {
 		for (i = 0; i < NENTRY ; i++) {
@@ -921,6 +1335,10 @@ tlb_flush_page(UINT32 laddr)
 	int idx;
 	int n;
 
+#if !defined(SUPPORT_IA32_HAXM)
+	codefetch_cache_invalidate_page(laddr);
+#endif
+
 	idx = (laddr >> TLB_ENTRY_SHIFT) & TLB_ENTRY_MASK;
 
 	for (n = 0; n < NTLB; n++) {
@@ -936,33 +1354,8 @@ tlb_flush_page(UINT32 laddr)
 struct tlb_entry * MEMCALL
 tlb_lookup(UINT32 laddr, int ucrw)
 {
-	struct tlb_entry *ep;
-	UINT bit;
-	int idx;
-	int n;
 
-	n = (ucrw & CPU_PAGE_CODE) ? 1 : 0;
-	idx = (laddr >> TLB_ENTRY_SHIFT) & TLB_ENTRY_MASK;
-	ep = &tlb[n].entry[idx];
-
-	if (TLB_IS_VALID(ep)) {
-		if ((laddr & TLB_TAG_MASK) == TLB_GET_TAG_ADDR(ep)) {
-			bit = ucrw & (CPU_PAGE_WRITE|CPU_PAGE_USER_MODE);
-			bit |= ep->tag & (CPU_PTE_WRITABLE|CPU_PTE_USER_MODE);
-			bit |= CPU_STAT_WP;
-#if !defined(USE_PAGE_ACCESS_TABLE)
-			if ((page_access & (1 << bit)))
-#else
-			if (page_access_bit[bit])
-#endif
-			{
-				if (!(ucrw & CPU_PAGE_WRITE) || TLB_IS_DIRTY(ep)) {
-					return ep;
-				}
-			}
-		}
-	}
-	return NULL;
+	return tlb_lookup_fast(laddr, ucrw);
 }
 
 static void MEMCALL
@@ -976,8 +1369,15 @@ tlb_update(UINT32 laddr, UINT entry, int bit)
 	idx = (laddr >> TLB_ENTRY_SHIFT) & TLB_ENTRY_MASK;
 	ep = &tlb[n].entry[idx];
 
+#if !defined(SUPPORT_IA32_HAXM)
+	if (n == 1) {
+		codefetch_cache_invalidate_page(laddr);
+	}
+#endif
 	TLB_SET_VALID(ep);
 	TLB_SET_TAG_ADDR(ep, laddr);
 	TLB_SET_TAG_FLAGS(ep, entry, bit);
 	ep->paddr = entry & CPU_PTE_BASEADDR_MASK;
+	ep->host_page = memp_get_direct_host_page(ep->paddr);
+	ep->fast_flags = tlb_make_fast_flags(entry, bit, n, ep->host_page != NULL);
 }

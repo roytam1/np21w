@@ -1190,14 +1190,18 @@ void
 INSB_YbDX(void)
 {
 	UINT8 data;
+	UINT32 paddr;
 
 	CPU_WORKCLOCK(12);
-	data = cpu_in(CPU_DX);
 	if (!CPU_INST_AS32) {
-		cpu_vmemorywrite(CPU_ES_INDEX, CPU_DI, data);
+		cpu_vmemorywrite_prepare_b(CPU_ES_INDEX, CPU_DI, &paddr);
+		data = cpu_in(CPU_DX);
+		cpu_vmemorywrite_commit_b(paddr, data);
 		CPU_DI += STRING_DIR;
 	} else {
-		cpu_vmemorywrite(CPU_ES_INDEX, CPU_EDI, data);
+		cpu_vmemorywrite_prepare_b(CPU_ES_INDEX, CPU_EDI, &paddr);
+		data = cpu_in(CPU_DX);
+		cpu_vmemorywrite_commit_b(paddr, data);
 		CPU_EDI += STRING_DIR;
 	}
 }
@@ -1206,14 +1210,19 @@ void
 INSW_YwDX(void)
 {
 	UINT16 data;
+	UINT32 paddr[2];
+	UINT remain;
 
 	CPU_WORKCLOCK(12);
-	data = cpu_in_w(CPU_DX);
 	if (!CPU_INST_AS32) {
-		cpu_vmemorywrite_w(CPU_ES_INDEX, CPU_DI, data);
+		cpu_vmemorywrite_prepare_w(CPU_ES_INDEX, CPU_DI, paddr, &remain);
+		data = cpu_in_w(CPU_DX);
+		cpu_vmemorywrite_commit_w(paddr, remain, data);
 		CPU_DI += STRING_DIRx2;
 	} else {
-		cpu_vmemorywrite_w(CPU_ES_INDEX, CPU_EDI, data);
+		cpu_vmemorywrite_prepare_w(CPU_ES_INDEX, CPU_EDI, paddr, &remain);
+		data = cpu_in_w(CPU_DX);
+		cpu_vmemorywrite_commit_w(paddr, remain, data);
 		CPU_EDI += STRING_DIRx2;
 	}
 }
@@ -1222,14 +1231,19 @@ void
 INSD_YdDX(void)
 {
 	UINT32 data;
+	UINT32 paddr[2];
+	UINT remain;
 
 	CPU_WORKCLOCK(12);
-	data = cpu_in_d(CPU_DX);
 	if (!CPU_INST_AS32) {
-		cpu_vmemorywrite_d(CPU_ES_INDEX, CPU_DI, data);
+		cpu_vmemorywrite_prepare_d(CPU_ES_INDEX, CPU_DI, paddr, &remain);
+		data = cpu_in_d(CPU_DX);
+		cpu_vmemorywrite_commit_d(paddr, remain, data);
 		CPU_DI += STRING_DIRx4;
 	} else {
-		cpu_vmemorywrite_d(CPU_ES_INDEX, CPU_EDI, data);
+		cpu_vmemorywrite_prepare_d(CPU_ES_INDEX, CPU_EDI, paddr, &remain);
+		data = cpu_in_d(CPU_DX);
+		cpu_vmemorywrite_commit_d(paddr, remain, data);
 		CPU_EDI += STRING_DIRx4;
 	}
 }

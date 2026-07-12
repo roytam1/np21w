@@ -83,20 +83,50 @@ static const UINT8 sync200m[8] = {0x02,0x26,0x03,0x11,0x83,0x07,0x90,0x65};
 static const UINT8 sync400m[8] = {0x02,0x4e,0x07,0x25,0x87,0x07,0x90,0x65};
 #endif	/* 0 */
 
+// ページング有効なときはそれを経由して読み書きしないと駄目
+static REG8 bioskbd_read8(UINT off) {
+
+	return MEMR_READ8(0, off);
+}
+
+static REG16 bioskbd_read16(UINT off) {
+
+	return MEMR_READ16(0, off);
+}
+
+static void bioskbd_write8(UINT off, REG8 value) {
+
+	MEMR_WRITE8(0, off, value);
+}
+
+static void bioskbd_write16(UINT off, REG16 value) {
+
+	MEMR_WRITE16(0, off, value);
+}
+
+static void bioskbd_clear(UINT off, UINT size) {
+
+	while (size--) {
+		bioskbd_write8(off++, 0);
+	}
+}
+
 static UINT16 keyget(void) {
 
 	UINT	pos;
 	UINT	kbbufhead;
+	REG8	count;
 
-	if (mem[MEMB_KB_COUNT]) {
-		mem[MEMB_KB_COUNT]--;
-		pos = GETBIOSMEM16(MEMW_KB_BUF_HEAD);
+	count = bioskbd_read8(MEMB_KB_COUNT);
+	if (count) {
+		bioskbd_write8(MEMB_KB_COUNT, (REG8)(count - 1));
+		pos = bioskbd_read16(MEMW_KB_BUF_HEAD);
 		kbbufhead = pos + 2;
 		if (kbbufhead >= 0x522) {
 			kbbufhead = 0x502;
 		}
-		SETBIOSMEM16(MEMW_KB_BUF_HEAD, kbbufhead);
-		return(GETBIOSMEM16(pos));
+		bioskbd_write16(MEMW_KB_BUF_HEAD, (REG16)kbbufhead);
+		return bioskbd_read16(pos);
 	}
 	return(0xffff);
 }
@@ -1030,7 +1060,7 @@ void bios0x18(void) {
 	
 	switch(CPU_AH) {
 		case 0x00:						// キー・データの読みだし
-			if (mem[MEMB_KB_COUNT]) {
+			if (bioskbd_read8(MEMB_KB_COUNT)) {
 				CPU_AX = keyget();
 			}
 			else {
@@ -1041,9 +1071,9 @@ void bios0x18(void) {
 			break;
 
    		case 0x01:						// キー・バッファ状態のセンス
-			if (mem[MEMB_KB_COUNT]) {
-				tmp.d = GETBIOSMEM16(MEMW_KB_BUF_HEAD);
-				CPU_AX = GETBIOSMEM16(tmp.d);
+			if (bioskbd_read8(MEMB_KB_COUNT)) {
+				tmp.d = bioskbd_read16(MEMW_KB_BUF_HEAD);
+				CPU_AX = bioskbd_read16(tmp.d);
 				CPU_BH = 1;
 			}
 			else {
@@ -1052,36 +1082,42 @@ void bios0x18(void) {
 			break;
 
    		case 0x02:						// シフト・キー状態のセンス
-			CPU_AL = mem[MEMB_SHIFT_STS];
+			CPU_AL = bioskbd_read8(MEMB_SHIFT_STS);
 			break;
 
    		case 0x03:						// キーボード・インタフェイスの初期化
+			//bios0x09_init();
 #if defined(BIOS_IO_EMULATION) && defined(CPUCORE_IA32)
 			// np21w ver0.86 rev47 BIOS I/O emulation
 			if (CPU_STAT_PM && CPU_STAT_VM86 && biosioemu.enable && biosioemu.active) {
 				biosioemu_enq8(0x43, 0x3a);
 				biosioemu_enq8(0x43, 0x32);
 				biosioemu_enq8(0x43, 0x16);
-				ZeroMemory(mem + 0x00502, 0x20);
-				ZeroMemory(mem + 0x00528, 0x13);
-				SETBIOSMEM16(MEMW_KB_SHIFT_TBL, 0x0e00);
-				SETBIOSMEM16(MEMW_KB_BUF_HEAD, 0x0502);
-				SETBIOSMEM16(MEMW_KB_BUF_TAIL, 0x0502);
-				SETBIOSMEM16(MEMW_KB_CODE_OFF, 0x0e00);
-				SETBIOSMEM16(MEMW_KB_CODE_SEG, 0xfd80);
-			}else
+			}
+			else
 #endif
 			{
-				bios0x09_init();
+				iocore_out8(0x43, 0x3a);
+				iocore_out8(0x43, 0x32);
+				iocore_out8(0x43, 0x16);
 			}
+
+			/* 呼びだし元のメモリ空間のメモリをセット */
+			bioskbd_clear(0x00502, 0x20);
+			bioskbd_clear(0x00528, 0x13);
+			bioskbd_write16(MEMW_KB_SHIFT_TBL, 0x0e00);
+			bioskbd_write16(MEMW_KB_BUF_HEAD, 0x0502);
+			bioskbd_write16(MEMW_KB_BUF_TAIL, 0x0502);
+			bioskbd_write16(MEMW_KB_CODE_OFF, 0x0e00);
+			bioskbd_write16(MEMW_KB_CODE_SEG, 0xfd80);
 			break;
 
    		case 0x04:						// キー入力状態のセンス
-			CPU_AH = mem[MEMX_KB_KY_STS + (CPU_AL & 0x0f)];
+			CPU_AH = bioskbd_read8(MEMX_KB_KY_STS + (CPU_AL & 0x0f));
  			break;
 
    		case 0x05:						// キー入力センス
-			if (mem[MEMB_KB_COUNT]) {
+			if (bioskbd_read8(MEMB_KB_COUNT)) {
 				CPU_AX = keyget();
 				CPU_BH = 1;
 			}

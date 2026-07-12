@@ -58,6 +58,43 @@
 #define	CPU_SETEXTSIZE(size)		ia32_setextsize((UINT32)(size) << 20)
 #define CPU_SETEMM(frame, addr)		ia32_setemm(frame, addr)
 
+ // USE_LEGACY_MEMORY_ACCESSがある場合は旧ルーチンを使用する
+#if defined(USE_LEGACY_MEMORY_ACCESS)
+// 旧版
+#define	cpu_memorywrite(a,v)	memp_write8(a,v)
+#define	cpu_memorywrite_b(a,v)	memp_write8(a,v)
+#define	cpu_memorywrite_w(a,v)	memp_write16(a,v)
+#define	cpu_memorywrite_d(a,v)	memp_write32(a,v)
+#define	cpu_memoryread(a)	memp_read8(a)
+#define	cpu_memoryread_b(a)	memp_read8(a)
+#define	cpu_memoryread_w(a)	memp_read16(a)
+#define	cpu_memoryread_d(a)	memp_read32(a)
+#define	cpu_memoryread_codefetch(a)		memp_read8_codefetch(a)
+#define	cpu_memoryread_b_codefetch(a)	memp_read8_codefetch(a)
+#define	cpu_memoryread_w_codefetch(a)	memp_read16_codefetch(a)
+#define	cpu_memoryread_d_codefetch(a)	memp_read32_codefetch(a)
+#ifdef USE_FASTPAGING
+#define	cpu_memoryread_paging(a)		memp_read8_paging(a)
+#define	cpu_memoryread_b_paging(a)		memp_read8_paging(a)
+#define	cpu_memoryread_w_paging(a)		memp_read16_paging(a)
+#define	cpu_memoryread_d_paging(a)		memp_read32_paging(a)
+#define	cpu_memorywrite_paging(a,v)		memp_write8_paging(a,v)
+#define	cpu_memorywrite_b_paging(a,v)	memp_write8_paging(a,v)
+#define	cpu_memorywrite_w_paging(a,v)	memp_write16_paging(a,v)
+#define	cpu_memorywrite_d_paging(a,v)	memp_write32_paging(a,v)
+#else
+#define	cpu_memoryread_paging(a)		memp_read8_codefetch(a)
+#define	cpu_memoryread_b_paging(a)		memp_read8_codefetch(a)
+#define	cpu_memoryread_w_paging(a)		memp_read16_codefetch(a)
+#define	cpu_memoryread_d_paging(a)		memp_read32_codefetch(a)
+#define	cpu_memorywrite_paging(a,v)		memp_write8(a,v)
+#define	cpu_memorywrite_b_paging(a,v)	memp_write8(a,v)
+#define	cpu_memorywrite_w_paging(a,v)	memp_write16(a,v)
+#define	cpu_memorywrite_d_paging(a,v)	memp_write32(a,v)
+#endif
+
+#else
+// 高速版
 #define	cpu_memorywrite(a,v)	memp_write8_fast(a,v)
 #define	cpu_memorywrite_b(a,v)	memp_write8_fast(a,v)
 #define	cpu_memorywrite_w(a,v)	memp_write16_fast(a,v)
@@ -88,6 +125,8 @@
 #define	cpu_memorywrite_b_paging(a,v)	memp_write8_fast(a,v)
 #define	cpu_memorywrite_w_paging(a,v)	memp_write16_fast(a,v)
 #define	cpu_memorywrite_d_paging(a,v)	memp_write32_fast(a,v)
+#endif
+
 #endif
 
 #define	cpu_memoryread_region(a,p,l)	memp_reads(a,p,l)

@@ -63,20 +63,26 @@ static void trace_fmt_ex(const char *fmt, ...)
 
 
 /*
- * Fast-path MMIO guard table.
+ * -- Fast-path MMIO guard table --
  *
- * The fast CPU memory path may directly access CPU_EXTMEMBASE.  Devices whose
- * MMIO/VRAM windows overlap that address space must mark the corresponding
- * blocks here.  Fast memory access only tests the counter table; actual device
- * decoding remains in the slow path.
+ * The fast CPU memory path may directly access mem or CPU_EXTMEMBASE. 
+ * Devices whose MMIO/VRAM windows overlap that address space must mark the corresponding blocks here.
  *
  * Granularity:
- *   00000000-000fffff : 4KB blocks  (PC-98 conventional/VRAM area)
- *   00100000-00ffffff : 64KB blocks (16MB legacy high area)
- *   01000000-ffffffff : 1MB blocks  (large PCI/linear apertures)
- *
- * Counters are used instead of booleans so overlapping boards can safely map
- * the same block and unmap independently.
+ *   00000000-000fffff : 4KB blocks
+ *   00100000-00ffffff : 64KB blocks
+ *   01000000-ffffffff : 1MB blocks
+ * 
+ * -- 高速処理用MMIOアクセステーブル --
+ * 
+ * MMIOやバンクメモリなど少しでも特殊アクセスされる可能性があるメモリ領域を登録する。
+ * 普通のメモリ領域が登録されていても低速版へフォールバックするのでOK。
+ * 素直なアクセスができるメモリ領域に高速アクセスできる方が全体として速くなる。
+ * 
+ * メモリ範囲粒度:
+ *   00000000-000fffff : 4KB blocks（現状I286_MEMWRITEMAX以上は常時低速アクセス扱いなので使用しない）
+ *   00100000-00ffffff : 64KB blocks
+ *   01000000-ffffffff : 1MB blocks
  */
 #define MEMP_FASTMMIO_LOW_LIMIT      0x00100000UL
 #define MEMP_FASTMMIO_MID_LIMIT      0x01000000UL
@@ -101,7 +107,7 @@ static void trace_fmt_ex(const char *fmt, ...)
 #define MEMP_ALIGN_CACHE __attribute__((aligned(64)))
 #endif
 
-static MEMP_ALIGN_CACHE UINT8 memp_fastmmio_low[MEMP_FASTMMIO_LOW_COUNT];
+//static MEMP_ALIGN_CACHE UINT8 memp_fastmmio_low[MEMP_FASTMMIO_LOW_COUNT];
 static MEMP_ALIGN_CACHE UINT8 memp_fastmmio_mid[MEMP_FASTMMIO_MID_COUNT];
 static MEMP_ALIGN_CACHE UINT8 memp_fastmmio_high[MEMP_FASTMMIO_HIGH_COUNT];
 
@@ -116,11 +122,11 @@ MEMP_FASTMMIO_INLINE UINT32 memp_fastmmio_block_end(UINT32 address)
 	return address | ((1UL << MEMP_FASTMMIO_HIGH_SHIFT) - 1);
 }
 
-// XXX: 開始アドレスしか見ていないので途中からMMIOアドレスに入るとおかしくなるがそんな変なアクセスはしないと信じる
+// 指定アドレスが直接アクセス可能かどうか調べる　OK=0、不可=0以外
 MEMP_FASTMMIO_INLINE int memp_fastmmio_addr_is_marked(UINT32 address)
 {
 	if (address < MEMP_FASTMMIO_LOW_LIMIT) {
-		return 1; // 問答無用でNGとする　 memp_fastmmio_low[address >> MEMP_FASTMMIO_LOW_SHIFT] != 0;
+		return 1; // 常時低速アクセスとする I286_MEMWRITEMAX未満はここではなく別途判定される
 	}
 	if (address < MEMP_FASTMMIO_MID_LIMIT) {
 		return memp_fastmmio_mid[(address - MEMP_FASTMMIO_LOW_LIMIT) >> MEMP_FASTMMIO_MID_SHIFT] != 0;
@@ -128,18 +134,25 @@ MEMP_FASTMMIO_INLINE int memp_fastmmio_addr_is_marked(UINT32 address)
 	return memp_fastmmio_high[address >> MEMP_FASTMMIO_HIGH_SHIFT] != 0;
 }
 
-MEMP_FASTMMIO_INLINE int memp_fastmmio_range_is_marked(UINT32 address)
+// 指定アドレス範囲が直接アクセス可能かどうか調べる　OK=0、不可=0以外
+MEMP_FASTMMIO_INLINE int memp_fastmmio_range_is_marked(UINT32 address, int size)
 {
+	// XXX: 開始アドレスしか見ていないので途中からMMIOアドレスに入るとおかしくなるがそんな変なアクセスはしないと信じる
 	return memp_fastmmio_addr_is_marked(address);
+
+	// 厳密に判定したければこっち
+	//return memp_fastmmio_addr_is_marked(address) || memp_fastmmio_addr_is_marked(address + size - 1);
 }
 
+// MMIOアクセステーブル　インクリメント
 static void memp_fastmmio_block_inc(UINT32 address)
 {
 	UINT idx;
 
 	if (address < MEMP_FASTMMIO_LOW_LIMIT) {
-		idx = (UINT)(address >> MEMP_FASTMMIO_LOW_SHIFT);
-		if (memp_fastmmio_low[idx] != 0xff) memp_fastmmio_low[idx]++;
+		// 特殊判定されるので登録不要
+		//idx = (UINT)(address >> MEMP_FASTMMIO_LOW_SHIFT);
+		//if (memp_fastmmio_low[idx] != 0xff) memp_fastmmio_low[idx]++;
 		return;
 	}
 	if (address < MEMP_FASTMMIO_MID_LIMIT) {
@@ -150,14 +163,15 @@ static void memp_fastmmio_block_inc(UINT32 address)
 	idx = (UINT)(address >> MEMP_FASTMMIO_HIGH_SHIFT);
 	if (memp_fastmmio_high[idx] != 0xff) memp_fastmmio_high[idx]++;
 }
-
+// MMIOアクセステーブル　デクリメント
 static void memp_fastmmio_block_dec(UINT32 address)
 {
 	UINT idx;
 
 	if (address < MEMP_FASTMMIO_LOW_LIMIT) {
-		idx = (UINT)(address >> MEMP_FASTMMIO_LOW_SHIFT);
-		if (memp_fastmmio_low[idx] != 0) memp_fastmmio_low[idx]--;
+		// 特殊判定されるので登録不要
+		//idx = (UINT)(address >> MEMP_FASTMMIO_LOW_SHIFT);
+		//if (memp_fastmmio_low[idx] != 0) memp_fastmmio_low[idx]--;
 		return;
 	}
 	if (address < MEMP_FASTMMIO_MID_LIMIT) {
@@ -168,7 +182,7 @@ static void memp_fastmmio_block_dec(UINT32 address)
 	idx = (UINT)(address >> MEMP_FASTMMIO_HIGH_SHIFT);
 	if (memp_fastmmio_high[idx] != 0) memp_fastmmio_high[idx]--;
 }
-
+// MMIOアクセスマップに直接アクセス不可領域を登録　カウンタ管理なので重複登録されてもよい
 void MEMCALL memp_mmio_range_add(UINT32 address, UINT32 leng)
 {
 	UINT32 end;
@@ -183,9 +197,9 @@ void MEMCALL memp_mmio_range_add(UINT32 address, UINT32 leng)
 		if (bend >= end || bend == 0xffffffffUL) break;
 		address = bend + 1;
 	}
-	tlb_flush_all();
+	tlb_flush_all(); // メモリ直接アクセス可能かが変わり得るのでTLBクリア
 }
-
+// MMIOアクセスマップから直接アクセス不可領域を削除
 void MEMCALL memp_mmio_range_remove(UINT32 address, UINT32 leng)
 {
 	UINT32 end;
@@ -200,21 +214,21 @@ void MEMCALL memp_mmio_range_remove(UINT32 address, UINT32 leng)
 		if (bend >= end || bend == 0xffffffffUL) break;
 		address = bend + 1;
 	}
-	tlb_flush_all();
+	tlb_flush_all(); // メモリ直接アクセス可能かが変わり得るのでTLBクリア
 }
-
+// MMIOアクセスマップ初期化　ついでに怪しい領域は先に登録しておく
 void MEMCALL memp_mmio_map_reset(void)
 {
-	ZeroMemory(memp_fastmmio_low, sizeof(memp_fastmmio_low));
+	//ZeroMemory(memp_fastmmio_low, sizeof(memp_fastmmio_low));
 	ZeroMemory(memp_fastmmio_mid, sizeof(memp_fastmmio_mid));
 	ZeroMemory(memp_fastmmio_high, sizeof(memp_fastmmio_high));
 
 	// 駄目な可能性がある範囲は事前登録
-	memp_mmio_range_add(I286_MEMWRITEMAX, USE_HIMEM - I286_MEMWRITEMAX);
-	memp_mmio_range_add(I286_MEMREADMAX, USE_HIMEM - I286_MEMREADMAX);
+	memp_mmio_range_add(I286_MEMWRITEMAX, USE_HIMEM - I286_MEMWRITEMAX); // I286_MEMWRITEMAX ～ USE_HIMEM
+	memp_mmio_range_add(I286_MEMREADMAX, USE_HIMEM - I286_MEMREADMAX); // I286_MEMREADMAX ～ USE_HIMEM
 	if (CPU_EXTLIMIT16 > USE_HIMEM) {
 		if (0x00f00000 > CPU_EXTLIMIT16) {
-			memp_mmio_range_add(CPU_EXTLIMIT16, 0x00f00000 - CPU_EXTLIMIT16);
+			memp_mmio_range_add(CPU_EXTLIMIT16, 0x00f00000 - CPU_EXTLIMIT16); // 0x00f00000 ～ CPU_EXTLIMIT16
 		}
 		memp_mmio_range_add(0x00f00000, 0x01000000 - 0x00f00000);
 	}
@@ -225,35 +239,39 @@ void MEMCALL memp_mmio_map_reset(void)
 #endif
 }
 
+// ページング時にメモリ直接アクセス可能かどうか調べて可能ならポインタを返す。不可ならNULLを返す。
+// 複雑な判定は止めて少しでも怪しければNULLを返す
 UINT8 * MEMCALL memp_get_direct_host_page(UINT32 address)
 {
-	if (address < I286_MEMWRITEMAX && address + 0x1000UL < I286_MEMWRITEMAX) { // READよりWRITEの方が小さいので小さい方で
-		return mem + address;
+	if (address < I286_MEMWRITEMAX && address + CPU_PAGE_SIZE < I286_MEMWRITEMAX) { 
+		return mem + address; // I286_MEMWRITEMAX未満は安全。I286_MEMREADMAXよりI286_MEMWRITEMAXの方が小さいので小さい方で判定
 	}
 	address &= CPU_ADRSMASK;
 	address &= 0xfffff000UL;
 
+	// NG領域を事前判定
 	if (CPU_EXTMEMBASE == NULL) {
-		return NULL;
+		return NULL; // 拡張メモリ無しは不可
 	}
 	if (address < USE_HIMEM) {
-		return NULL;
+		return NULL; // HIMEM未満は複雑なので全部不可とする
 	}
-	if (address >= CPU_EXTLIMIT16) {
+	if (address >= CPU_EXTLIMIT16) { // 16MB以内メモリ領域を超えていたら追加判定
 		if (address < 0x00100000UL) {
-			return NULL;
+			return NULL; // CPU_EXTLIMIT16以上0x100000未満はメモリ無しなので不可。16MB超えのメモリを積んでいたらCPU_EXTLIMIT16==0x100000なのでここには来ない
 		}
-		if ((address + 0x1000UL) < address) {
-			return NULL;
+		if ((address + CPU_PAGE_SIZE) < address) {
+			return NULL; // ページサイズを足してオーバーフローするメモリアドレスは不可
 		}
 #if defined(CPU_EXTLIMIT)
-		if ((address + 0x1000UL) > CPU_EXTLIMIT) {
-			return NULL;
+		if ((address + CPU_PAGE_SIZE) > CPU_EXTLIMIT) {
+			return NULL; // 全メモリ容量超えの領域も不可とする
 		}
 #endif
 	}
+	// 高速MMIOアクセステーブルで判定
 	if (memp_fastmmio_addr_is_marked(address) ||
-	    memp_fastmmio_addr_is_marked(address + 0x0fffUL)) {
+	    memp_fastmmio_addr_is_marked(address + (CPU_PAGE_SIZE - 1))) {
 		return NULL;
 	}
 	return CPU_EXTMEMBASE + address;
@@ -1552,7 +1570,7 @@ static void MEMCALL memp_write16_paging_slow(UINT32 address, REG16 value) {
 }
 
 static void MEMCALL memp_write32_paging_slow(UINT32 address, UINT32 value) {
-	if ((address + 1) & 0x7fff) {			// non 32kb boundary
+	if ((address & 0x7fff) <= 0x8000 - 4) {			// non 32kb boundary
 		address = address & CPU_ADRSMASK;
 		if (address < USE_HIMEM) {
 			memfn0.wr32[address >> 15](address, value);
@@ -1593,7 +1611,7 @@ static void MEMCALL memp_write32_paging_slow(UINT32 address, UINT32 value) {
 
 }
 
-// ---- メモリ読み書き関数
+// ---- 通常メモリ読み込み関数
 REG8 MEMCALL memp_read8(UINT32 address) {
 	
 #ifdef MEM_BDA_TRACEOUT
@@ -1983,7 +2001,7 @@ UINT32 MEMCALL memp_read32(UINT32 address) {
 	}
 }
 
-// 高速版　普通のメモリを優先的に処理する
+// ----- 高速版読み込み　普通のメモリを優先的に処理する
 REG8 MEMCALL memp_read8_fast(UINT32 address) {
 	UINT32 raw = address;
 
@@ -1991,7 +2009,7 @@ REG8 MEMCALL memp_read8_fast(UINT32 address) {
 		return mem[address];
 	}
 	address = address & CPU_ADRSMASK;
-	if (memp_fastmmio_range_is_marked(address)) return memp_read8_slow(raw);
+	if (memp_fastmmio_addr_is_marked(address)) return memp_read8_slow(raw);
 	return CPU_EXTMEMBASE[address];
 }
 
@@ -2002,7 +2020,7 @@ REG16 MEMCALL memp_read16_fast(UINT32 address) {
 		return LOADINTELWORD(mem + address);
 	}
 	address = address & CPU_ADRSMASK;
-	if (!((address + 1) & 0x7fff) || memp_fastmmio_range_is_marked(address)) return memp_read16_slow(raw);
+	if (!((address + 1) & 0x7fff) || memp_fastmmio_range_is_marked(address, 2)) return memp_read16_slow(raw);
 	return LOADINTELWORD(CPU_EXTMEMBASE + address);
 }
 
@@ -2013,11 +2031,11 @@ UINT32 MEMCALL memp_read32_fast(UINT32 address) {
 		return LOADINTELDWORD(mem + address);
 	}
 	address = address & CPU_ADRSMASK;
-	if (!((address & 0x7fff) <= 0x8000 - 4) || memp_fastmmio_range_is_marked(address)) return memp_read32_slow(raw);
+	if (!((address & 0x7fff) <= 0x8000 - 4) || memp_fastmmio_range_is_marked(address, 4)) return memp_read32_slow(raw);
 	return LOADINTELDWORD(CPU_EXTMEMBASE + address);
 }
 
-// ----
+// ---- 通常メモリ読み込み関数（codefetch用）
 PF_UINT8 MEMCALL memp_read8_codefetch(UINT32 address) {
 	
 	if (address < I286_MEMREADMAX) {
@@ -2154,7 +2172,7 @@ UINT32 MEMCALL memp_read32_codefetch(UINT32 address) {
 	}
 }
 
-// 高速版（codefetch用）　普通のメモリを優先的に処理する
+// ---- 高速版読み込み（codefetch用）　普通のメモリを優先的に処理する
 PF_UINT8 MEMCALL memp_read8_codefetch_fast(UINT32 address) {
 	UINT32 raw = address;
 
@@ -2162,7 +2180,7 @@ PF_UINT8 MEMCALL memp_read8_codefetch_fast(UINT32 address) {
 		return mem[address];
 	}
 	address = address & CPU_ADRSMASK;
-	if (memp_fastmmio_range_is_marked(address)) return memp_read8_codefetch_slow(raw);
+	if (memp_fastmmio_addr_is_marked(address)) return memp_read8_codefetch_slow(raw);
 	return CPU_EXTMEMBASE[address];
 }
 
@@ -2173,7 +2191,7 @@ PF_UINT16 MEMCALL memp_read16_codefetch_fast(UINT32 address) {
 		return LOADINTELWORD(mem + address);
 	}
 	address = address & CPU_ADRSMASK;
-	if (!((address + 1) & 0x7fff) || memp_fastmmio_range_is_marked(address)) return memp_read16_codefetch_slow(raw);
+	if (!((address + 1) & 0x7fff) || memp_fastmmio_range_is_marked(address, 2)) return memp_read16_codefetch_slow(raw);
 	return LOADINTELWORD(CPU_EXTMEMBASE + address);
 }
 
@@ -2184,11 +2202,11 @@ PF_UINT32 MEMCALL memp_read32_codefetch_fast(UINT32 address) {
 		return LOADINTELDWORD(mem + address);
 	}
 	address = address & CPU_ADRSMASK;
-	if (!((address & 0x7fff) <= 0x8000 - 4) || memp_fastmmio_range_is_marked(address)) return memp_read32_codefetch_slow(raw);
+	if (!((address & 0x7fff) <= 0x8000 - 4) || memp_fastmmio_range_is_marked(address, 4)) return memp_read32_codefetch_slow(raw);
 	return LOADINTELDWORD(CPU_EXTMEMBASE + address);
 }
 
-// 高速版（paging用）　普通のメモリを優先的に処理する
+// ---- 通常メモリ読み込み関数（paging用）
 PF_UINT8 MEMCALL memp_read8_paging(UINT32 address) {
 
 	return memp_read8_codefetch_fast(address);
@@ -2217,6 +2235,7 @@ PF_UINT32 MEMCALL memp_read32_paging_fast(UINT32 address) {
 	return memp_read32_codefetch_fast(address);
 }
 
+// ---- 通常メモリ書き込み関数
 void MEMCALL memp_write8(UINT32 address, REG8 value) {
 	
 #ifdef MEM_BDA_TRACEOUT
@@ -2643,7 +2662,7 @@ void MEMCALL memp_write32(UINT32 address, UINT32 value) {
 	}
 }
 
-// 高速版　普通のメモリを優先的に処理する
+// ---- 高速版書き込み　普通のメモリを優先的に処理する
 void MEMCALL memp_write8_fast(UINT32 address, REG8 value) {
 	UINT32 raw = address;
 
@@ -2653,7 +2672,7 @@ void MEMCALL memp_write8_fast(UINT32 address, REG8 value) {
 		return;
 	}
 	address = address & CPU_ADRSMASK;
-	if (memp_fastmmio_range_is_marked(address)) {
+	if (memp_fastmmio_addr_is_marked(address)) {
 		memp_write8_slow(raw, value);
 		return;
 	}
@@ -2668,7 +2687,7 @@ void MEMCALL memp_write16_fast(UINT32 address, REG16 value) {
 		return;
 	}
 	address = address & CPU_ADRSMASK;
-	if (!((address + 1) & 0x7fff) || memp_fastmmio_range_is_marked(address)) {
+	if (!((address + 1) & 0x7fff) || memp_fastmmio_range_is_marked(address, 2)) {
 		memp_write16_slow(raw, value);
 		return;
 	}
@@ -2683,13 +2702,14 @@ void MEMCALL memp_write32_fast(UINT32 address, UINT32 value) {
 		return;
 	}
 	address = address & CPU_ADRSMASK;
-	if (!((address & 0x7fff) <= 0x8000 - 4) || memp_fastmmio_range_is_marked(address)) {
+	if (!((address & 0x7fff) <= 0x8000 - 4) || memp_fastmmio_range_is_marked(address, 4)) {
 		memp_write32_slow(raw, value);
 		return;
 	}
 	STOREINTELDWORD(CPU_EXTMEMBASE + address, value);
 }
 
+// ---- 通常メモリ書き込み関数（paging用）
 void MEMCALL memp_write8_paging(UINT32 address, REG8 value) {
 	
 	//if (address==0x0457) return; // XXX: IDEのデータ破壊回避のための暫定
@@ -2772,7 +2792,7 @@ void MEMCALL memp_write32_paging(UINT32 address, UINT32 value) {
 		return;
 	}
 	else{
-		if ((address + 1) & 0x7fff) {			// non 32kb boundary
+		if ((address & 0x7fff) <= 0x8000 - 4) {			// non 32kb boundary
 			address = address & CPU_ADRSMASK;
 			if (address < USE_HIMEM) {
 				memfn0.wr32[address >> 15](address, value);
@@ -2813,7 +2833,7 @@ void MEMCALL memp_write32_paging(UINT32 address, UINT32 value) {
 	}
 }
 
-// 高速版（paging用）　普通のメモリを優先的に処理する
+// ---- 高速版書き込み（paging用）　普通のメモリを優先的に処理する
 void MEMCALL memp_write8_paging_fast(UINT32 address, REG8 value) {
 	UINT32 raw = address;
 
@@ -2822,7 +2842,7 @@ void MEMCALL memp_write8_paging_fast(UINT32 address, REG8 value) {
 		return;
 	}
 	address = address & CPU_ADRSMASK;
-	if (memp_fastmmio_range_is_marked(address)) {
+	if (memp_fastmmio_addr_is_marked(address)) {
 		memp_write8_paging_slow(raw, value);
 		return;
 	}
@@ -2837,7 +2857,7 @@ void MEMCALL memp_write16_paging_fast(UINT32 address, REG16 value) {
 		return;
 	}
 	address = address & CPU_ADRSMASK;
-	if (!((address + 1) & 0x7fff) || memp_fastmmio_range_is_marked(address)) {
+	if (!((address + 1) & 0x7fff) || memp_fastmmio_range_is_marked(address, 2)) {
 		memp_write16_paging_slow(raw, value);
 		return;
 	}
@@ -2852,7 +2872,7 @@ void MEMCALL memp_write32_paging_fast(UINT32 address, UINT32 value) {
 		return;
 	}
 	address = address & CPU_ADRSMASK;
-	if (!((address & 0x7fff) <= 0x8000 - 4) || memp_fastmmio_range_is_marked(address)) {
+	if (!((address & 0x7fff) <= 0x8000 - 4) || memp_fastmmio_range_is_marked(address, 4)) {
 		memp_write32_paging_slow(raw, value);
 		return;
 	}

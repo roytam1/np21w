@@ -27,6 +27,13 @@
 #include "cpu.h"
 #include "ia32.mcr"
 
+// USE_LEGACY_MEMORY_ACCESSがある場合は旧ルーチンを使用する
+#if defined(USE_LEGACY_MEMORY_ACCESS)
+#define	IA32_MEMORY_FAST_PATH	0
+#else
+#define	IA32_MEMORY_FAST_PATH	1
+#endif
+
 #if defined(SUPPORT_WAB_NPDISP)
 #define NPDISP_WINDOW_MAGIC	0x504e
 extern UINT32	g_npdisp_windowAddr;
@@ -201,8 +208,10 @@ struct tlb_entry {
 #define	TLB_ENTRY_TAG_GLOBAL		CPU_PTE_GLOBAL_PAGE	/* (1 << 8) */
 #define	TLB_ENTRY_TAG_MAX_SHIFT		12
 	UINT32	paddr;	/* physical address */
+#if IA32_MEMORY_FAST_PATH
 	UINT8	*host_page;	/* direct host pointer for ordinary RAM page */
 	UINT32	fast_flags;	/* predecoded access/direct flags */
+#endif
 };
 /*
  * TLB fast path
@@ -235,15 +244,19 @@ do { \
 	(ep)->tag |= (bit) & (CPU_PTE_WRITABLE|CPU_PTE_USER_MODE); \
 } while (/*CONSTCOND*/ 0)
 
-#define	TLBF_SUPER_READ		0x00000001UL
-#define	TLBF_USER_READ		0x00000002UL
-#define	TLBF_SUPER_WRITE	0x00000004UL	/* valid when CR0.WP=0 */
-#define	TLBF_SUPER_WRITE_WP	0x00000008UL	/* valid when CR0.WP=1 */
-#define	TLBF_USER_WRITE		0x00000010UL
-#define	TLBF_CODE_SUPER		0x00000020UL
-#define	TLBF_CODE_USER		0x00000040UL
-#define	TLBF_DIRECT_READ	0x00000100UL
-#define	TLBF_DIRECT_WRITE	0x00000200UL
+#if IA32_MEMORY_FAST_PATH
+// ページ高速アクセスの簡易判定のためのフラグ
+// このフラグ判定で弾かれた場合は通常のpaging関数で詳細判定する
+#define	TLBF_SUPER_READ		0x00000001UL // スーパーバイザモード読み取り許可
+#define	TLBF_USER_READ		0x00000002UL // ユーザーモード読み取り許可
+#define	TLBF_SUPER_WRITE	0x00000004UL // CR0.WP==0の場合のスーパーバイザモード書き込み許可
+#define	TLBF_SUPER_WRITE_WP	0x00000008UL // CR0.WP==1の場合のスーパーバイザモード書き込み許可
+#define	TLBF_USER_WRITE		0x00000010UL // ユーザーモード書き込み許可
+#define	TLBF_CODE_SUPER		0x00000020UL // スーパーバイザモード命令フェッチ許可
+#define	TLBF_CODE_USER		0x00000040UL // ユーザーモード命令フェッチ許可
+#define	TLBF_DIRECT_READ	0x00000100UL // host_pageポインタへ直接読み取り可能
+#define	TLBF_DIRECT_WRITE	0x00000200UL // host_pageポインタへ直接書き込み可能
+#endif
 
 #define	NTLB		2	/* 0: DTLB, 1: ITLB */
 #define	NENTRY		(1 << 6)
@@ -255,6 +268,7 @@ typedef struct {
 } tlb_t;
 static tlb_t tlb[NTLB];
 
+#if IA32_MEMORY_FAST_PATH
 #if defined(__GNUC__)
 #define TLB_FAST_INLINE static __inline__ __attribute__((always_inline))
 #elif defined(_MSC_VER)
@@ -339,6 +353,7 @@ tlb_make_fast_flags(UINT entry, int bit, int n, int direct)
 	}
 	return flags;
 }
+#endif	/* IA32_MEMORY_FAST_PATH */
 
 static void MEMCALL tlb_update(UINT32 laddr, UINT entry, int ucrw);
 
@@ -347,14 +362,16 @@ static UINT32 MEMCALL paging(UINT32 laddr, int ucrw);
 
 struct tlb_entry* MEMCALL tlb_lookup(UINT32 laddr, int ucrw);
 
-#if !defined(SUPPORT_IA32_HAXM)
+/* 命令フェッチ時のページをキャッシュする　基本は順次アクセスなので1ページのみキャッシュ */
+#if IA32_MEMORY_FAST_PATH && !defined(SUPPORT_IA32_HAXM)
+
 #define TLB_PAGE_OFFSET(laddr)	((laddr) & CPU_PAGE_MASK)
 #define TLB_PAGE_BASE(laddr)	((laddr) & ~CPU_PAGE_MASK)
 
 typedef struct codefetch_cache_entry {
-	UINT32	lpage;		/* linear page base */
-	int	ucrw;		/* permission key used to create this cache */
-	UINT8	*host_page;	/* direct host pointer for this linear page */
+	UINT32	lpage;		/* キャッシュ対象の線形ページ先頭アドレス　linear page base */
+	int	ucrw;		/* アクセス種別　permission key used to create this cache */
+	UINT8	*host_page;	/* 直接アクセス可能な場合のポインタ　direct host pointer for this linear page */
 } codefetch_cache_entry_t;
 
 static codefetch_cache_entry_t codefetch_cache;
@@ -508,7 +525,7 @@ cpu_memory_access_la_RMW_d(UINT32 laddr, UINT32 (CPUCALL *func)(UINT32, void *),
 UINT8 MEMCALL
 cpu_linear_memory_read_b(UINT32 laddr, int ucrw)
 {
-#if !defined(SUPPORT_IA32_HAXM)
+#if IA32_MEMORY_FAST_PATH && !defined(SUPPORT_IA32_HAXM)
 	struct tlb_entry *ep;
 	UINT offset;
 
@@ -526,7 +543,7 @@ cpu_linear_memory_read_b(UINT32 laddr, int ucrw)
 PF_UINT8 MEMCALL
 cpu_linear_memory_read_b_codefetch(UINT32 laddr, int ucrw)
 {
-#if !defined(SUPPORT_IA32_HAXM)
+#if IA32_MEMORY_FAST_PATH && !defined(SUPPORT_IA32_HAXM)
 	struct tlb_entry *ep;
 	UINT offset;
 	UINT8 *host_page;
@@ -554,12 +571,12 @@ cpu_linear_memory_read_w(UINT32 laddr, int ucrw)
 {
 	UINT32 paddr[2];
 	UINT16 value;
-#if !defined(SUPPORT_IA32_HAXM)
+#if IA32_MEMORY_FAST_PATH && !defined(SUPPORT_IA32_HAXM)
 	struct tlb_entry *ep;
 	UINT offset;
 #endif
 
-#if !defined(SUPPORT_IA32_HAXM)
+#if IA32_MEMORY_FAST_PATH && !defined(SUPPORT_IA32_HAXM)
 	ep = tlb_lookup_linear(laddr, ucrw);
 	if (ep != NULL) {
 		offset = TLB_PAGE_OFFSET(laddr);
@@ -588,13 +605,13 @@ cpu_linear_memory_read_w_codefetch(UINT32 laddr, int ucrw)
 {
 	UINT32 paddr[2];
 	PF_UINT16 value;
-#if !defined(SUPPORT_IA32_HAXM)
+#if IA32_MEMORY_FAST_PATH && !defined(SUPPORT_IA32_HAXM)
 	struct tlb_entry *ep;
 	UINT offset;
 	UINT8 *host_page;
 #endif
 	
-#if !defined(SUPPORT_IA32_HAXM)
+#if IA32_MEMORY_FAST_PATH && !defined(SUPPORT_IA32_HAXM)
 	offset = TLB_PAGE_OFFSET(laddr);
 	if ((laddr + 1) & CPU_PAGE_MASK) {
 		host_page = codefetch_cache_lookup(laddr, ucrw);
@@ -635,7 +652,7 @@ cpu_linear_memory_read_d(UINT32 laddr, int ucrw)
 	UINT32 value;
 	UINT remain;
 
-#if !defined(SUPPORT_IA32_HAXM)
+#if IA32_MEMORY_FAST_PATH && !defined(SUPPORT_IA32_HAXM)
 	{
 		struct tlb_entry *ep;
 		UINT offset;
@@ -698,7 +715,7 @@ cpu_linear_memory_read_d_codefetch(UINT32 laddr, int ucrw)
 	UINT32 value;
 	UINT remain;
 
-#if !defined(SUPPORT_IA32_HAXM)
+#if IA32_MEMORY_FAST_PATH && !defined(SUPPORT_IA32_HAXM)
 	{
 		struct tlb_entry *ep;
 		UINT offset;
@@ -863,7 +880,7 @@ cpu_linear_memory_reads(UINT32 laddr, void* dat, UINT leng, int ucrw)
 	while (leng > 0) {
 		UINT32 inPageSize = CPU_PAGE_SIZE - (laddr & CPU_PAGE_MASK);
 		inPageSize = min(inPageSize, leng);
-#if !defined(SUPPORT_IA32_HAXM)
+#if IA32_MEMORY_FAST_PATH && !defined(SUPPORT_IA32_HAXM)
 		{
 			struct tlb_entry *ep;
 			UINT offset;
@@ -895,7 +912,7 @@ cpu_linear_memory_reads(UINT32 laddr, void* dat, UINT leng, int ucrw)
 void MEMCALL
 cpu_linear_memory_write_b(UINT32 laddr, UINT8 value, int ucrw)
 {
-#if !defined(SUPPORT_IA32_HAXM)
+#if IA32_MEMORY_FAST_PATH && !defined(SUPPORT_IA32_HAXM)
 	struct tlb_entry *ep;
 	UINT offset;
 
@@ -918,7 +935,7 @@ cpu_linear_memory_write_w(UINT32 laddr, UINT16 value, int ucrw)
 {
 	UINT32 paddr[2];
 
-#if !defined(SUPPORT_IA32_HAXM)
+#if IA32_MEMORY_FAST_PATH && !defined(SUPPORT_IA32_HAXM)
 	{
 		struct tlb_entry *ep;
 		UINT offset;
@@ -962,7 +979,7 @@ cpu_linear_memory_write_d(UINT32 laddr, UINT32 value, int ucrw)
 	UINT32 paddr[2];
 	UINT remain;
 
-#if !defined(SUPPORT_IA32_HAXM)
+#if IA32_MEMORY_FAST_PATH && !defined(SUPPORT_IA32_HAXM)
 	{
 		struct tlb_entry *ep;
 		UINT offset;
@@ -1122,7 +1139,7 @@ cpu_linear_memory_writes(UINT32 laddr, void* dat, UINT leng, int ucrw)
 	while (leng > 0) {
 		UINT32 inPageSize = CPU_PAGE_SIZE - (laddr & CPU_PAGE_MASK);
 		inPageSize = min(inPageSize, leng);
-#if !defined(SUPPORT_IA32_HAXM)
+#if IA32_MEMORY_FAST_PATH && !defined(SUPPORT_IA32_HAXM)
 		{
 			struct tlb_entry *ep;
 			UINT offset;
@@ -1204,7 +1221,11 @@ paging(UINT32 laddr, int ucrw)
 	UINT err;
 
 #if !defined(SUPPORT_IA32_HAXM) // HAXMはエミュレーションTLBを使わない
+#if IA32_MEMORY_FAST_PATH
 	ep = tlb_lookup_fast(laddr, ucrw);
+#else
+	ep = tlb_lookup(laddr, ucrw);
+#endif
 	if (ep != NULL)
 		return ep->paddr + (laddr & CPU_PAGE_MASK);
 #endif
@@ -1296,7 +1317,7 @@ void
 tlb_init(void)
 {
 	memset(tlb, 0, sizeof(tlb));
-#if !defined(SUPPORT_IA32_HAXM)
+#if IA32_MEMORY_FAST_PATH && !defined(SUPPORT_IA32_HAXM)
 	codefetch_cache_invalidate();
 #endif
 }
@@ -1308,7 +1329,7 @@ tlb_flush()
 	int i;
 	int n;
 
-#if !defined(SUPPORT_IA32_HAXM)
+#if IA32_MEMORY_FAST_PATH && !defined(SUPPORT_IA32_HAXM)
 	codefetch_cache_invalidate();
 #endif
 
@@ -1335,7 +1356,7 @@ tlb_flush_page(UINT32 laddr)
 	int idx;
 	int n;
 
-#if !defined(SUPPORT_IA32_HAXM)
+#if IA32_MEMORY_FAST_PATH && !defined(SUPPORT_IA32_HAXM)
 	codefetch_cache_invalidate_page(laddr);
 #endif
 
@@ -1354,8 +1375,37 @@ tlb_flush_page(UINT32 laddr)
 struct tlb_entry * MEMCALL
 tlb_lookup(UINT32 laddr, int ucrw)
 {
-
+#if IA32_MEMORY_FAST_PATH
 	return tlb_lookup_fast(laddr, ucrw);
+#else
+	struct tlb_entry *ep;
+	UINT bit;
+	int idx;
+	int n;
+
+	n = (ucrw & CPU_PAGE_CODE) ? 1 : 0;
+	idx = (laddr >> TLB_ENTRY_SHIFT) & TLB_ENTRY_MASK;
+	ep = &tlb[n].entry[idx];
+
+	if (TLB_IS_VALID(ep)) {
+		if ((laddr & TLB_TAG_MASK) == TLB_GET_TAG_ADDR(ep)) {
+			bit = ucrw & (CPU_PAGE_WRITE|CPU_PAGE_USER_MODE);
+			bit |= ep->tag & (CPU_PTE_WRITABLE|CPU_PTE_USER_MODE);
+			bit |= CPU_STAT_WP;
+#if !defined(USE_PAGE_ACCESS_TABLE)
+			if ((page_access & (1 << bit)))
+#else
+			if (page_access_bit[bit])
+#endif
+			{
+				if (!(ucrw & CPU_PAGE_WRITE) || TLB_IS_DIRTY(ep)) {
+					return ep;
+				}
+			}
+		}
+	}
+	return NULL;
+#endif
 }
 
 static void MEMCALL
@@ -1369,7 +1419,7 @@ tlb_update(UINT32 laddr, UINT entry, int bit)
 	idx = (laddr >> TLB_ENTRY_SHIFT) & TLB_ENTRY_MASK;
 	ep = &tlb[n].entry[idx];
 
-#if !defined(SUPPORT_IA32_HAXM)
+#if IA32_MEMORY_FAST_PATH && !defined(SUPPORT_IA32_HAXM)
 	if (n == 1) {
 		codefetch_cache_invalidate_page(laddr);
 	}
@@ -1378,6 +1428,8 @@ tlb_update(UINT32 laddr, UINT entry, int bit)
 	TLB_SET_TAG_ADDR(ep, laddr);
 	TLB_SET_TAG_FLAGS(ep, entry, bit);
 	ep->paddr = entry & CPU_PTE_BASEADDR_MASK;
+#if IA32_MEMORY_FAST_PATH
 	ep->host_page = memp_get_direct_host_page(ep->paddr);
 	ep->fast_flags = tlb_make_fast_flags(entry, bit, n, ep->host_page != NULL);
+#endif
 }

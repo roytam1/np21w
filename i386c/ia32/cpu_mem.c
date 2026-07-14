@@ -656,6 +656,52 @@ cpu_vmemorywrite_commit_d(UINT32 paddr[2], UINT remain, UINT32 data)
 }
 
 
+#if defined(USE_CPU_BULKREP)
+UINT8 * MEMCALL
+cpu_vmemory_get_direct_host_ptr(int idx, UINT32 offset, UINT leng, int ucrw)
+{
+	descriptor_t *sdp;
+	UINT32 addr;
+
+	__ASSERT((unsigned int)idx < CPU_SEGREG_NUM);
+	__ASSERT(leng > 0);
+
+	sdp = &CPU_STAT_SREG(idx);
+	addr = sdp->u.seg.segbase + offset;
+
+	if (!CPU_STAT_PM) {
+		return cpu_lmemory_get_direct_host_ptr(addr, leng, ucrw);
+	}
+
+	/*
+	 * Non-faulting segment probe for REP bulk fast paths.
+	 * If the descriptor has not already been validated for the whole
+	 * address space, fall back to the old one-element path so that segment
+	 * limit exceptions occur at exactly the normal instruction point.
+	 */
+	if (!SEG_IS_VALID(sdp) || !SEG_IS_PRESENT(sdp) || SEG_IS_SYSTEM(sdp)) {
+		return NULL;
+	}
+	if ((ucrw & CPU_PAGE_WRITE) != 0) {
+		if (SEG_IS_CODE(sdp) ||
+		    (SEG_IS_DATA(sdp) && !SEG_IS_WRITABLE_DATA(sdp)) ||
+		    !(sdp->flag & CPU_DESC_FLAG_WRITABLE)) {
+			return NULL;
+		}
+	} else {
+		if ((SEG_IS_CODE(sdp) && !SEG_IS_READABLE_CODE(sdp)) ||
+		    !(sdp->flag & CPU_DESC_FLAG_READABLE)) {
+			return NULL;
+		}
+	}
+	if (!(sdp->flag & CPU_DESC_FLAG_WHOLEADR)) {
+		return NULL;
+	}
+	return cpu_lmemory_get_direct_host_ptr(addr, leng, ucrw);
+}
+#endif
+
+
 DECLARE_VIRTUAL_ADDRESS_MEMORY_RW_FUNCTIONS(b, UINT8, 1)
 DECLARE_VIRTUAL_ADDRESS_MEMORY_RMW_FUNCTIONS(b, UINT8, 1)
 DECLARE_VIRTUAL_ADDRESS_MEMORY_RW_FUNCTIONS(w, UINT16, 2)

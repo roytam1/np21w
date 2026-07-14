@@ -107,9 +107,9 @@ static void trace_fmt_ex(const char *fmt, ...)
 #define MEMP_ALIGN_CACHE __attribute__((aligned(64)))
 #endif
 
-//static MEMP_ALIGN_CACHE UINT8 memp_fastmmio_low[MEMP_FASTMMIO_LOW_COUNT];
-static MEMP_ALIGN_CACHE UINT8 memp_fastmmio_mid[MEMP_FASTMMIO_MID_COUNT];
-static MEMP_ALIGN_CACHE UINT8 memp_fastmmio_high[MEMP_FASTMMIO_HIGH_COUNT];
+//static MEMP_ALIGN_CACHE unsigned int memp_fastmmio_low[MEMP_FASTMMIO_LOW_COUNT];
+static MEMP_ALIGN_CACHE unsigned int memp_fastmmio_mid[MEMP_FASTMMIO_MID_COUNT];
+static MEMP_ALIGN_CACHE unsigned int memp_fastmmio_high[MEMP_FASTMMIO_HIGH_COUNT];
 
 MEMP_FASTMMIO_INLINE UINT32 memp_fastmmio_block_end(UINT32 address)
 {
@@ -157,11 +157,11 @@ static void memp_fastmmio_block_inc(UINT32 address)
 	}
 	if (address < MEMP_FASTMMIO_MID_LIMIT) {
 		idx = (UINT)((address - MEMP_FASTMMIO_LOW_LIMIT) >> MEMP_FASTMMIO_MID_SHIFT);
-		if (memp_fastmmio_mid[idx] != 0xff) memp_fastmmio_mid[idx]++;
+		if (memp_fastmmio_mid[idx] != UINT_MAX) memp_fastmmio_mid[idx]++;
 		return;
 	}
 	idx = (UINT)(address >> MEMP_FASTMMIO_HIGH_SHIFT);
-	if (memp_fastmmio_high[idx] != 0xff) memp_fastmmio_high[idx]++;
+	if (memp_fastmmio_high[idx] != UINT_MAX) memp_fastmmio_high[idx]++;
 }
 // MMIOアクセステーブル　デクリメント
 static void memp_fastmmio_block_dec(UINT32 address)

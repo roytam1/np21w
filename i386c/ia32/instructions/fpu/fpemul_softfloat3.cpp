@@ -866,6 +866,7 @@ static void FPU_FSTENV(UINT32 addr)
 		fpu_memorywrite_d(addr + 20, FPU_LASTINSTOP);
 		break;
 	}
+	CPU_WORKCLOCK(60);
 }
 static void FPU_FLDENV(UINT32 addr)
 {
@@ -885,6 +886,7 @@ static void FPU_FLDENV(UINT32 addr)
 		break;
 	}
 	FPU_STAT_TOP = FP_TOP_GET();
+	CPU_WORKCLOCK(60);
 }
 static void FPU_FSAVE(UINT32 addr)
 {
@@ -898,6 +900,7 @@ static void FPU_FSAVE(UINT32 addr)
 		start += 10;
 	}
 	FPU_FINIT();
+	CPU_WORKCLOCK(60);
 }
 static void FPU_FRSTOR(UINT32 addr)
 {
@@ -910,6 +913,7 @@ static void FPU_FRSTOR(UINT32 addr)
 		FPU_FLD80(addr + start, FPU_ST(i));
 		start += 10;
 	}
+	CPU_WORKCLOCK(60);
 }
 static void FPU_FXSAVE(UINT32 addr) {
 	UINT start;
@@ -1051,11 +1055,13 @@ static void EA_TREE(UINT op)
 			TRACEOUT(("FDIV EA"));
 			FPU_STATUSWORD &= ~FP_C1_FLAG;
 			FPU_FDIV_EA(FPU_STAT_TOP);
+			CPU_WORKCLOCK(30);
 			break;
 		case 7:	/* FDIVR (íPê∏ìxé¿êî) */
 			TRACEOUT(("FDIVR EA"));
 			FPU_STATUSWORD &= ~FP_C1_FLAG;
 			FPU_FDIVR_EA(FPU_STAT_TOP);
+			CPU_WORKCLOCK(30);
 			break;
 		default:
 			break;
@@ -1115,11 +1121,13 @@ SF_ESC0(void)
 			TRACEOUT(("FDIV"));
 			FPU_STATUSWORD &= ~FP_C1_FLAG;
 			FPU_FDIV(FPU_STAT_TOP,FPU_ST(sub));
+			CPU_WORKCLOCK(30);
 			break;
 		case 7:	/* FDIVR */
 			TRACEOUT(("FDIVR"));
 			FPU_STATUSWORD &= ~FP_C1_FLAG;
 			FPU_FDIVR(FPU_STAT_TOP,FPU_ST(sub));
+			CPU_WORKCLOCK(30);
 			break;
 		}
 	} else {
@@ -1351,6 +1359,7 @@ SF_ESC1(void)
 				FPU_FCOS();	
 				break;
 			}
+			CPU_WORKCLOCK(50);
 			break;
 
 		default:

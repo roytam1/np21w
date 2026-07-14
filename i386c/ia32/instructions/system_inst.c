@@ -330,6 +330,7 @@ MOV_CdRd(void)
 			}
 
 			CPU_STAT_WP = (CPU_CR0 & CPU_CR0_WP) ? 0x10 : 0;
+			tlb_update_access_flags();
 			break;
 
 		case 2: /* CR2 */

@@ -54,6 +54,9 @@ void MEMCALL cpu_vmemorywrite_b(int idx, UINT32 offset, UINT8 value);
 #define	cpu_vmemorywrite(i,o,v)		cpu_vmemorywrite_b(i,o,v)
 void MEMCALL cpu_vmemorywrite_w(int idx, UINT32 offset, UINT16 value);
 void MEMCALL cpu_vmemorywrite_d(int idx, UINT32 offset, UINT32 value);
+#if defined(USE_CPU_BULKREP)
+UINT8 * MEMCALL cpu_vmemory_get_direct_host_ptr(int idx, UINT32 offset, UINT leng, int ucrw);
+#endif
 void MEMCALL cpu_vmemorywrite_q(int idx, UINT32 offset, UINT64 value);
 void MEMCALL cpu_vmemorywrite_f(int idx, UINT32 offset, const REG80 *value);
 UINT8 MEMCALL cpu_vmemoryread_b(int idx, UINT32 offset);

@@ -173,6 +173,9 @@ ia32_setextsize(UINT32 size)
 	CPU_EMSPTR[1] = mem + 0xc4000;
 	CPU_EMSPTR[2] = mem + 0xc8000;
 	CPU_EMSPTR[3] = mem + 0xcc000;
+
+	// MMIOマップ再構築
+	memp_mmio_map_reset();
 }
 
 void

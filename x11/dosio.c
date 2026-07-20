@@ -145,6 +145,23 @@ file_getdatetime(FILEH handle, DOSDATE *dosdate, DOSTIME *dostime)
 	return -1;
 }
 
+BRESULT
+file_getshortname(const OEMCHAR *path, OEMCHAR *shortname, UINT cchShortName)
+{
+
+	(void)path;
+	(void)shortname;
+	(void)cchShortName;
+	return FAILURE;
+}
+
+BOOL
+file_islink(const OEMCHAR *path)
+{
+	struct stat sb;
+	return (lstat(path, &sb) == 0 && S_ISLNK(sb.st_mode)) ? TRUE : FALSE;
+}
+
 short
 file_delete(const OEMCHAR *path)
 {
@@ -273,6 +290,7 @@ file_listnext(FLISTH hdl, FLINFO *fli)
 		return FAILURE;
 	}
 
+	fli->shortpath[0] = '\0';
 	fli->caps = FLICAPS_SIZE | FLICAPS_ATTR | FLICAPS_DATE | FLICAPS_TIME;
 	fli->size = sb.st_size;
 	fli->attr = 0;

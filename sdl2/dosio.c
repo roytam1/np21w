@@ -7,6 +7,9 @@
 #include "dosio.h"
 #if defined(WIN32)
 #include <direct.h>
+#ifndef FILE_ATTRIBUTE_REPARSE_POINT
+#define FILE_ATTRIBUTE_REPARSE_POINT 0x00000400
+#endif
 #else
 #include <dirent.h>
 #endif
@@ -151,6 +154,31 @@ struct stat sb;
 	return(-1);
 }
 
+BRESULT file_getshortname(const char *path, char *shortname, UINT cchShortName) {
+
+	(void)path;
+	(void)shortname;
+	(void)cchShortName;
+	return(FAILURE);
+}
+
+BOOL file_islink(const char *path) {
+#if defined(WIN32)
+	DWORD attr;
+#if defined(OSLANG_UTF8)
+	char sjis[MAX_PATH];
+	codecnv_utf8tosjis(sjis, sizeof(sjis), path, (UINT)-1);
+	attr = GetFileAttributes(sjis);
+#else
+	attr = GetFileAttributes(path);
+#endif
+	return (attr != INVALID_FILE_ATTRIBUTES && (attr & FILE_ATTRIBUTE_REPARSE_POINT)) ? TRUE : FALSE;
+#else
+	struct stat sb;
+	return (lstat(path, &sb) == 0 && S_ISLNK(sb.st_mode)) ? TRUE : FALSE;
+#endif
+}
+
 short file_delete(const char *path) {
 
 	return(remove(path));
@@ -240,6 +268,7 @@ static BRESULT setflist(WIN32_FIND_DATA *w32fd, FLINFO *fli) {
 		(!file_cmpname(w32fd->cFileName, "..")))) {
 		return(FAILURE);
 	}
+	memset(fli, 0, sizeof(*fli));
 	fli->caps = FLICAPS_SIZE | FLICAPS_ATTR;
 	fli->size = w32fd->nFileSizeLow;
 	fli->attr = w32fd->dwFileAttributes;

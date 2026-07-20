@@ -6967,6 +6967,8 @@ static void pc98_cirrus_reset(CirrusVGAState * s, int device_id, int is_pci)
 	
 	np2clvga.VRAMWindowAddr2 = 0;
 	np2clvga.VRAMWindowAddr3 = 0;
+
+	s_cirrus_memp_map_count = 0;
 	
 	pc98_cirrus_vga_initVRAMWindowAddr();
 	

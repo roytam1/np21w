@@ -33,6 +33,7 @@
 #define IDD_CALENDAR                    161
 #define IDD_SNDSB16                     162
 #define IDD_SMPU98                      163
+#define IDD_SNDMAPPER                   164
 #define IDD_ABOUT                       171
 #define IDD_LGY98                       180
 #define IDD_NETWORK                     181
@@ -245,6 +246,12 @@
 #define IDC_VOLMIDISTR                  15223
 #define IDC_VOLHW                       15224
 #define IDC_VOLHWSTR                    15225
+#define IDC_FDDSNDDEV                   15260
+#define IDC_VOLFDD                      15261
+#define IDC_VOLFDDSTR                   15262
+#define IDC_BRDSNDDEV                   15263
+#define IDC_VOLBRD                      15264
+#define IDC_VOLBRDSTR                   15265
 #define IDC_VOL14L                      15301
 #define IDC_VOL14LSTR                   15302
 #define IDC_VOL14R                      15303

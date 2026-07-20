@@ -205,6 +205,12 @@ struct tagNP2Config
 	UINT8	fddequip;
 	UINT8	MOTOR;
 	UINT8	MOTORVOL;
+#if defined(SUPPORT_FDDSNDDEV)
+	OEMCHAR	fddSndDevice[MAX_PATH];		/* FDD seek sound output device ("" = main) */
+	OEMCHAR	boardSndDevice[MAX_PATH];	/* board(relay) sound output device ("" = main) */
+	UINT16	fddSndVol;					/* FDD seek separate-output volume (0-100) */
+	UINT16	boardSndVol;				/* board(relay) separate-output volume (0-100) */
+#endif
 	UINT8	PROTECTMEM;
 	UINT8	hdrvacc;
 	UINT8	hdrvenable;

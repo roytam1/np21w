@@ -19,6 +19,9 @@ typedef struct
 	UINT8 isDirectory;
 	HANDLE hFindFile;
 	HANDLE hFile;
+	void *sfnMap;
+	UINT32 sfnCount;
+	UINT8 sfnMapBuilt;
 
 	UINT32 hostdrvWinAPIDesiredAccess;
 	UINT32 hostdrvShareAccess;
@@ -26,8 +29,15 @@ typedef struct
 	UINT32 hostdrvFileAttributes;
 
 	UINT8 deleteOnClose;
+	UINT8 deleteIdentityValid;
 	UINT8 allowDeleteChild;
+	UINT8 reservedSecurityState;
 	UINT16 extendLength; // Œã‘±‚ÌŠg’£—Ìˆæ‚Ì’·‚³
+
+	// •Û‘¶‚µ‚È‚¢—Ìˆæ
+	DWORD deleteVolumeSerialNumber;
+	DWORD deleteFileIndexHigh;
+	DWORD deleteFileIndexLow;
 } NP2HOSTDRVNT_FILEINFO;
 
 typedef struct

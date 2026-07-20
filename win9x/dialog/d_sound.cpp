@@ -18,6 +18,10 @@
 #include "pccore.h"
 #include "iocore.h"
 #include "soundmng.h"
+#if defined(SUPPORT_FDDSNDDEV)
+#include "soundmng\sddsound3.h"
+#include "soundmng\fddsndout.h"
+#endif
 #include "generic/dipswbmp.h"
 #include "sound/sound.h"
 #include "sound/fmboard.h"
@@ -336,6 +340,183 @@ LRESULT SndOptMixerPage::WindowProc(UINT nMsg, WPARAM wParam, LPARAM lParam)
 			case IDC_VOLHW:
 				m_hardware.UpdateValue();
 				break;
+			default:
+				break;
+		}
+	}
+	return CDlgProc::WindowProc(nMsg, wParam, lParam);
+}
+
+
+#if defined(SUPPORT_FDDSNDDEV)
+// ---- mapper
+
+/**
+ * @brief Mapper page
+ */
+class SndOptMapperPage : public CPropPageProc
+{
+public:
+	SndOptMapperPage();
+	virtual ~SndOptMapperPage();
+
+protected:
+	virtual BOOL OnInitDialog();
+	virtual void OnOK();
+	virtual LRESULT WindowProc(UINT nMsg, WPARAM wParam, LPARAM lParam);
+
+private:
+	CComboData m_fddDev;			//!< FDD sound output device
+	CComboData m_brdDev;			//!< board(relay) sound output device
+	CSliderValue m_volFdd;		//!< FDD separate-output volume
+	CSliderValue m_volBrd;		//!< board separate-output volume
+	std::vector<LPCTSTR> m_devlist;	//!< enumerated device names
+};
+
+/**
+ * Constructor
+ */
+SndOptMapperPage::SndOptMapperPage()
+	: CPropPageProc(IDD_SNDMAPPER)
+{
+}
+
+/**
+ * Destructor
+ */
+SndOptMapperPage::~SndOptMapperPage()
+{
+}
+
+/**
+ * Initialize Mapper page.
+ */
+BOOL SndOptMapperPage::OnInitDialog()
+{
+	m_fddDev.SubclassDlgItem(IDC_FDDSNDDEV, this);
+	m_brdDev.SubclassDlgItem(IDC_BRDSNDDEV, this);
+	m_devlist.clear();
+	CSoundDeviceDSound3::EnumerateDevices(m_devlist);
+	m_fddDev.Add(TEXT("(Main device)"), 0);
+	m_brdDev.Add(TEXT("(Main device)"), 0);
+	for (UINT i = 0; i < m_devlist.size(); i++)
+	{
+		m_fddDev.Add(m_devlist[i], i + 1);
+		m_brdDev.Add(m_devlist[i], i + 1);
+	}
+
+	UINT32 nFdd = 0;
+	UINT32 nBrd = 0;
+	for (UINT i = 0; i < m_devlist.size(); i++)
+	{
+		if (!::lstrcmpi(np2cfg.fddSndDevice, m_devlist[i])) nFdd = i + 1;
+		if (!::lstrcmpi(np2cfg.boardSndDevice, m_devlist[i])) nBrd = i + 1;
+	}
+	if ((nFdd == 0) && (np2cfg.fddSndDevice[0] != '\0'))
+	{
+		m_fddDev.Add(np2cfg.fddSndDevice, 0xFFFF);
+		nFdd = 0xFFFF;
+	}
+	if ((nBrd == 0) && (np2cfg.boardSndDevice[0] != '\0'))
+	{
+		m_brdDev.Add(np2cfg.boardSndDevice, 0xFFFF);
+		nBrd = 0xFFFF;
+	}
+	m_fddDev.SetCurItemData(nFdd);
+	m_brdDev.SetCurItemData(nBrd);
+
+	m_volFdd.SubclassDlgItem(IDC_VOLFDD, this);
+	m_volFdd.SetStaticId(IDC_VOLFDDSTR);
+	m_volFdd.SetRange(0, 200);
+	m_volFdd.SetPos(np2cfg.fddSndVol);
+
+	m_volBrd.SubclassDlgItem(IDC_VOLBRD, this);
+	m_volBrd.SetStaticId(IDC_VOLBRDSTR);
+	m_volBrd.SetRange(0, 200);
+	m_volBrd.SetPos(np2cfg.boardSndVol);
+
+	return TRUE;
+}
+
+/**
+ * Apply Mapper settings.
+ */
+void SndOptMapperPage::OnOK()
+{
+	bool bUpdated = false;
+	bool bReconf = false;
+	OEMCHAR szDev[MAX_PATH];
+
+	const UINT32 nFdd = m_fddDev.GetCurItemData(0);
+	if (nFdd == 0xFFFF)
+	{
+		::lstrcpyn(szDev, np2cfg.fddSndDevice, _countof(szDev));
+	}
+	else
+	{
+		szDev[0] = '\0';
+		if ((nFdd > 0) && (nFdd <= m_devlist.size()))
+		{
+			::lstrcpyn(szDev, m_devlist[nFdd - 1], _countof(szDev));
+		}
+	}
+	const UINT16 cFddVol = static_cast<UINT16>(m_volFdd.GetPos());
+	if ((::lstrcmpi(np2cfg.fddSndDevice, szDev)) || (np2cfg.fddSndVol != cFddVol))
+	{
+		::lstrcpyn(np2cfg.fddSndDevice, szDev, _countof(np2cfg.fddSndDevice));
+		np2cfg.fddSndVol = cFddVol;
+		bReconf = true;
+		bUpdated = true;
+	}
+
+	const UINT32 nBrd = m_brdDev.GetCurItemData(0);
+	if (nBrd == 0xFFFF)
+	{
+		::lstrcpyn(szDev, np2cfg.boardSndDevice, _countof(szDev));
+	}
+	else
+	{
+		szDev[0] = '\0';
+		if ((nBrd > 0) && (nBrd <= m_devlist.size()))
+		{
+			::lstrcpyn(szDev, m_devlist[nBrd - 1], _countof(szDev));
+		}
+	}
+	const UINT16 cBrdVol = static_cast<UINT16>(m_volBrd.GetPos());
+	if ((::lstrcmpi(np2cfg.boardSndDevice, szDev)) || (np2cfg.boardSndVol != cBrdVol))
+	{
+		::lstrcpyn(np2cfg.boardSndDevice, szDev, _countof(np2cfg.boardSndDevice));
+		np2cfg.boardSndVol = cBrdVol;
+		bReconf = true;
+		bUpdated = true;
+	}
+
+	if (bReconf)
+	{
+		fddsndout_reconfig();
+	}
+	if (bUpdated)
+	{
+		::sysmng_update(SYS_UPDATECFG);
+	}
+}
+
+/**
+ * Handle Mapper slider updates.
+ */
+LRESULT SndOptMapperPage::WindowProc(UINT nMsg, WPARAM wParam, LPARAM lParam)
+{
+	if (nMsg == WM_HSCROLL)
+	{
+		switch (::GetDlgCtrlID(reinterpret_cast<HWND>(lParam)))
+		{
+			case IDC_VOLFDD:
+				m_volFdd.UpdateValue();
+				break;
+
+			case IDC_VOLBRD:
+				m_volBrd.UpdateValue();
+				break;
 
 			default:
 				break;
@@ -343,6 +524,7 @@ LRESULT SndOptMixerPage::WindowProc(UINT nMsg, WPARAM wParam, LPARAM lParam)
 	}
 	return CDlgProc::WindowProc(nMsg, wParam, lParam);
 }
+#endif	/* SUPPORT_FDDSNDDEV */
 
 
 
@@ -2195,6 +2377,11 @@ void dialog_sndopt(HWND hwndParent)
 
 	SndOptMixerPage mixer;
 	prop.AddPage(&mixer);
+
+#if defined(SUPPORT_FDDSNDDEV)
+	SndOptMapperPage mapper;
+	prop.AddPage(&mapper);
+#endif	/* SUPPORT_FDDSNDDEV */
 
 	SndOpt14Page pc980114;
 	prop.AddPage(&pc980114);

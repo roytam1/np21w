@@ -233,10 +233,17 @@ void MEMCALL memp_mmio_map_reset(void)
 		memp_mmio_range_add(0x00f00000, 0x01000000 - 0x00f00000);
 	}
 #if defined(CPU_EXTLIMIT)
-	memp_mmio_range_add(CPU_EXTLIMIT, 0 - CPU_EXTLIMIT); // メモリがない領域
-#else
-	memp_mmio_range_add(0x01000000, 0 - 0x01000000); // 16MB超えは全部メモリ無し
+	if (CPU_EXTLIMIT > 0) {
+		memp_mmio_range_add(CPU_EXTLIMIT, 0 - CPU_EXTLIMIT); // メモリがない領域
+	}
+	else
 #endif
+	if (CPU_EXTLIMIT16 > 0) {
+		memp_mmio_range_add(CPU_EXTLIMIT16, 0 - CPU_EXTLIMIT16); // メモリがない領域
+	}
+	else {
+		memp_mmio_range_add(USE_HIMEM, 0 - USE_HIMEM); // メモリがない領域
+	}
 }
 
 // ページング時にメモリ直接アクセス可能かどうか調べて可能ならポインタを返す。不可ならNULLを返す。

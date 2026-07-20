@@ -201,6 +201,9 @@ static const SFENTRY np2tbl[] = {
 #if defined(SUPPORT_HOSTDRV)
 	{"HOSTDRV",		0,	STATFLAG_HDRV,	NULL,			0},
 #endif
+#if defined(SUPPORT_HOSTDRV9X)
+	{"HOSTDRV9X",	0,	STATFLAG_HDRV9X,NULL,			0},
+#endif
 #if defined(SUPPORT_HOSTDRVNT)
 	{"HOSTDRVNT",	0,	STATFLAG_HDRVNT,NULL,			0},
 #endif

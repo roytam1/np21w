@@ -739,6 +739,7 @@
     <ClCompile Include="soundmng\asio\asiodriverlist.cpp" />
     <ClCompile Include="soundmng\sdasio.cpp" />
     <ClCompile Include="soundmng\sddsound3.cpp" />
+    <ClCompile Include="soundmng\fddsndout.cpp" />
     <ClCompile Include="soundmng\sdwasapi.cpp" />
     <ClCompile Include="subwnd\dclock.cpp" />
     <ClCompile Include="subwnd\dd2.cpp" />
@@ -1080,6 +1081,7 @@
     <ClInclude Include="soundmng\sdasio.h" />
     <ClInclude Include="soundmng\sdbase.h" />
     <ClInclude Include="soundmng\sddsound3.h" />
+    <ClInclude Include="soundmng\fddsndout.h" />
     <ClInclude Include="soundmng\sdwasapi.h" />
     <ClInclude Include="subwnd\dclock.h" />
     <ClInclude Include="subwnd\dd2.h" />

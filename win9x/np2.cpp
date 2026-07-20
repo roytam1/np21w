@@ -42,6 +42,7 @@
 #include "mousemng.h"
 #include "scrnmng.h"
 #include "soundmng.h"
+#include "soundmng\fddsndout.h"
 #include "sysmng.h"
 #include "winkbd.h"
 #include "ini.h"
@@ -834,6 +835,10 @@ static void OpenSoundDevice(HWND hWnd)
 		pSoundMng->SetPCMVolume(SOUND_RELAY1, np2cfg.MOTORVOL);
 		pSoundMng->SetMasterVolume(np2cfg.vol_master);
 	}
+#if defined(SUPPORT_FDDSNDDEV)
+	fddsndout_setwindow(hWnd);
+	fddsndout_reconfig();
+#endif
 }
 
 // ---- proc
@@ -4845,6 +4850,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInst,
 							if (framecnt < drawskip)
 							{
 								ExecuteOneFrame(framecnt == 0);
+								if (framecnt == 0) processasyncwait();
 								framecnt++;
 							}
 							else
@@ -4884,6 +4890,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInst,
 										timing_setcount(cnt - framecnt);
 									}
 									framereset(0);
+									if (framecnt == 0) processasyncwait();
 								}
 							}
 							else

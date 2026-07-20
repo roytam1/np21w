@@ -54,6 +54,9 @@
 #if defined(SUPPORT_HOSTDRVNT)
 #include	"hostdrvnt.h"
 #endif
+#if defined(SUPPORT_HOSTDRV9X)
+#include	"hostdrv9x.h"
+#endif
 #include	"np2ver.h"
 #include	"calendar.h"
 #include	"timing.h"
@@ -141,7 +144,11 @@ const OEMCHAR np2version[] = OEMTEXT(NP2VER_CORE);
 #if defined(SUPPORT_FMGEN)
 				1,
 #endif	/* SUPPORT_FMGEN */
-				3, 0, 50, 0, 0, 1, 0,
+				3, 0, 50,
+#if defined(SUPPORT_FDDSNDDEV)
+				OEMTEXT(""), OEMTEXT(""), 100, 100,
+#endif
+				0, 0, 1, 0,
 
 				0, {OEMTEXT(""), OEMTEXT(""), OEMTEXT(""), OEMTEXT("")},
 #if defined(SUPPORT_IDEIO)
@@ -854,6 +861,9 @@ void pccore_reset(void) {
 #if defined(SUPPORT_HOSTDRVNT)
 	hostdrvNT_reset();
 #endif
+#if defined(SUPPORT_HOSTDRV9X)
+	hostdrv9x_reset();
+#endif
 
 	timing_reset();
 	soundmng_play();
@@ -1363,6 +1373,9 @@ void pccore_exec(BOOL draw) {
 #endif
 #if defined(SUPPORT_HOSTDRV)
 			hostdrv_reset(); // XXX: Win9xの再起動で必要
+#endif
+#if defined(SUPPORT_HOSTDRV9X)
+			hostdrv9x_reset();
 #endif
 #if defined(SUPPORT_HOSTDRVNT)
 			hostdrvNT_reset(); // XXX: Win9xの再起動で必要

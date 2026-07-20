@@ -154,6 +154,8 @@ void wabwin_readini()
 void np2wab_forceupdate()
 {
 	np2wab_forceupdateflag = 1;
+	ga_screenupdated = 0;
+	SetEvent(wab_thread_eventhandle);
 }
 
 /**

@@ -24,6 +24,9 @@
 #if defined(SUPPORT_HOSTDRVNT)
 #include	"generic/hostdrvnt.h"
 #endif
+#if defined(SUPPORT_HOSTDRV9X)
+#include	"generic/hostdrv9x.h"
+#endif
 #if defined(SUPPORT_WAB_NPDISP)
 #include	"wab/npdisp.h"
 #endif
@@ -592,6 +595,9 @@ static const FNIOBIND bindfn[] =
 #endif
 #if defined(SUPPORT_HOSTDRVNT)
 			hostdrvNT_bind,
+#endif
+#if defined(SUPPORT_HOSTDRV9X)
+			hostdrv9x_bind,
 #endif
 #if defined(SUPPORT_WAB_NPDISP)
 			npdisp_bind,

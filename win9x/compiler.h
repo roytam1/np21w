@@ -189,11 +189,13 @@ typedef	signed __int64		SINT64;
 
 #define SOUND_CRITICAL
 #define	SOUNDRESERVE	20
-#define SUPPORT_VSTi
+//#define SUPPORT_VSTi
 #define SUPPORT_ASIO
 #if (_MSC_VER >= 1500)
 #define SUPPORT_WASAPI
 #endif	/* (_MSC_VER >= 1500) */
+
+#define	SUPPORT_FDDSNDDEV	/* FDD / board(relay) operation sound to a separate output device */
 
 #define	SUPPORT_TEXTCNV
 

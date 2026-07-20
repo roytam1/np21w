@@ -765,7 +765,9 @@ void scrnmng_UIThreadProc(void)
 		scrnmngDD_restoresurfaces();
 #endif
 		scrnmng_cs_LeaveModeChangeCriticalSection();
-
+#ifdef SUPPORT_WAB
+		np2wab_forceupdate();
+#endif
 	}
 	if (scrnmng_create_pending && !IsIconic(g_hWndMain))
 	{

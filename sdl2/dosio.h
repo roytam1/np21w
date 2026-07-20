@@ -49,6 +49,7 @@ typedef struct {
 	DOSDATE	date;
 	DOSTIME	time;
 	char	path[MAX_PATH];
+	char	shortpath[14];
 } FLINFO;
 
 
@@ -66,6 +67,8 @@ UINT file_write(FILEH handle, const void *data, UINT length);
 short file_close(FILEH handle);
 UINT file_getsize(FILEH handle);
 short file_getdatetime(FILEH handle, DOSDATE *dosdate, DOSTIME *dostime);
+BRESULT file_getshortname(const char *path, char *shortname, UINT cchShortName);
+BOOL file_islink(const char *path);
 short file_delete(const char *path);
 short file_attr(const char *path);
 short file_dircreate(const char *path);

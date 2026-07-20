@@ -570,6 +570,12 @@ static const PFTBL s_IniItems[] =
 
 	PFVAL("Seek_Snd", PFTYPE_BOOL,		&np2cfg.MOTOR),
 	PFMAX("Seek_Vol", PFTYPE_UINT8,		&np2cfg.MOTORVOL,		100),
+#if defined(SUPPORT_FDDSNDDEV)
+	PFSTR("FDDSndDev", PFTYPE_STR,		np2cfg.fddSndDevice),
+	PFMAX("FDDSndVol", PFTYPE_UINT16,	&np2cfg.fddSndVol,		200),
+	PFSTR("BrdSndDev", PFTYPE_STR,		np2cfg.boardSndDevice),
+	PFMAX("BrdSndVol", PFTYPE_UINT16,	&np2cfg.boardSndVol,	200),
+#endif
 
 	PFVAL("btnRAPID", PFTYPE_BOOL,		&np2cfg.BTN_RAPID),
 	PFVAL("btn_MODE", PFTYPE_BOOL,		&np2cfg.BTN_MODE),

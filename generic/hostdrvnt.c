@@ -21,8 +21,13 @@
 #include	"dosio.h"
 
 #include	"hostdrv.h"
+#include	"hostdrvs.h"
 #include	"hostdrvnt.h"
 #include	"hostdrvntdef.h"
+
+#ifndef FILE_ATTRIBUTE_REPARSE_POINT
+#define FILE_ATTRIBUTE_REPARSE_POINT 0x00000400
+#endif
 
 // 性能上最適化で優先しない方がいいコードなのでわざと別セグメントに置く
 #pragma code_seg(".MISCCODE")
@@ -189,6 +194,8 @@ void hostdrvNT_invokeMonitorChangeFS()
 
 // ---------- Utility Functions
 
+static int hostdrvNT_isSafeHostPath(const WCHAR* path);
+
 /// <summary>
 /// ホスト共有ドライブのルートパスを取得してUnicode文字列として記憶。最後の区切り文字（\）がある場合は削除する。
 /// </summary>
@@ -249,7 +256,8 @@ void hostdrvNT_updateHDrvRoot(void)
 
 	// 最後の文字が\なら除去
 	slen = wcslen(s_hdrvRoot);
-	if (slen > 0 && s_hdrvRoot[slen - 1] == '\\')
+	if (slen > 0 && s_hdrvRoot[slen - 1] == '\\' &&
+		!(slen == 3 && s_hdrvRoot[1] == L':' && s_hdrvRoot[2] == L'\\'))
 	{
 		s_hdrvRoot[slen - 1] = '\0';
 	}
@@ -271,6 +279,263 @@ static int hostdrvNT_getEmptyFile()
 	}
 	return -1;
 }
+
+/// <summary>
+/// 短いファイル名キャッシュ削除
+/// </summary>
+static void hostdrvNT_clearShortNameMap(NP2HOSTDRVNT_FILEINFO *fi)
+{
+	if (fi->sfnMap != NULL)
+	{
+		hostdrvs_freeshortnamemap((HDRVSFNENTRY *)fi->sfnMap);
+		fi->sfnMap = NULL;
+	}
+	fi->sfnCount = 0;
+	fi->sfnMapBuilt = 0;
+}
+
+/// <summary>
+/// 短いファイル名キャッシュがあるか確認（必要なら生成）
+/// </summary>
+static int hostdrvNT_ensureShortNameMap(NP2HOSTDRVNT_FILEINFO *fi)
+{
+	HDRVSFNENTRY *entries;
+	UINT count;
+
+	if (fi == NULL || fi->hostFileName == NULL ||
+		!hostdrvNT_isSafeHostPath(fi->hostFileName))
+	{
+		return 0;
+	}
+	if (fi->sfnMapBuilt)
+	{
+		return 1;
+	}
+	entries = NULL;
+	count = 0;
+	if (hostdrvs_getshortnamemap(fi->hostFileName, &entries, &count) != SUCCESS)
+	{
+		return 0;
+	}
+	fi->sfnMap = entries;
+	fi->sfnCount = (UINT32)count;
+	fi->sfnMapBuilt = 1;
+	return 1;
+}
+
+/// <summary>
+/// パスがHOSTDRVルート以下か確認　相対パスやシンボリックリンクを考慮しない形式的な確認
+/// </summary>
+/// <param name="path">確認したいパス</param>
+/// <returns></returns>
+static int hostdrvNT_isPathInsideRoot(const WCHAR *path)
+{
+	UINT32 rootLen;
+
+	if (path == NULL || s_hdrvRoot[0] == L'\0') return 0;
+	rootLen = (UINT32)wcslen(s_hdrvRoot);
+	if (_wcsnicmp(path, s_hdrvRoot, rootLen) != 0) return 0;
+	if (path[rootLen] == L'\0') return 1;
+	if (rootLen > 0 && s_hdrvRoot[rootLen - 1] == L'\\') return 1;
+	return path[rootLen] == L'\\';
+}
+
+/// <summary>
+/// パスがHOSTDRVルート以下か確認　相対パスやシンボリックリンクも考慮
+/// </summary>
+/// <param name="path">確認したいパス</param>
+/// <returns></returns>
+static int hostdrvNT_isSafeHostPath(const WCHAR *path)
+{
+	WCHAR current[MAX_PATH];
+	WCHAR relative[MAX_PATH];
+	WCHAR component[MAX_PATH];
+	WCHAR candidate[MAX_PATH];
+	WCHAR *p;
+	UINT32 rootLen;
+
+	// 形式的な確認
+	if (!hostdrvNT_isPathInsideRoot(path)) return 0;
+
+	// HOSTDRVルートと同じなら安全
+	rootLen = (UINT32)wcslen(s_hdrvRoot);
+	if (path[rootLen] == L'\0') return 1;
+	
+	// パスの各階層ごとに問題ないか確認
+	// パスからHOSTDRVルート部分をcurrentへ、残りをrelativeへ入れる
+	wcscpy(current, s_hdrvRoot);
+	wcsncpy(relative, path + rootLen, NELEMENTS(relative) - 1);
+	relative[NELEMENTS(relative) - 1] = L'\0';
+	p = relative;
+	while (*p == L'\\') p++; // relative先頭の\をとばす
+	while (*p != L'\0')
+	{
+		WCHAR *next = wcschr(p, L'\\');
+		UINT32 len = next ? (UINT32)(next - p) : (UINT32)wcslen(p);
+		DWORD attrs;
+
+		// 現在の階層を抽出 長すぎるものは不可
+		if (len == 0 || len >= NELEMENTS(component)) return 0;
+		wcsncpy(component, p, len);
+		component[len] = L'\0';
+
+		// パス結合してシンボリックリンク等でないことを確認
+		if (!PathCombineW(candidate, current, component)) return 0;
+		attrs = GetFileAttributesW(candidate);
+		if (attrs == INVALID_FILE_ATTRIBUTES) return 0;
+		if (attrs & FILE_ATTRIBUTE_REPARSE_POINT) return 0;
+
+		// 階層を1つ進める
+		wcscpy(current, candidate);
+		if (!next) break;
+
+		p = next + 1;
+		while (*p == L'\\') p++; // relative先頭の\をとばす
+	}
+	return _wcsicmp(current, path) == 0;
+}
+
+/// <summary>
+/// DOS/Windows予約名かを確認
+/// </summary>
+/// <param name="component"></param>
+/// <returns></returns>
+static int hostdrvNT_isReservedDosName(const WCHAR *component)
+{
+	WCHAR base[16];
+	UINT i;
+	UINT len;
+
+	if (component == NULL || component[0] == L'\0') return 0;
+	len = 0;
+	while (component[len] != L'\0' && component[len] != L'.' && component[len] != L':')
+	{
+		if (len + 1 >= NELEMENTS(base)) break;
+		base[len] = component[len];
+		len++;
+	}
+	while (len > 0 && (base[len - 1] == L' ' || base[len - 1] == L'.')) len--;
+	base[len] = L'\0';
+	for (i = 0; i < len; i++)
+	{
+		if (base[i] >= L'a' && base[i] <= L'z') base[i] -= (L'a' - L'A');
+	}
+	if (!wcscmp(base, L"CON") || !wcscmp(base, L"PRN") ||
+		!wcscmp(base, L"AUX") || !wcscmp(base, L"NUL") ||
+		!wcscmp(base, L"CLOCK$")) return 1;
+	if (len == 4 && (!wcsncmp(base, L"COM", 3) || !wcsncmp(base, L"LPT", 3)) &&
+		base[3] >= L'1' && base[3] <= L'9') return 1;
+	return 0;
+}
+
+/// <summary>
+/// ゲストのパスを検証　予約名やドライブ区切り文字などをはじく
+/// </summary>
+/// <param name="path"></param>
+/// <returns></returns>
+static int hostdrvNT_validateVirtualPath(const WCHAR *path)
+{
+	WCHAR component[MAX_PATH];
+	const WCHAR *p;
+
+	if (path == NULL) return 0;
+	if (wcschr(path, L':') != NULL || wcschr(path, L'/') != NULL) return 0;
+	p = path;
+	while (*p != L'\0')
+	{
+		UINT len;
+		while (*p == L'\\') p++;
+		if (*p == L'\0') break;
+		len = 0;
+		while (p[len] != L'\0' && p[len] != L'\\')
+		{
+			if (p[len] < 0x20) return 0;
+			len++;
+		}
+		if (len >= NELEMENTS(component)) return 0;
+		wcsncpy(component, p, len);
+		component[len] = L'\0';
+		if (wcscmp(component, L".") != 0 && wcscmp(component, L"..") != 0)
+		{
+			if (component[len - 1] == L' ' || component[len - 1] == L'.') return 0;
+			if (hostdrvNT_isReservedDosName(component)) return 0;
+		}
+		p += len;
+	}
+	return 1;
+}
+
+/// <summary>
+/// ハンドルからファイル詳細情報を取得
+/// </summary>
+static int hostdrvNT_getIdentityFromHandle(HANDLE hFile, BY_HANDLE_FILE_INFORMATION *info)
+{
+	if (hFile == NULL || hFile == INVALID_HANDLE_VALUE || info == NULL) return 0;
+	ZeroMemory(info, sizeof(*info));
+	return GetFileInformationByHandle(hFile, info) ? 1 : 0;
+}
+
+/// <summary>
+/// パスからファイル詳細情報を取得
+/// </summary>
+static int hostdrvNT_getIdentityFromPath(const WCHAR *path, int isDirectory, BY_HANDLE_FILE_INFORMATION *info)
+{
+	HANDLE hFile;
+	DWORD flags;
+	int result;
+
+	if (path == NULL || info == NULL) return 0;
+	if (!hostdrvNT_isSafeHostPath(path)) return 0;
+	flags = isDirectory ? FILE_FLAG_BACKUP_SEMANTICS : FILE_ATTRIBUTE_NORMAL;
+	hFile = CreateFileW(path, FILE_READ_ATTRIBUTES,
+		FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+		NULL, OPEN_EXISTING, flags, NULL);
+	if (hFile == INVALID_HANDLE_VALUE) return 0;
+	result = hostdrvNT_getIdentityFromHandle(hFile, info);
+	CloseHandle(hFile);
+	return result;
+}
+
+/// <summary>
+/// ファイル同一性検証用の情報を保存
+/// </summary>
+static int hostdrvNT_captureDeleteIdentity(NP2HOSTDRVNT_FILEINFO *fi)
+{
+	BY_HANDLE_FILE_INFORMATION info;
+	int result;
+
+	if (fi == NULL || fi->hostFileName == NULL || fi->isRoot) return 0;
+	result = hostdrvNT_getIdentityFromHandle(fi->hFile, &info);
+	if (!result)
+	{
+		result = hostdrvNT_getIdentityFromPath(fi->hostFileName, fi->isDirectory, &info);
+	}
+	if (!result)
+	{
+		fi->deleteIdentityValid = 0;
+		return 0;
+	}
+	fi->deleteVolumeSerialNumber = info.dwVolumeSerialNumber;
+	fi->deleteFileIndexHigh = info.nFileIndexHigh;
+	fi->deleteFileIndexLow = info.nFileIndexLow;
+	fi->deleteIdentityValid = 1;
+	return 1;
+}
+
+/// <summary>
+/// 先所するファイルが開いたものと同一かを確認
+/// </summary>
+static int hostdrvNT_deleteIdentityMatchesPath(const NP2HOSTDRVNT_FILEINFO *fi)
+{
+	BY_HANDLE_FILE_INFORMATION info;
+
+	if (fi == NULL || !fi->deleteIdentityValid || fi->hostFileName == NULL || fi->isRoot) return 0;
+	if (!hostdrvNT_getIdentityFromPath(fi->hostFileName, fi->isDirectory, &info)) return 0;
+	return info.dwVolumeSerialNumber == fi->deleteVolumeSerialNumber &&
+		info.nFileIndexHigh == fi->deleteFileIndexHigh &&
+		info.nFileIndexLow == fi->deleteFileIndexLow;
+}
+
 static void hostdrvNT_preCloseFile(int index)
 {
 	if (hostdrvNT.files[index].hFile && hostdrvNT.files[index].hFile != INVALID_HANDLE_VALUE)
@@ -281,42 +546,42 @@ static void hostdrvNT_preCloseFile(int index)
 }
 static void hostdrvNT_closeFile(int index)
 {
-	if (hostdrvNT.files[index].hFindFile && hostdrvNT.files[index].hFindFile != INVALID_HANDLE_VALUE)
+	NP2HOSTDRVNT_FILEINFO *fi = &hostdrvNT.files[index];
+	if (fi->hFindFile && fi->hFindFile != INVALID_HANDLE_VALUE)
 	{
-		FindClose(hostdrvNT.files[index].hFindFile);
-		hostdrvNT.files[index].hFindFile = NULL;
+		FindClose(fi->hFindFile);
+		fi->hFindFile = NULL;
 	}
-	if (hostdrvNT.files[index].hFile && hostdrvNT.files[index].hFile != INVALID_HANDLE_VALUE)
+	hostdrvNT_clearShortNameMap(fi);
+	if (fi->hFile && fi->hFile != INVALID_HANDLE_VALUE)
 	{
-		CloseHandle(hostdrvNT.files[index].hFile);
-		hostdrvNT.files[index].hFile = NULL;
+		CloseHandle(fi->hFile);
+		fi->hFile = NULL;
 	}
-	if (hostdrvNT.files[index].deleteOnClose)
+	if (fi->deleteOnClose)
 	{
-		// 削除権限があれば削除
-		if (s_hdrvAcc & HDFMODE_DELETE)
+		// ファイル同一性が確認できなかった場合は削除しない
+		if ((s_hdrvAcc & HDFMODE_DELETE) && !fi->isRoot && hostdrvNT_deleteIdentityMatchesPath(fi))
 		{
-			if (hostdrvNT.files[index].isDirectory)
+			BOOL deleted = fi->isDirectory ?
+				RemoveDirectoryW(fi->hostFileName) : DeleteFileW(fi->hostFileName);
+			if (deleted)
 			{
-				RemoveDirectoryW(hostdrvNT.files[index].hostFileName);
+				hostdrvNT_notifyChange(fi->hostFileName, NP2_FILE_ACTION_REMOVED, 0);
 			}
-			else
-			{
-				DeleteFileW(hostdrvNT.files[index].hostFileName);
-			}
-			hostdrvNT_notifyChange(hostdrvNT.files[index].hostFileName, NP2_FILE_ACTION_REMOVED, 0);
 		}
-		hostdrvNT.files[index].deleteOnClose = 0;
+		fi->deleteOnClose = 0;
+		fi->deleteIdentityValid = 0;
 	}
-	if (hostdrvNT.files[index].fileName != NULL)
+	if (fi->fileName != NULL)
 	{
-		free(hostdrvNT.files[index].fileName);
-		hostdrvNT.files[index].fileName = NULL;
+		free(fi->fileName);
+		fi->fileName = NULL;
 	}
-	if (hostdrvNT.files[index].hostFileName != NULL)
+	if (fi->hostFileName != NULL)
 	{
-		free(hostdrvNT.files[index].hostFileName);
-		hostdrvNT.files[index].hostFileName = NULL;
+		free(fi->hostFileName);
+		fi->hostFileName = NULL;
 	}
 }
 static void hostdrvNT_closeAllFiles()
@@ -336,6 +601,8 @@ static int hostdrvNT_reopenFile(int index)
 	if (index < 0 || index >= NP2HOSTDRVNT_FILES_MAX) return 0;
 
 	fi = &hostdrvNT.files[index];
+	if (fi->fileName == NULL || fi->hostFileName == NULL ||
+		!hostdrvNT_isSafeHostPath(fi->hostFileName)) return 0;
 	fh = fi->hFile;
 	if (!fh || fh == INVALID_HANDLE_VALUE)
 	{
@@ -363,17 +630,107 @@ static int hostdrvNT_reopenFile(int index)
 			}
 		}
 	}
+	if (fi->deleteOnClose && !fi->deleteIdentityValid)
+	{
+		hostdrvNT_captureDeleteIdentity(fi);
+	}
 	return 1;
+}
+
+static int hostdrvNT_resolveShortPath(WCHAR *hostPath)
+{
+	WCHAR current[MAX_PATH];
+	WCHAR relative[MAX_PATH];
+	WCHAR component[MAX_PATH];
+	WCHAR candidate[MAX_PATH];
+	WCHAR mapped[MAX_PATH];
+	WCHAR *p;
+	UINT32 rootLen;
+
+	if (hostPath == NULL || hostPath[0] == L'\0')
+	{
+		return 1;
+	}
+	rootLen = (UINT32)wcslen(s_hdrvRoot);
+	if (!hostdrvNT_isPathInsideRoot(hostPath))
+	{
+		return 1;
+	}
+	wcscpy(current, s_hdrvRoot);
+	wcsncpy(relative, hostPath + rootLen, MAX_PATH - 1);
+	relative[MAX_PATH - 1] = L'\0';
+	p = relative;
+	while (*p == L'\\') p++;
+
+	while (*p != L'\0')
+	{
+		WCHAR *next;
+		UINT32 len;
+
+		next = wcschr(p, L'\\');
+		len = next ? (UINT32)(next - p) : (UINT32)wcslen(p);
+		if (len >= MAX_PATH)
+		{
+			return 1;
+		}
+		wcsncpy(component, p, len);
+		component[len] = L'\0';
+		if (!PathCombineW(candidate, current, component))
+		{
+			return 1;
+		}
+
+		// LFNのまま存在するならOK　そうでないならSFN変換
+		{
+			DWORD candidateAttr = GetFileAttributesW(candidate);
+			if (candidateAttr != INVALID_FILE_ATTRIBUTES &&
+				(candidateAttr & FILE_ATTRIBUTE_REPARSE_POINT))
+			{
+				return 1;
+			}
+			if (candidateAttr == INVALID_FILE_ATTRIBUTES)
+			{
+				HDRVSFNENTRY *entries;
+				UINT count;
+
+				entries = NULL;
+				count = 0;
+				if (hostdrvs_getshortnamemap(current, &entries, &count) == SUCCESS)
+				{
+					if (hostdrvs_lookuplongname(entries, count, component, mapped,
+						NELEMENTS(mapped), NULL))
+					{
+						PathCombineW(candidate, current, mapped);
+					}
+					hostdrvs_freeshortnamemap(entries);
+				}
+			}
+		}
+		{
+			DWORD resolvedAttr = GetFileAttributesW(candidate);
+			if (resolvedAttr != INVALID_FILE_ATTRIBUTES &&
+				(resolvedAttr & FILE_ATTRIBUTE_REPARSE_POINT)) return 1;
+		}
+		wcscpy(current, candidate);
+		if (!next)
+		{
+			break;
+		}
+		p = next + 1;
+		while (*p == L'\\') p++;
+	}
+	wcscpy(hostPath, current);
+	return hostdrvNT_isPathInsideRoot(hostPath) ? 0 : 1;
 }
 
 static int hostdrvNT_getHostPath(WCHAR* virPath, WCHAR* hostPath, UINT8* isRoot, int getTargetDir)
 {
 	WCHAR hdrvPath[MAX_PATH];
 	WCHAR pathTmp[MAX_PATH];
-	UINT32 hdrvPathLen = 0;
 
 	wcscpy(hdrvPath, s_hdrvRoot);
-	hdrvPathLen = wcslen(hdrvPath);
+
+	if (!hostdrvNT_validateVirtualPath(virPath)) return 1;
 
 	// ホストのパスと結合
 	if (virPath[0] == '\\') virPath++;
@@ -389,18 +746,13 @@ static int hostdrvNT_getHostPath(WCHAR* virPath, WCHAR* hostPath, UINT8* isRoot,
 	}
 
 	// ホストのパス部分が無くなっていたら拒否
-	if (wcsncmp(hdrvPath, hostPath, hdrvPathLen) != 0) return 1;
+	if (!hostdrvNT_isPathInsideRoot(hostPath)) return 1;
+
+	if (hostdrvNT_resolveShortPath(hostPath) != 0) return 1;
+	if (!hostdrvNT_isPathInsideRoot(hostPath)) return 1;
 
 	// ルートディレクトリ判定
-	if (wcslen(hostPath) > hdrvPathLen + 1)
-	{
-		UINT32 vlen = wcslen(hostPath + hdrvPathLen + 1);
-		*isRoot = (vlen == 0 || (vlen == 1 && *(hostPath + hdrvPathLen + 1) == '\\'));
-	}
-	else
-	{
-		*isRoot = 1;
-	}
+	*isRoot = (_wcsicmp(hostPath, hdrvPath) == 0) ? 1 : 0;
 
 	// 必要ならファイル名からそのファイルのディレクトリパスへ変換
 	if (getTargetDir)
@@ -820,8 +1172,6 @@ static int hostdrvNT_getOneEntry(NP2HOSTDRVNT_FILEINFO* fi, NP2_FILE_BOTH_DIR_IN
 	if (findFileData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
 	{
 		// ディレクトリ
-		//WCHAR longPath[MAX_PATH];
-		//WCHAR shortPath[MAX_PATH];
 		dirInfo->FileNameLength = wcslen(findFileData.cFileName) * sizeof(WCHAR);
 		wcscpy(dirInfo->FileName, findFileData.cFileName);
 		dirInfo->FileAttributes = findFileData.dwFileAttributes;
@@ -829,35 +1179,10 @@ static int hostdrvNT_getOneEntry(NP2HOSTDRVNT_FILEINFO* fi, NP2_FILE_BOTH_DIR_IN
 		dirInfo->LastAccessTime = *((UINT64*)&findFileData.ftLastAccessTime);
 		dirInfo->LastWriteTime = *((UINT64*)&findFileData.ftLastWriteTime);
 		dirInfo->ChangeTime = *((UINT64*)&findFileData.ftLastWriteTime);
-
-		//PathCombineW(longPath, fi->hostFileName, findFileData.cFileName);
-		//if (GetShortPathNameW(longPath, shortPath, MAX_PATH))
-		//{
-		//	WCHAR *shortFileName;
-		//	UINT32 shortLen;
-		//	// 最後の区切り文字以降を採用
-		//	shortFileName = wcsrchr(shortPath, '\\');
-		//	if (shortFileName == NULL)
-		//	{
-		//		shortFileName = shortPath;
-		//	}
-		//	else
-		//	{
-		//		shortFileName++; // \は消す
-		//	}
-		//	shortLen = wcslen(shortFileName);
-		//	if (shortLen <= sizeof(dirInfo->ShortName) / sizeof(WCHAR))
-		//	{
-		//		memcpy(dirInfo->ShortName, shortFileName, shortLen * sizeof(WCHAR));
-		//		dirInfo->ShortNameLength = shortLen * sizeof(WCHAR);
-		//	}
-		//}
 	}
 	else
 	{
 		// ファイル
-		//WCHAR longPath[MAX_PATH];
-		//WCHAR shortPath[MAX_PATH];
 		dirInfo->CreationTime = *((UINT64*)&findFileData.ftCreationTime);
 		dirInfo->LastAccessTime = *((UINT64*)&findFileData.ftLastAccessTime);
 		dirInfo->LastWriteTime = *((UINT64*)&findFileData.ftLastWriteTime);
@@ -867,30 +1192,28 @@ static int hostdrvNT_getOneEntry(NP2HOSTDRVNT_FILEINFO* fi, NP2_FILE_BOTH_DIR_IN
 		dirInfo->FileAttributes = findFileData.dwFileAttributes;
 		dirInfo->FileNameLength = wcslen(findFileData.cFileName) * sizeof(WCHAR);
 		wcscpy(dirInfo->FileName, findFileData.cFileName);
-
-		//PathCombineW(longPath, fi->hostFileName, findFileData.cFileName);
-		//if (GetShortPathNameW(longPath, shortPath, MAX_PATH))
-		//{
-		//	WCHAR* shortFileName;
-		//	UINT32 shortLen;
-		//	// 最後の区切り文字以降を採用
-		//	shortFileName = wcsrchr(shortPath, '\\');
-		//	if (shortFileName == NULL)
-		//	{
-		//		shortFileName = shortPath;
-		//	}
-		//	else
-		//	{
-		//		shortFileName++; // \は消す
-		//	}
-		//	shortLen = wcslen(shortFileName);
-		//	if (shortLen <= sizeof(dirInfo->ShortName) / sizeof(WCHAR))
-		//	{
-		//		memcpy(dirInfo->ShortName, shortFileName, shortLen * sizeof(WCHAR));
-		//		dirInfo->ShortNameLength = shortLen * sizeof(WCHAR);
-		//	}
-		//}
 	}
+
+	// SFN処理
+	dirInfo->ShortNameLength = 0;
+	ZeroMemory(dirInfo->ShortName, sizeof(dirInfo->ShortName));
+	if (hostdrvNT_ensureShortNameMap(fi))
+	{
+		WCHAR shortName[14];
+		UINT32 shortLen;
+
+		if (hostdrvs_lookupshortname((const HDRVSFNENTRY *)fi->sfnMap,
+			(UINT)fi->sfnCount, findFileData.cFileName, shortName, NELEMENTS(shortName)))
+		{
+			shortLen = (UINT32)wcslen(shortName);
+			if (shortLen <= NELEMENTS(dirInfo->ShortName))
+			{
+				memcpy(dirInfo->ShortName, shortName, shortLen * sizeof(WCHAR));
+				dirInfo->ShortNameLength = (SINT8)(shortLen * sizeof(WCHAR));
+			}
+		}
+	}
+
 	TRACEOUTW((L"FIND: %s", findFileData.cFileName));
 
 	return bytesReturned;
@@ -1157,6 +1480,12 @@ static void hostdrvNT_IRP_MJ_CREATE(HOSTDRVNT_INVOKEINFO *invokeInfo)
 		UINT32 hostPathLength;
 		DWORD attrs;
 
+		fi->deleteOnClose = 0;
+		fi->deleteIdentityValid = 0;
+		fi->deleteVolumeSerialNumber = 0;
+		fi->deleteFileIndexHigh = 0;
+		fi->deleteFileIndexLow = 0;
+
 		// パスに無効な文字が含まれる場合はSTATUS_OBJECT_NAME_INVALID　ここでSTATUS_OBJECT_NAME_NOT_FOUNDを返すとワイルドカード付きcopyコマンドなどがうまく動かない
 		if (wcschr(fileName, '?') || wcschr(fileName, '*') || wcschr(fileName, '\"') || wcschr(fileName, '|') || wcschr(fileName, '<') || wcschr(fileName, '>'))
 		{
@@ -1191,7 +1520,7 @@ static void hostdrvNT_IRP_MJ_CREATE(HOSTDRVNT_INVOKEINFO *invokeInfo)
 
 		// パスの末尾が\なら除去
 		hostPathLength = wcslen(hostPath);
-		if (hostPathLength > 0 && hostPath[hostPathLength - 1] == '\\')
+		if (!isRoot && hostPathLength > 0 && hostPath[hostPathLength - 1] == '\\')
 		{
 			hostPath[hostPathLength - 1] = '\0';
 		}
@@ -1199,6 +1528,41 @@ static void hostdrvNT_IRP_MJ_CREATE(HOSTDRVNT_INVOKEINFO *invokeInfo)
 		// とりあえずオープン
 		attrs = GetFileAttributesW(hostPath); // ディレクトリ情報を取得
 		TRACEOUTW((L">>> OPEN: FILE %d %s", fileIndex, hostPath));
+		if (hostdrvDeleteOnClose)
+		{
+			int deleteTargetIsDirectory =
+				(attrs != INVALID_FILE_ATTRIBUTES) ? !!(attrs & FILE_ATTRIBUTE_DIRECTORY) : !!hostdrvDirectoryFile;
+			/* 先にDelete可否を検証する */
+			if (isRoot)
+			{
+				cpu_kmemorywrite_d(invokeInfo->statusAddr, NP2_STATUS_CANNOT_DELETE);
+				cpu_kmemorywrite_d(invokeInfo->statusAddr + 4, 0);
+				free(fileName);
+				return;
+			}
+			if (!(s_hdrvAcc & HDFMODE_DELETE))
+			{
+				cpu_kmemorywrite_d(invokeInfo->statusAddr, NP2_STATUS_ACCESS_DENIED);
+				cpu_kmemorywrite_d(invokeInfo->statusAddr + 4, 0);
+				free(fileName);
+				return;
+			}
+			if (!deleteTargetIsDirectory && !(hostdrvDesiredAccess & DELETE))
+			{
+				cpu_kmemorywrite_d(invokeInfo->statusAddr, NP2_STATUS_CANNOT_DELETE);
+				cpu_kmemorywrite_d(invokeInfo->statusAddr + 4, 0);
+				free(fileName);
+				return;
+			}
+			if (attrs != INVALID_FILE_ATTRIBUTES && deleteTargetIsDirectory &&
+				hostdrvNT_dirHasFiles(hostPath))
+			{
+				cpu_kmemorywrite_d(invokeInfo->statusAddr, NP2_STATUS_DIRECTORY_NOT_EMPTY);
+				cpu_kmemorywrite_d(invokeInfo->statusAddr + 4, 0);
+				free(fileName);
+				return;
+			}
+		}
 		if (attrs == INVALID_FILE_ATTRIBUTES)
 		{
 			// パスが存在しない、またはエラー
@@ -1367,36 +1731,6 @@ static void hostdrvNT_IRP_MJ_CREATE(HOSTDRVNT_INVOKEINFO *invokeInfo)
 			fi->isRoot = 0;
 		}
 		fi->allowDeleteChild = (hostdrvDesiredAccess & FILE_DELETE_CHILD) ? 1 : 0; // TODO: 効果が分かっていない。無視してもとりあえず動く
-		if (hostdrvDeleteOnClose)
-		{
-			if (isRoot || (!(hostdrvDesiredAccess & DELETE) && !fi->isDirectory))
-			{
-				cpu_kmemorywrite_d(invokeInfo->statusAddr, NP2_STATUS_CANNOT_DELETE); // Status STATUS_CANNOT_DELETE
-				cpu_kmemorywrite_d(invokeInfo->statusAddr + 4, 0); // Information
-				free(fileName);
-				return;
-			}
-			else
-			{
-				if (!(s_hdrvAcc & HDFMODE_DELETE))
-				{
-					TRACEOUTW((L"ERROR: delete command is disabled by HOSTDRV."));
-					cpu_kmemorywrite_d(invokeInfo->statusAddr, NP2_STATUS_ACCESS_DENIED);
-					cpu_kmemorywrite_d(invokeInfo->statusAddr + 4, 0); // Information
-					free(fileName);
-					return; 
-				}
-				if (fi->isDirectory && hostdrvNT_dirHasFiles(fi->hostFileName))
-				{
-					TRACEOUTW((L"ERROR: STATUS_DIRECTORY_NOT_EMPTY."));
-					cpu_kmemorywrite_d(invokeInfo->statusAddr, NP2_STATUS_DIRECTORY_NOT_EMPTY);
-					cpu_kmemorywrite_d(invokeInfo->statusAddr + 4, 0); // Information
-					free(fileName);
-					return;
-				}
-				fi->deleteOnClose = 1;
-			}
-		}
 
 		// 仮想マシン内とホストのファイル名を記憶
 		fi->hostFileName = (WCHAR*)malloc((wcslen(hostPath) + 1) * sizeof(WCHAR));
@@ -1410,6 +1744,15 @@ static void hostdrvNT_IRP_MJ_CREATE(HOSTDRVNT_INVOKEINFO *invokeInfo)
 		}
 		wcscpy(fi->hostFileName, hostPath);
 		fi->fileName = fileName; // fileNameは使い回すのでfreeはしないこと
+		if (hostdrvDeleteOnClose)
+		{
+			fi->deleteOnClose = 1;
+			if (!hostdrvNT_captureDeleteIdentity(fi))
+			{
+				// 同一性検証でエラーの場合は削除しない
+				fi->deleteOnClose = 0;
+			}
+		}
 
 		// ホスト側のファイル管理番号をメモリに書き込み
 		fsContextFileIndex = fileIndex;
@@ -1632,6 +1975,7 @@ static void hostdrvNT_IRP_MJ_DIRECTORY_CONTROL(HOSTDRVNT_INVOKEINFO* invokeInfo)
 				FindClose(fi->hFindFile);
 				fi->hFindFile = NULL;
 			}
+			hostdrvNT_clearShortNameMap(fi);
 		}
 
 		// フォルダスキャン実施
@@ -2237,6 +2581,12 @@ static void hostdrvNT_IRP_MJ_SET_INFORMATION(HOSTDRVNT_INVOKEINFO* invokeInfo)
 		{
 			fileInfo.dwFileAttributes = FILE_ATTRIBUTE_NORMAL;
 		}
+		if (!hostdrvNT_isSafeHostPath(fi->hostFileName))
+		{
+			cpu_kmemorywrite_d(invokeInfo->statusAddr, NP2_STATUS_ACCESS_DENIED);
+			cpu_kmemorywrite_d(invokeInfo->statusAddr + 4, 0);
+			return;
+		}
 		if (!SetFileAttributesW(fi->hostFileName, fileInfo.dwFileAttributes))
 		{
 			DWORD error = GetLastError();
@@ -2408,6 +2758,14 @@ static void hostdrvNT_IRP_MJ_SET_INFORMATION(HOSTDRVNT_INVOKEINFO* invokeInfo)
 			return;
 		}
 
+		// 共有ルートなら拒否
+		if (fi->isRoot)
+		{
+			cpu_kmemorywrite_d(invokeInfo->statusAddr, NP2_STATUS_CANNOT_DELETE);
+			cpu_kmemorywrite_d(invokeInfo->statusAddr + 4, 0);
+			return;
+		}
+
 		// 削除不可なら拒否
 		if (!(s_hdrvAcc & HDFMODE_DELETE))
 		{
@@ -2423,6 +2781,14 @@ static void hostdrvNT_IRP_MJ_SET_INFORMATION(HOSTDRVNT_INVOKEINFO* invokeInfo)
 			TRACEOUTW((L"ERROR: no DELETE flag."));
 			cpu_kmemorywrite_d(invokeInfo->statusAddr, NP2_STATUS_ACCESS_DENIED);
 			cpu_kmemorywrite_d(invokeInfo->statusAddr + 4, 0); // Information
+			return;
+		}
+
+		// 安全なパスでないなら不可
+		if (!hostdrvNT_isSafeHostPath(fi->hostFileName))
+		{
+			cpu_kmemorywrite_d(invokeInfo->statusAddr, NP2_STATUS_ACCESS_DENIED);
+			cpu_kmemorywrite_d(invokeInfo->statusAddr + 4, 0);
 			return;
 		}
 
@@ -2456,11 +2822,18 @@ static void hostdrvNT_IRP_MJ_SET_INFORMATION(HOSTDRVNT_INVOKEINFO* invokeInfo)
 		// 削除フラグをセット
 		if (disposeInfo.DeleteFileOnClose)
 		{
+			if (!hostdrvNT_captureDeleteIdentity(fi))
+			{
+				cpu_kmemorywrite_d(invokeInfo->statusAddr, NP2_STATUS_CANNOT_DELETE);
+				cpu_kmemorywrite_d(invokeInfo->statusAddr + 4, 0);
+				return;
+			}
 			fi->deleteOnClose = 1;
 		}
 		else
 		{
 			fi->deleteOnClose = 0;
+			fi->deleteIdentityValid = 0;
 		}
 	}
 	else if (infoClass == FileRenameInformation)
@@ -2474,6 +2847,14 @@ static void hostdrvNT_IRP_MJ_SET_INFORMATION(HOSTDRVNT_INVOKEINFO* invokeInfo)
 		UINT32 fsContextFileIndex;
 		WCHAR* oldFileName;
 		WCHAR* oldHostFileName;
+
+		// 共有ルートなら不可
+		if (fi->isRoot)
+		{
+			cpu_kmemorywrite_d(invokeInfo->statusAddr, NP2_STATUS_ACCESS_DENIED);
+			cpu_kmemorywrite_d(invokeInfo->statusAddr + 4, 0);
+			return;
+		}
 
 		// 入力データサイズが期待通りか確認
 		if (length < sizeof(renameInfo))
@@ -2612,6 +2993,15 @@ static void hostdrvNT_IRP_MJ_SET_INFORMATION(HOSTDRVNT_INVOKEINFO* invokeInfo)
 			free(newPath);
 			cpu_kmemorywrite_d(invokeInfo->statusAddr, NP2_STATUS_INVALID_PARAMETER);
 			cpu_kmemorywrite_d(invokeInfo->statusAddr + 4, 0); // Information
+			return;
+		}
+
+		// 安全なパスでないなら不可
+		if (!hostdrvNT_isSafeHostPath(fi->hostFileName))
+		{
+			free(newPath);
+			cpu_kmemorywrite_d(invokeInfo->statusAddr, NP2_STATUS_ACCESS_DENIED);
+			cpu_kmemorywrite_d(invokeInfo->statusAddr + 4, 0);
 			return;
 		}
 
@@ -3483,12 +3873,16 @@ int hostdrvNT_sfsave(STFLAGH sfh, const SFENTRY* tbl)
 			statflag_write(sfh, &fi->hostdrvShareAccess, sizeof(fi->hostdrvShareAccess));
 			statflag_write(sfh, &fi->hostdrvWinAPICreateDisposition, sizeof(fi->hostdrvWinAPICreateDisposition));
 			statflag_write(sfh, &fi->hostdrvFileAttributes, sizeof(fi->hostdrvFileAttributes));
-			statflag_write(sfh, &fi->deleteOnClose, sizeof(fi->deleteOnClose));
+			{
+				UINT8 savedDeleteOnClose = 0;
+				// 削除情報は保存しない
+				statflag_write(sfh, &savedDeleteOnClose, sizeof(savedDeleteOnClose));
+			}
 			statflag_write(sfh, &fi->allowDeleteChild, sizeof(fi->allowDeleteChild));
 			fi->extendLength = 0;
 			statflag_write(sfh, &fi->extendLength, sizeof(fi->extendLength));
 
-			fi->deleteOnClose = 0; // XXX: ステートセーブ後の終了処理でファイル削除が行われないようにする。本当はレジュームではない普通のステートセーブの時はそのままにしなければならない。
+			fi->deleteOnClose = 0; // ステートセーブ後の終了処理でファイル削除が行われないようにする。安全のためロード時の復元もしない
 
 			validDataCount++;
 		}
@@ -3525,6 +3919,10 @@ int hostdrvNT_sfload(STFLAGH sfh, const SFENTRY* tbl)
 				return STATFLAG_FAILURE;
 			}
 			fi = &hostdrvNT.files[i];
+			fi->deleteIdentityValid = 0;
+			fi->deleteVolumeSerialNumber = 0;
+			fi->deleteFileIndexHigh = 0;
+			fi->deleteFileIndexLow = 0;
 
 			statflag_read(sfh, &fileNameLength, sizeof(fileNameLength));
 			fi->fileName = (WCHAR*)malloc(fileNameLength);
@@ -3552,6 +3950,28 @@ int hostdrvNT_sfload(STFLAGH sfh, const SFENTRY* tbl)
 				char* dummyBuffer = malloc(fi->extendLength);
 				statflag_read(sfh, dummyBuffer, fi->extendLength);
 				free(dummyBuffer);
+			}
+			{
+				WCHAR safeHostPath[MAX_PATH];
+				UINT8 safeIsRoot;
+				if (fi->fileName == NULL || hostdrvNT_getHostPath(fi->fileName, safeHostPath, &safeIsRoot, 0) != 0)
+				{
+					free(fi->fileName);
+					fi->fileName = NULL;
+					if (fi->hostFileName) free(fi->hostFileName);
+					fi->hostFileName = NULL;
+					fi->deleteOnClose = 0;
+					fi->deleteIdentityValid = 0;
+					continue;
+				}
+				if (fi->hostFileName) free(fi->hostFileName);
+				fi->hostFileName = (WCHAR*)malloc((wcslen(safeHostPath) + 1) * sizeof(WCHAR));
+				if (fi->hostFileName == NULL) return STATFLAG_FAILURE;
+				wcscpy(fi->hostFileName, safeHostPath);
+				fi->isRoot = fi->isDirectory ? safeIsRoot : 0;
+				// 同一性保証が難しいのでDeleteフラグは復元しないほうが安全
+				fi->deleteOnClose = 0;
+				fi->deleteIdentityValid = 0;
 			}
 			// ファイルロックがかかると不味いのでここで再オープンはしない
 		}

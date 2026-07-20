@@ -82,6 +82,7 @@ struct _flinfo
 	DOSDATE	date;			/*!< 日付 */
 	DOSTIME	time;			/*!< 時刻 */
 	OEMCHAR	path[MAX_PATH];	/*!< ファイル名 */
+	OEMCHAR	shortpath[14];	/*!< ホストOSが持つ8.3別名（存在しない場合は空） */
 };
 typedef struct _flinfo		FLINFO;			/*!< FLINFO 定義 */
 
@@ -104,6 +105,9 @@ UINT DOSIOCALL file_write(FILEH hFile, const void *data, UINT length);
 short DOSIOCALL file_close(FILEH hFile);
 FILELEN DOSIOCALL file_getsize(FILEH hFile);
 short DOSIOCALL file_getdatetime(FILEH hFile, DOSDATE* dosdate, DOSTIME* dostime);
+BRESULT DOSIOCALL file_getshortname(const OEMCHAR* lpPathName, OEMCHAR* lpShortName, UINT cchShortName);
+BOOL DOSIOCALL file_islink(const OEMCHAR* lpPathName);
+short DOSIOCALL file_setdatetime(FILEH hFile, const DOSDATE* dosdate, const DOSTIME* dostime);
 short DOSIOCALL file_delete(const OEMCHAR* lpPathName);
 short DOSIOCALL file_attr(const OEMCHAR* lpPathName);
 short DOSIOCALL file_setattr(const OEMCHAR* lpPathName, short attr);

@@ -435,14 +435,14 @@ void CSoundDeviceDSound3::FillStream(DWORD dwPosition)
  */
 void CSoundDeviceDSound3::DestroyAllPCM()
 {
-	for (std::map<UINT, LPDIRECTSOUNDBUFFER>::iterator it = m_pcm.begin(); it != m_pcm.begin(); ++it)
+	for (std::map<UINT, LPDIRECTSOUNDBUFFER>::iterator it = m_pcm.begin(); it != m_pcm.end(); ++it)
 	{
 		LPDIRECTSOUNDBUFFER lpDSBuffer = it->second;
 		lpDSBuffer->Stop();
 		lpDSBuffer->Release();
 	}
 	m_pcm.clear();
-	for (std::map<UINT, TCHAR*>::iterator it = m_pcmfile.begin(); it != m_pcmfile.begin(); ++it)
+	for (std::map<UINT, TCHAR*>::iterator it = m_pcmfile.begin(); it != m_pcmfile.end(); ++it)
 	{
 		TCHAR* lpFilename = it->second;
 		delete[] lpFilename;
@@ -455,7 +455,7 @@ void CSoundDeviceDSound3::DestroyAllPCM()
  */
 void CSoundDeviceDSound3::StopAllPCM()
 {
-	for (std::map<UINT, LPDIRECTSOUNDBUFFER>::iterator it = m_pcm.begin(); it != m_pcm.begin(); ++it)
+	for (std::map<UINT, LPDIRECTSOUNDBUFFER>::iterator it = m_pcm.begin(); it != m_pcm.end(); ++it)
 	{
 		LPDIRECTSOUNDBUFFER lpDSBuffer = it->second;
 		lpDSBuffer->Stop();
@@ -638,7 +638,8 @@ LPDIRECTSOUNDBUFFER CSoundDeviceDSound3::CreateWaveBuffer(LPCTSTR lpFilename, in
 			unsigned char *buf = new unsigned char[cbBlock1];
 			extrom.Read(buf, cbBlock1);
 			for(DWORD i=0;i<cbBlock1;i++){
-				buf[i] = (unsigned char)((buf[i] - 0x80) * volume100 / 100 + 0x80);
+				int nv = (buf[i] - 0x80) * volume100 / 100 + 0x80;
+					buf[i] = (unsigned char)((nv < 0) ? 0 : ((nv > 255) ? 255 : nv));
 			}
 			memcpy(lpBlock1, buf, cbBlock1);
 			delete[] buf;
@@ -648,7 +649,8 @@ LPDIRECTSOUNDBUFFER CSoundDeviceDSound3::CreateWaveBuffer(LPCTSTR lpFilename, in
 			short *buf = new short[cbBlock1/2];
 			extrom.Read(buf, cbBlock1);
 			for(DWORD i=0;i<cbBlock1/2;i++){
-				buf[i] = (short)((int)buf[i] * volume100 / 100);
+				int nv = (int)buf[i] * volume100 / 100;
+					buf[i] = (short)((nv < -32768) ? -32768 : ((nv > 32767) ? 32767 : nv));
 			}
 			memcpy(lpBlock1, buf, cbBlock1);
 			delete[] buf;
@@ -663,7 +665,8 @@ LPDIRECTSOUNDBUFFER CSoundDeviceDSound3::CreateWaveBuffer(LPCTSTR lpFilename, in
 				unsigned char *buf = new unsigned char[cbBlock2];
 				extrom.Read(buf, cbBlock2);
 				for(DWORD i=0;i<cbBlock2;i++){
-					buf[i] = (unsigned char)((buf[i] - 0x80) * volume100 / 100 + 0x80);
+					int nv = (buf[i] - 0x80) * volume100 / 100 + 0x80;
+					buf[i] = (unsigned char)((nv < 0) ? 0 : ((nv > 255) ? 255 : nv));
 				}
 				memcpy(lpBlock2, buf, cbBlock2);
 				delete[] buf;
@@ -673,7 +676,8 @@ LPDIRECTSOUNDBUFFER CSoundDeviceDSound3::CreateWaveBuffer(LPCTSTR lpFilename, in
 				short *buf = new short[cbBlock2/2];
 				extrom.Read(buf, cbBlock2);
 				for(DWORD i=0;i<cbBlock2/2;i++){
-					buf[i] = (short)((int)buf[i] * volume100 / 100);
+					int nv = (int)buf[i] * volume100 / 100;
+					buf[i] = (short)((nv < -32768) ? -32768 : ((nv > 32767) ? 32767 : nv));
 				}
 				memcpy(lpBlock2, buf, cbBlock2);
 				delete[] buf;

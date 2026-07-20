@@ -60,6 +60,9 @@ inf				db		0
 				dw		0
 				dw		0
 				dw		0
+				db		HDRV_HANDOFF_SIG
+				dw		0		; CDS offset for HOSTD9X hand-off
+				dw		0		; CDS segment for HOSTD9X hand-off
 
 ;						76543210   fedcba98
 i2f_nochkbmp	db		11010101b, 00111111b
@@ -156,6 +159,8 @@ drvcheck:		and		al, 0dfh ; 小文字 -> 大文字へ変換
 
 				; assign_cds CDSの必要項目を格納
 				call	getcds
+				mov		[inf + HDRVIF.cds_off], di
+				mov		[inf + HDRVIF.cds_seg], es
 				mov		dx, drverr1_msg
 				jc		short stay_error ; ドライブ番号管理外エラー
 				test	byte [es:di + CDS.flag + 1], 0c0h

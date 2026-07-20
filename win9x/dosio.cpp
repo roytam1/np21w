@@ -6,6 +6,10 @@
 #include "compiler.h"
 #include "dosio.h"
 
+#ifndef FILE_ATTRIBUTE_REPARSE_POINT
+#define FILE_ATTRIBUTE_REPARSE_POINT 0x00000400
+#endif
+
 //! カレント パス バッファ
 static OEMCHAR curpath[MAX_PATH];
 
@@ -204,6 +208,81 @@ short DOSIOCALL file_getdatetime(FILEH hFile, DOSDATE* dosdate, DOSTIME* dostime
 }
 
 /**
+ * ホストファイルシステムが持つ短いファイル名を取得する。ない場合はFAILUREを返す。
+ * @param[in] lpPathName 変換元
+ * @param[out] lpShortName 結果格納先
+ * @param[in] cchShortName 結果格納先バッファサイズ
+ * @retval SUCCESS 成功
+ * @retval FAILURE 失敗
+ */
+BRESULT DOSIOCALL file_getshortname(const OEMCHAR* lpPathName, OEMCHAR* lpShortName, UINT cchShortName)
+{
+	OEMCHAR szShortPath[MAX_PATH];
+	DWORD nLength;
+	OEMCHAR* lpLeaf;
+
+	if ((lpPathName == NULL) || (lpShortName == NULL) || (cchShortName == 0))
+	{
+		return FAILURE;
+	}
+	lpShortName[0] = '\0';
+	nLength = ::GetShortPathName(lpPathName, szShortPath, NELEMENTS(szShortPath));
+	if ((nLength == 0) || (nLength >= NELEMENTS(szShortPath)))
+	{
+		return FAILURE;
+	}
+	lpLeaf = file_getname(szShortPath);
+	if ((lpLeaf[0] == '\0') || (OEMSTRLEN(lpLeaf) >= cchShortName))
+	{
+		return FAILURE;
+	}
+	file_cpyname(lpShortName, lpLeaf, cchShortName);
+	return SUCCESS;
+}
+
+BOOL DOSIOCALL file_islink(const OEMCHAR* lpPathName)
+{
+	const DWORD attr = ::GetFileAttributes(lpPathName);
+	return (attr != INVALID_FILE_ATTRIBUTES && (attr & FILE_ATTRIBUTE_REPARSE_POINT)) ? TRUE : FALSE;
+}
+
+/**
+ * ファイルのタイム スタンプを設定
+ * @param[in] hFile ファイル ハンドル
+ * @param[in] dosdate DOS日付
+ * @param[in] dostime DOS時刻
+ * @retval 0 成功
+ * @retval -1 失敗
+ */
+short DOSIOCALL file_setdatetime(FILEH hFile, const DOSDATE* dosdate, const DOSTIME* dostime)
+{
+	SYSTEMTIME st;
+	FILETIME ftLocalTime;
+	FILETIME ft;
+
+	if ((dosdate == NULL) || (dostime == NULL))
+	{
+		return -1;
+	}
+
+	::ZeroMemory(&st, sizeof(st));
+	st.wYear = dosdate->year;
+	st.wMonth = dosdate->month;
+	st.wDay = dosdate->day;
+	st.wHour = dostime->hour;
+	st.wMinute = dostime->minute;
+	st.wSecond = dostime->second;
+
+	if ((!::SystemTimeToFileTime(&st, &ftLocalTime)) ||
+		(!::LocalFileTimeToFileTime(&ftLocalTime, &ft)) ||
+		(!::SetFileTime(hFile, NULL, NULL, &ft)))
+	{
+		return -1;
+	}
+	return 0;
+}
+
+/**
  * ファイルの削除
  * @param[in] lpPathName ファイル名
  * @retval 0 成功
@@ -399,6 +478,11 @@ static bool DOSIOCALL setFLInfo(const WIN32_FIND_DATA& w32fd, FLINFO *fli)
 		fli->attr = w32fd.dwFileAttributes;
 		convertDateTime(w32fd.ftLastWriteTime, &fli->date, &fli->time);
 		file_cpyname(fli->path, w32fd.cFileName, NELEMENTS(fli->path));
+#if !defined(_WIN32_WCE)
+		file_cpyname(fli->shortpath, w32fd.cAlternateFileName, NELEMENTS(fli->shortpath));
+#else
+		fli->shortpath[0] = '\0';
+#endif
 	}
 	return true;
 }

@@ -41,34 +41,63 @@ struct tagHostDrvFile
 	DOSDATE	date;			/*!< 日付 */
 	DOSTIME	time;			/*!< 時間 */
 };
-typedef struct tagHostDrvFile HDRVFILE;		/*!< 定義 */
+typedef struct tagHostDrvFile HDRVFILE;
 
 /**
  * @brief ファイル リスト情報
  */
 struct tagHostDrvList
 {
-	HDRVFILE file;					/*!< DOS ファイル情報 */
-	OEMCHAR szFilename[MAX_PATH];	/*!< ファイル名 */
+	HDRVFILE file;
+	OEMCHAR szFilename[MAX_PATH];
 };
-typedef struct tagHostDrvList _HDRVLST;		/*!< 定義 */
-typedef struct tagHostDrvList *HDRVLST;		/*!< 定義 */
+typedef struct tagHostDrvList _HDRVLST;
+typedef struct tagHostDrvList *HDRVLST;
 
 /**
  * @brief パス情報
  */
 struct tagHostDrvPath
 {
-	HDRVFILE file;				/*!< DOS ファイル情報 */
-	OEMCHAR szPath[MAX_PATH];	/*!< パス */
+	HDRVFILE file;
+	OEMCHAR szPath[MAX_PATH];
 };
-typedef struct tagHostDrvPath HDRVPATH;		/*!< 定義 */
+typedef struct tagHostDrvPath HDRVPATH;
+
+/**
+ * @brief 短いファイル名マップ
+ *
+ * file.fcbname: DOS互換FCB名
+ * szShortFilename: ホストから取得した短いファイル名（あれば）
+ */
+struct tagHostDrvShortNameEntry
+{
+	HDRVFILE file;
+	OEMCHAR szFilename[MAX_PATH];
+	OEMCHAR szShortFilename[14];
+	UINT nOrder;
+	BOOL bAssigned;
+};
+typedef struct tagHostDrvShortNameEntry HDRVSFNENTRY;
+
+BRESULT hostdrvs_getshortnamemap(const OEMCHAR *lpPath, HDRVSFNENTRY **ppEntries, UINT *pnEntries);
+void hostdrvs_freeshortnamemap(HDRVSFNENTRY *pEntries);
+BOOL hostdrvs_lookupshortname(const HDRVSFNENTRY *pEntries, UINT nEntries,
+							  const OEMCHAR *lpFilename, OEMCHAR *lpShortName, UINT cchShortName);
+BOOL hostdrvs_lookuplongname(const HDRVSFNENTRY *pEntries, UINT nEntries,
+							 const OEMCHAR *lpShortName, OEMCHAR *lpFilename, UINT cchFilename,
+							 UINT32 *lpAttr);
 
 LISTARRAY hostdrvs_getpathlist(const HDRVPATH *phdp, const char *lpMask, UINT nAttr);
 UINT hostdrvs_getrealdir(HDRVPATH *phdp, char *lpFcbname, const char *lpDosPath);
 UINT hostdrvs_appendname(HDRVPATH *phdp, const char *lpFcbname);
 UINT hostdrvs_getrealpath(HDRVPATH *phdp, const char *lpDosPath);
+BOOL hostdrvs_isroot(const HDRVPATH *phdp);
+BOOL hostdrvs_issafehostpath(const OEMCHAR *lpPath);
 void hostdrvs_fhdlallclose(LISTARRAY fileArray);
 HDRVHANDLE hostdrvs_fhdlsea(LISTARRAY fileArray);
+
+void hostdrvs_setshortnamemode(UINT nMode);
+UINT hostdrvs_getshortnamemode(void);
 
 #endif	/* defined(SUPPORT_HOSTDRV) */

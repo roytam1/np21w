@@ -46,6 +46,9 @@
 #if defined(SUPPORT_HOSTDRVNT)
 #include "hostdrvnt.h"
 #endif
+#if defined(SUPPORT_HOSTDRV9X)
+#include "hostdrv9x.h"
+#endif
 #include "calendar.h"
 #include "keystat.h"
 #if defined(SUPPORT_WAB)
@@ -153,6 +156,7 @@ enum
 	STATFLAG_HDRVNT,
 	STATFLAG_NPDISP,
 	STATFLAG_GA1280A,
+	STATFLAG_HDRV9X,
 	STATFLAG_MASK				= 0x3fff,
 	
 	STATFLAG_BWD_COMPATIBLE			= 0x4000, // このフラグが立っているとき、古いバージョンのステートセーブと互換性がある（足りないデータは0で埋められるので注意する）いまのところSTATFLAG_BINのみサポート
@@ -1607,6 +1611,11 @@ const SFENTRY	*tblterm;
 				ret |= hostdrv_sfsave(&sffh->sfh, tbl);
 				break;
 #endif
+#if defined(SUPPORT_HOSTDRV9X)
+			case STATFLAG_HDRV9X:
+				ret |= hostdrv9x_sfsave(&sffh->sfh, tbl);
+				break;
+#endif
 #if defined(SUPPORT_HOSTDRVNT)
 			case STATFLAG_HDRVNT:
 				ret |= hostdrvNT_sfsave(&sffh->sfh, tbl);
@@ -1691,7 +1700,11 @@ const SFENTRY	*tblterm;
 					ret |= flagcheck_veronly(&sffh->sfh, tbl);
 					break;
 #endif
-
+#if defined(SUPPORT_HOSTDRV9X)
+				case STATFLAG_HDRV9X:
+					ret |= flagcheck_veronly(&sffh->sfh, tbl);
+					break;
+#endif
 #if defined(SUPPORT_HOSTDRVNT)
 				case STATFLAG_HDRVNT:
 					ret |= flagcheck_veronly(&sffh->sfh, tbl);
@@ -1843,7 +1856,11 @@ const SFENTRY	*tblterm;
 					ret |= hostdrv_sfload(&sffh->sfh, tbl);
 					break;
 #endif
-
+#if defined(SUPPORT_HOSTDRV9X)
+				case STATFLAG_HDRV9X:
+					ret |= hostdrv9x_sfload(&sffh->sfh, tbl);
+					break;
+#endif
 #if defined(SUPPORT_HOSTDRVNT)
 				case STATFLAG_HDRVNT:
 					ret |= hostdrvNT_sfload(&sffh->sfh, tbl);

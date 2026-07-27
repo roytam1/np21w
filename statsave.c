@@ -2060,7 +2060,11 @@ const SFENTRY	*tblterm;
 
 	// カーソル表示状態復元
 	mousemng_updateautohidecursor();
-	
+
+#if defined(CPUCORE_IA32)
+	tlb_flush_all(); // TLBクリア
+#endif
+
 	return(ret);
 }
 

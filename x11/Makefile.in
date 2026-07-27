@@ -255,6 +255,9 @@ am__objects_2 = $(real_topsrcdir)/x11/xnp2-main.$(OBJEXT) \
 	$(real_topsrcdir)/generic/xnp2-cmjasts.$(OBJEXT) \
 	$(real_topsrcdir)/generic/xnp2-hostdrv.$(OBJEXT) \
 	$(real_topsrcdir)/generic/xnp2-hostdrvs.$(OBJEXT) \
+	$(real_topsrcdir)/generic/xnp2-hostdrv9x.$(OBJEXT) \
+	$(real_topsrcdir)/generic/xnp2-hostdrvnt.$(OBJEXT) \
+	$(real_topsrcdir)/generic/xnp2-hostdrvwincompat.$(OBJEXT) \
 	$(real_topsrcdir)/generic/xnp2-unasm.$(OBJEXT) \
 	$(real_topsrcdir)/generic/xnp2-np2info.$(OBJEXT) \
 	$(real_topsrcdir)/generic/xnp2-memdbg32.$(OBJEXT) \
@@ -537,6 +540,9 @@ am__objects_9 = $(real_topsrcdir)/x11/xnp21-main.$(OBJEXT) \
 	$(real_topsrcdir)/generic/xnp21-cmjasts.$(OBJEXT) \
 	$(real_topsrcdir)/generic/xnp21-hostdrv.$(OBJEXT) \
 	$(real_topsrcdir)/generic/xnp21-hostdrvs.$(OBJEXT) \
+	$(real_topsrcdir)/generic/xnp21-hostdrv9x.$(OBJEXT) \
+	$(real_topsrcdir)/generic/xnp21-hostdrvnt.$(OBJEXT) \
+	$(real_topsrcdir)/generic/xnp21-hostdrvwincompat.$(OBJEXT) \
 	$(real_topsrcdir)/generic/xnp21-unasm.$(OBJEXT) \
 	$(real_topsrcdir)/generic/xnp21-np2info.$(OBJEXT) \
 	$(real_topsrcdir)/generic/xnp21-memdbg32.$(OBJEXT) \
@@ -1058,6 +1064,9 @@ COMMON_SOURCES = $(real_topsrcdir)/x11/main.c \
 		$(real_topsrcdir)/generic/cmjasts.c \
 		$(real_topsrcdir)/generic/hostdrv.c \
 		$(real_topsrcdir)/generic/hostdrvs.c \
+		$(real_topsrcdir)/generic/hostdrv9x.c \
+		$(real_topsrcdir)/generic/hostdrvnt.c \
+		$(real_topsrcdir)/generic/hostdrvwincompat.c \
 		$(real_topsrcdir)/generic/unasm.c \
 		$(real_topsrcdir)/generic/np2info.c \
 		$(real_topsrcdir)/generic/memdbg32.c \
@@ -1636,6 +1645,12 @@ $(real_topsrcdir)/generic/xnp2-cmjasts.$(OBJEXT):  \
 $(real_topsrcdir)/generic/xnp2-hostdrv.$(OBJEXT):  \
 	$(real_topsrcdir)/generic/$(am__dirstamp)
 $(real_topsrcdir)/generic/xnp2-hostdrvs.$(OBJEXT):  \
+	$(real_topsrcdir)/generic/$(am__dirstamp)
+$(real_topsrcdir)/generic/xnp2-hostdrv9x.$(OBJEXT):  \
+	$(real_topsrcdir)/generic/$(am__dirstamp)
+$(real_topsrcdir)/generic/xnp2-hostdrvnt.$(OBJEXT):  \
+	$(real_topsrcdir)/generic/$(am__dirstamp)
+$(real_topsrcdir)/generic/xnp2-hostdrvwincompat.$(OBJEXT):  \
 	$(real_topsrcdir)/generic/$(am__dirstamp)
 $(real_topsrcdir)/generic/xnp2-unasm.$(OBJEXT):  \
 	$(real_topsrcdir)/generic/$(am__dirstamp)
@@ -2216,6 +2231,12 @@ $(real_topsrcdir)/generic/xnp21-cmjasts.$(OBJEXT):  \
 $(real_topsrcdir)/generic/xnp21-hostdrv.$(OBJEXT):  \
 	$(real_topsrcdir)/generic/$(am__dirstamp)
 $(real_topsrcdir)/generic/xnp21-hostdrvs.$(OBJEXT):  \
+	$(real_topsrcdir)/generic/$(am__dirstamp)
+$(real_topsrcdir)/generic/xnp21-hostdrv9x.$(OBJEXT):  \
+	$(real_topsrcdir)/generic/$(am__dirstamp)
+$(real_topsrcdir)/generic/xnp21-hostdrvnt.$(OBJEXT):  \
+	$(real_topsrcdir)/generic/$(am__dirstamp)
+$(real_topsrcdir)/generic/xnp21-hostdrvwincompat.$(OBJEXT):  \
 	$(real_topsrcdir)/generic/$(am__dirstamp)
 $(real_topsrcdir)/generic/xnp21-unasm.$(OBJEXT):  \
 	$(real_topsrcdir)/generic/$(am__dirstamp)
@@ -3212,6 +3233,24 @@ $(real_topsrcdir)/generic/xnp2-hostdrvs.o: $(real_topsrcdir)/generic/hostdrvs.c
 
 $(real_topsrcdir)/generic/xnp2-hostdrvs.obj: $(real_topsrcdir)/generic/hostdrvs.c
 	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(xnp2_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o $(real_topsrcdir)/generic/xnp2-hostdrvs.obj `if test -f '$(real_topsrcdir)/generic/hostdrvs.c'; then $(CYGPATH_W) '$(real_topsrcdir)/generic/hostdrvs.c'; else $(CYGPATH_W) '$(srcdir)/$(real_topsrcdir)/generic/hostdrvs.c'; fi`
+
+$(real_topsrcdir)/generic/xnp2-hostdrv9x.o: $(real_topsrcdir)/generic/hostdrv9x.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(xnp2_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o $(real_topsrcdir)/generic/xnp2-hostdrv9x.o `test -f '$(real_topsrcdir)/generic/hostdrv9x.c' || echo '$(srcdir)/'`$(real_topsrcdir)/generic/hostdrv9x.c
+
+$(real_topsrcdir)/generic/xnp2-hostdrv9x.obj: $(real_topsrcdir)/generic/hostdrv9x.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(xnp2_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o $(real_topsrcdir)/generic/xnp2-hostdrv9x.obj `if test -f '$(real_topsrcdir)/generic/hostdrv9x.c'; then $(CYGPATH_W) '$(real_topsrcdir)/generic/hostdrv9x.c'; else $(CYGPATH_W) '$(srcdir)/$(real_topsrcdir)/generic/hostdrv9x.c'; fi`
+
+$(real_topsrcdir)/generic/xnp2-hostdrvnt.o: $(real_topsrcdir)/generic/hostdrvnt.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(xnp2_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o $(real_topsrcdir)/generic/xnp2-hostdrvnt.o `test -f '$(real_topsrcdir)/generic/hostdrvnt.c' || echo '$(srcdir)/'`$(real_topsrcdir)/generic/hostdrvnt.c
+
+$(real_topsrcdir)/generic/xnp2-hostdrvnt.obj: $(real_topsrcdir)/generic/hostdrvnt.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(xnp2_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o $(real_topsrcdir)/generic/xnp2-hostdrvnt.obj `if test -f '$(real_topsrcdir)/generic/hostdrvnt.c'; then $(CYGPATH_W) '$(real_topsrcdir)/generic/hostdrvnt.c'; else $(CYGPATH_W) '$(srcdir)/$(real_topsrcdir)/generic/hostdrvnt.c'; fi`
+
+$(real_topsrcdir)/generic/xnp2-hostdrvwincompat.o: $(real_topsrcdir)/generic/hostdrvwincompat.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(xnp2_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o $(real_topsrcdir)/generic/xnp2-hostdrvwincompat.o `test -f '$(real_topsrcdir)/generic/hostdrvwincompat.c' || echo '$(srcdir)/'`$(real_topsrcdir)/generic/hostdrvwincompat.c
+
+$(real_topsrcdir)/generic/xnp2-hostdrvwincompat.obj: $(real_topsrcdir)/generic/hostdrvwincompat.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(xnp2_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o $(real_topsrcdir)/generic/xnp2-hostdrvwincompat.obj `if test -f '$(real_topsrcdir)/generic/hostdrvwincompat.c'; then $(CYGPATH_W) '$(real_topsrcdir)/generic/hostdrvwincompat.c'; else $(CYGPATH_W) '$(srcdir)/$(real_topsrcdir)/generic/hostdrvwincompat.c'; fi`
 
 $(real_topsrcdir)/generic/xnp2-unasm.o: $(real_topsrcdir)/generic/unasm.c
 	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(xnp2_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o $(real_topsrcdir)/generic/xnp2-unasm.o `test -f '$(real_topsrcdir)/generic/unasm.c' || echo '$(srcdir)/'`$(real_topsrcdir)/generic/unasm.c
@@ -4716,6 +4755,24 @@ $(real_topsrcdir)/generic/xnp21-hostdrvs.o: $(real_topsrcdir)/generic/hostdrvs.c
 
 $(real_topsrcdir)/generic/xnp21-hostdrvs.obj: $(real_topsrcdir)/generic/hostdrvs.c
 	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(xnp21_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o $(real_topsrcdir)/generic/xnp21-hostdrvs.obj `if test -f '$(real_topsrcdir)/generic/hostdrvs.c'; then $(CYGPATH_W) '$(real_topsrcdir)/generic/hostdrvs.c'; else $(CYGPATH_W) '$(srcdir)/$(real_topsrcdir)/generic/hostdrvs.c'; fi`
+
+$(real_topsrcdir)/generic/xnp21-hostdrv9x.o: $(real_topsrcdir)/generic/hostdrv9x.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(xnp21_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o $(real_topsrcdir)/generic/xnp21-hostdrv9x.o `test -f '$(real_topsrcdir)/generic/hostdrv9x.c' || echo '$(srcdir)/'`$(real_topsrcdir)/generic/hostdrv9x.c
+
+$(real_topsrcdir)/generic/xnp21-hostdrv9x.obj: $(real_topsrcdir)/generic/hostdrv9x.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(xnp21_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o $(real_topsrcdir)/generic/xnp21-hostdrv9x.obj `if test -f '$(real_topsrcdir)/generic/hostdrv9x.c'; then $(CYGPATH_W) '$(real_topsrcdir)/generic/hostdrv9x.c'; else $(CYGPATH_W) '$(srcdir)/$(real_topsrcdir)/generic/hostdrv9x.c'; fi`
+
+$(real_topsrcdir)/generic/xnp21-hostdrvnt.o: $(real_topsrcdir)/generic/hostdrvnt.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(xnp21_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o $(real_topsrcdir)/generic/xnp21-hostdrvnt.o `test -f '$(real_topsrcdir)/generic/hostdrvnt.c' || echo '$(srcdir)/'`$(real_topsrcdir)/generic/hostdrvnt.c
+
+$(real_topsrcdir)/generic/xnp21-hostdrvnt.obj: $(real_topsrcdir)/generic/hostdrvnt.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(xnp21_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o $(real_topsrcdir)/generic/xnp21-hostdrvnt.obj `if test -f '$(real_topsrcdir)/generic/hostdrvnt.c'; then $(CYGPATH_W) '$(real_topsrcdir)/generic/hostdrvnt.c'; else $(CYGPATH_W) '$(srcdir)/$(real_topsrcdir)/generic/hostdrvnt.c'; fi`
+
+$(real_topsrcdir)/generic/xnp21-hostdrvwincompat.o: $(real_topsrcdir)/generic/hostdrvwincompat.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(xnp21_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o $(real_topsrcdir)/generic/xnp21-hostdrvwincompat.o `test -f '$(real_topsrcdir)/generic/hostdrvwincompat.c' || echo '$(srcdir)/'`$(real_topsrcdir)/generic/hostdrvwincompat.c
+
+$(real_topsrcdir)/generic/xnp21-hostdrvwincompat.obj: $(real_topsrcdir)/generic/hostdrvwincompat.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(xnp21_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o $(real_topsrcdir)/generic/xnp21-hostdrvwincompat.obj `if test -f '$(real_topsrcdir)/generic/hostdrvwincompat.c'; then $(CYGPATH_W) '$(real_topsrcdir)/generic/hostdrvwincompat.c'; else $(CYGPATH_W) '$(srcdir)/$(real_topsrcdir)/generic/hostdrvwincompat.c'; fi`
 
 $(real_topsrcdir)/generic/xnp21-unasm.o: $(real_topsrcdir)/generic/unasm.c
 	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(xnp21_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o $(real_topsrcdir)/generic/xnp21-unasm.o `test -f '$(real_topsrcdir)/generic/unasm.c' || echo '$(srcdir)/'`$(real_topsrcdir)/generic/unasm.c

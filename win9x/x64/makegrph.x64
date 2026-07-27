@@ -165,7 +165,7 @@ makegrph:		sub			rsp, byte 72
 					je			short .putline
 					test		byte [rel gdc + gdc_t.mode1], 10h
 					je			short .putline
-					add			edi, SCRN_BUFWIDTH
+					add			rdi, SCRN_BUFWIDTH
 
 					cmp			dh, 0						; ALL_DRAWFLAG
 					je			short .putlineskip

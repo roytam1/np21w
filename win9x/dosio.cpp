@@ -46,6 +46,16 @@ FILEH DOSIOCALL file_open(const OEMCHAR* lpPathName)
 }
 
 /**
+ * リードライト両方可能でファイルを開きます。リードオンリーの場合は失敗します。
+ * @param[in] lpPathName ファイル名
+ * @return ファイル ハンドル
+ */
+FILEH DOSIOCALL file_open_rw(const OEMCHAR* lpPathName)
+{
+	return ::CreateFile(lpPathName, GENERIC_READ | GENERIC_WRITE, 0, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+}
+
+/**
  * リード オンリーでファイルを開きます
  * @param[in] lpPathName ファイル名
  * @return ファイル ハンドル
@@ -267,6 +277,15 @@ BOOL DOSIOCALL file_islink(const OEMCHAR* lpPathName)
 {
 	const DWORD attr = ::GetFileAttributes(lpPathName);
 	return (attr != INVALID_FILE_ATTRIBUTES && (attr & FILE_ATTRIBUTE_REPARSE_POINT)) ? TRUE : FALSE;
+}
+
+BOOL DOSIOCALL file_infoislink(const FLINFO* fli, const OEMCHAR* lpPathName)
+{
+	if ((fli != NULL) && (fli->caps & FLICAPS_ATTR))
+	{
+		return (fli->attr & FILE_ATTRIBUTE_REPARSE_POINT) ? TRUE : FALSE;
+	}
+	return file_islink(lpPathName);
 }
 
 /**
@@ -511,6 +530,29 @@ static bool DOSIOCALL setFLInfo(const WIN32_FIND_DATA& w32fd, FLINFO *fli)
 }
 
 /**
+ * ファイル/ディレクトリ1件の情報を得る（ワイルドカードを付加しない）
+ * @param[in] lpPathName パス
+ * @param[out] fli 検索結果
+ * @retval SUCCESS 成功
+ * @retval FAILURE 失敗
+ */
+BRESULT DOSIOCALL file_getinfo(const OEMCHAR* lpPathName, FLINFO* fli)
+{
+	WIN32_FIND_DATA w32fd;
+	HANDLE hFile;
+	bool result;
+
+	hFile = ::FindFirstFile(lpPathName, &w32fd);
+	if (hFile == INVALID_HANDLE_VALUE)
+	{
+		return FAILURE;
+	}
+	result = setFLInfo(w32fd, fli);
+	::FindClose(hFile);
+	return result ? SUCCESS : FAILURE;
+}
+
+/**
  * ファイルの検索
  * @param[in] lpPathName パス
  * @param[out] fli 検索結果
@@ -569,6 +611,38 @@ void DOSIOCALL file_listclose(FLISTH hList)
 {
 	::FindClose(hList);
 }
+
+#if defined(DOSIO_HAS_DIRMONITOR)
+FDIRMONH DOSIOCALL file_dirmonitor_open(const OEMCHAR* lpPathName)
+{
+	if (lpPathName == NULL || lpPathName[0] == '\0')
+	{
+		return FDIRMONH_INVALID;
+	}
+	return ::FindFirstChangeNotification(lpPathName, FALSE,
+		FILE_NOTIFY_CHANGE_FILE_NAME | FILE_NOTIFY_CHANGE_DIR_NAME);
+}
+
+BOOL DOSIOCALL file_dirmonitor_changed(FDIRMONH hMonitor)
+{
+	DWORD dwWait;
+
+	if (hMonitor == NULL || hMonitor == FDIRMONH_INVALID)
+	{
+		return TRUE;
+	}
+	dwWait = ::WaitForSingleObject(hMonitor, 0);
+	return (dwWait == WAIT_TIMEOUT) ? FALSE : TRUE;
+}
+
+void DOSIOCALL file_dirmonitor_close(FDIRMONH hMonitor)
+{
+	if (hMonitor != NULL && hMonitor != FDIRMONH_INVALID)
+	{
+		::FindCloseChangeNotification(hMonitor);
+	}
+}
+#endif
 
 
 

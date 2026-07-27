@@ -74,7 +74,7 @@ struct tagHostDrvShortNameEntry
 {
 	HDRVFILE file;
 	OEMCHAR szFilename[MAX_PATH];
-	OEMCHAR szShortFilename[14];
+	OEMCHAR szShortFilename[64];
 	UINT nOrder;
 	BOOL bAssigned;
 };
@@ -82,6 +82,11 @@ typedef struct tagHostDrvShortNameEntry HDRVSFNENTRY;
 
 BRESULT hostdrvs_getshortnamemap(const OEMCHAR *lpPath, HDRVSFNENTRY **ppEntries, UINT *pnEntries);
 void hostdrvs_freeshortnamemap(HDRVSFNENTRY *pEntries);
+void hostdrvs_invalidateshortnamecache(void);
+BOOL hostdrvs_lookupshortnamecached(const OEMCHAR *lpPath, const OEMCHAR *lpFilename,
+								 OEMCHAR *lpShortName, UINT cchShortName);
+BOOL hostdrvs_lookuplongnamecached(const OEMCHAR *lpPath, const OEMCHAR *lpShortName,
+								 OEMCHAR *lpFilename, UINT cchFilename, UINT32 *lpAttr);
 BOOL hostdrvs_lookupshortname(const HDRVSFNENTRY *pEntries, UINT nEntries,
 							  const OEMCHAR *lpFilename, OEMCHAR *lpShortName, UINT cchShortName);
 BOOL hostdrvs_lookuplongname(const HDRVSFNENTRY *pEntries, UINT nEntries,

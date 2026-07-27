@@ -503,7 +503,7 @@ static BRESULT read_data(UINT num, UINT32 pos, UINT size, UINT seg, UINT off) {
 	UINT		r;
 
 	hdf = (HDRVHANDLE)listarray_getitem(hostdrv.fhdl, num);
-	if (hdf == NULL) {
+	if ((hdf == NULL) || (hdf->hdl == (INTPTR)FILEH_INVALID)) {
 		return(FAILURE);
 	}
 	fh = (FILEH)hdf->hdl;
@@ -530,7 +530,7 @@ static BRESULT write_data(UINT num, UINT32 pos, UINT size, UINT seg, UINT off) {
 	UINT		r;
 
 	hdf = (HDRVHANDLE)listarray_getitem(hostdrv.fhdl, num);
-	if (hdf == NULL) {
+	if ((hdf == NULL) || (hdf->hdl == (INTPTR)FILEH_INVALID)) {
 		return(FAILURE);
 	}
 	fh = (FILEH)hdf->hdl;
@@ -630,6 +630,7 @@ static void remove_dir(INTRST intrst)
 			nResult = ERR_ACCESSDENIED;
 			break;
 		}
+		hostdrvs_invalidateshortnamecache();
 		succeed(intrst);
 		return;
 	} while (FALSE /*CONSTCOND*/);
@@ -681,6 +682,7 @@ static void make_dir(INTRST intrst)
 			nResult = ERR_ACCESSDENIED;
 			break;
 		}
+		hostdrvs_invalidateshortnamecache();
 		nResult = ERR_NOERROR;
 	} while (FALSE /*CONSTCOND*/);
 
@@ -975,26 +977,26 @@ static void set_fileattr(INTRST intrst) {
 	attr = MEMR_READ16(CPU_SS, CPU_BP + sizeof(IF4INTR)) & 0x37;
 
 	hostattr = file_attr(hdp.szPath);
-	hostattr &= ~(FILE_ATTRIBUTE_READONLY | FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_ARCHIVE | FILE_ATTRIBUTE_SYSTEM);
+	hostattr &= ~(FILEATTR_READONLY | FILEATTR_HIDDEN | FILEATTR_ARCHIVE | FILEATTR_SYSTEM);
 	if (attr & 0x01)
 	{
-		hostattr |= FILE_ATTRIBUTE_READONLY;
+		hostattr |= FILEATTR_READONLY;
 	}
 	if (attr & 0x02)
 	{
-		hostattr |= FILE_ATTRIBUTE_HIDDEN;
+		hostattr |= FILEATTR_HIDDEN;
 	}
 	if (attr & 0x04)
 	{
-		hostattr |= FILE_ATTRIBUTE_SYSTEM;
+		hostattr |= FILEATTR_SYSTEM;
 	}
 	if (attr & 0x20)
 	{
-		hostattr |= FILE_ATTRIBUTE_ARCHIVE;
+		hostattr |= FILEATTR_ARCHIVE;
 	}
 	if (hostattr == 0)
 	{
-		hostattr |= FILE_ATTRIBUTE_NORMAL;
+		hostattr |= FILEATTR_NORMAL;
 	}
 	if (file_setattr(hdp.szPath, hostattr))
 	{
@@ -1121,8 +1123,11 @@ static void rename_file(INTRST intrst)
 				break;
 			}
 			// .‚Æ..‚Í•s³
-			if ((_tcscmp(phdl->szFilename, OEMTEXT(".")) == 0) ||
-				(_tcscmp(phdl->szFilename, OEMTEXT("..")) == 0))
+			if (((phdl->szFilename[0] == (OEMCHAR)'.') &&
+				 (phdl->szFilename[1] == (OEMCHAR)'\0')) ||
+				((phdl->szFilename[0] == (OEMCHAR)'.') &&
+				 (phdl->szFilename[1] == (OEMCHAR)'.') &&
+				 (phdl->szFilename[2] == (OEMCHAR)'\0')))
 			{
 				nResult = ERR_ACCESSDENIED;
 				break;
@@ -1148,6 +1153,7 @@ static void rename_file(INTRST intrst)
 				nResult = ERR_ACCESSDENIED;
 				break;
 			}
+			hostdrvs_invalidateshortnamecache();
 		}
 	} while (FALSE /*CONSTCOND*/);
 
@@ -1218,6 +1224,7 @@ static void delete_file(INTRST intrst)
 				nResult = ERR_ACCESSDENIED;
 				break;
 			}
+			hostdrvs_invalidateshortnamecache();
 		}
 		else
 		{
@@ -1252,6 +1259,7 @@ static void delete_file(INTRST intrst)
 					nResult = ERR_ACCESSDENIED;
 					break;
 				}
+				hostdrvs_invalidateshortnamecache();
 			}
 		}
 	} while (FALSE /*CONSTCOND*/);
@@ -1338,7 +1346,7 @@ static void open_file(INTRST intrst)
 				nResult = ERR_ACCESSDENIED;
 				break;
 			}
-			fh = file_open(hdp.szPath);
+			fh = file_open_rw(hdp.szPath);
 		}
 		else
 		{
@@ -1442,6 +1450,7 @@ static void create_file(INTRST intrst)
 			nResult = ERR_ACCESSDENIED;
 			break;
 		}
+		hostdrvs_invalidateshortnamecache();
 
 		hdf->hdl = (INTPTR)fh;
 		hdf->mode = HDFMODE_READ | HDFMODE_WRITE;
@@ -1823,7 +1832,7 @@ static void ext_openfile(INTRST intrst)
 		{
 			if (IS_PERMITWRITE)
 			{
-				fh = file_open(hdp.szPath);
+				fh = file_open_rw(hdp.szPath);
 			}
 		}
 		else
@@ -1836,6 +1845,10 @@ static void ext_openfile(INTRST intrst)
 			TRACEOUT(("file open error!"));
 			nResult = ERR_ACCESSDENIED;
 			break;
+		}
+		if (create)
+		{
+			hostdrvs_invalidateshortnamecache();
 		}
 
 		hdf = hostdrvs_fhdlsea(hostdrv.fhdl);
@@ -1952,6 +1965,7 @@ void hostdrv_deinitialize(void) {
 	hostdrv_findhandles_clear();
 	hostdrvs_fhdlallclose(hostdrv.fhdl);
 	listarray_destroy(hostdrv.fhdl);
+	hostdrvs_invalidateshortnamecache();
 	TRACEOUT(("hostdrv_deinitialize"));
 }
 
@@ -1971,6 +1985,7 @@ void hostdrv_mount(const void *arg1, long arg2) {
 		np2sysp_outstr(OEMTEXT("ng"), 0);
 		return;
 	}
+	hostdrvs_invalidateshortnamecache();
 	hostdrv.stat.is_mount = 1;
 	hostdrv.stat.newprotocol = 0;
 	fetch_if4dos();
@@ -2205,7 +2220,7 @@ int hostdrv_sfload(STFLAGH sfh, const SFENTRY *tbl) {
 				continue;
 			}
 			if (hdf->mode & HDFMODE_WRITE) {
-				fh = file_open(hdf->path);
+				fh = file_open_rw(hdf->path);
 			}
 			else {
 				fh = file_open_rb(hdf->path);

@@ -41,6 +41,10 @@ static const PROCTBL evtproc[] = {
 			{PROCID('e','p','k','1'), pc9861ch1cb},
 			{PROCID('e','p','k','2'), pc9861ch2cb},
 #endif
+#if defined(SUPPORT_IDEIO)
+			{PROCID('e','i','d','1'), ideioint},
+			{PROCID('e','i','d','2'), ideioint2},
+#endif
 };
 
 static const ENUMTBL evtnum[] = {

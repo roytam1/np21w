@@ -13,8 +13,6 @@
 #endif
 #include "pccore.h"
 
-#include <shlwapi.h>
-
 /* 性能上最適化で優先しない方がいいコードなのでわざと別セグメントに置く */
 /* #pragma code_seg(".MISCCODE") */
 
@@ -42,11 +40,143 @@ static const UINT8 s_cDosCharacters[] =
 
 static UINT s_nShortNameMode = HOSTDRV_SHORTNAME_DEFAULT;
 
+/* OEMCHAR helpers kept local so generic/hostdrvs.c does not require the
+ * Windows _tcs* family.  Case-insensitive filename comparisons are delegated
+ * to the active dosio backend; exact cache-key comparisons stay local. */
+static UINT32 HostOemCharValue(OEMCHAR c)
+{
+	if (sizeof(OEMCHAR) == 1)
+	{
+		return (UINT32)(UINT8)c;
+	}
+	return (UINT32)c;
+}
+
+static int HostOemCmp(const OEMCHAR *a, const OEMCHAR *b)
+{
+	UINT32 ca;
+	UINT32 cb;
+
+	for (;;)
+	{
+		ca = HostOemCharValue(*a++);
+		cb = HostOemCharValue(*b++);
+		if (ca != cb) return (ca > cb) ? 1 : -1;
+		if (ca == 0) return 0;
+	}
+}
+
+static int HostOemIcmp(const OEMCHAR *a, const OEMCHAR *b)
+{
+	/* Use the backend's filename comparison semantics.  This preserves the
+	 * Windows/SJIS behavior while allowing X11/SDL2 to apply their native
+	 * case-folding rules.  Cache keys themselves remain byte/code-unit exact
+	 * (HostOemCmp) so case-sensitive host filesystems cannot alias /Foo and
+	 * /foo to the same SFN cache entry. */
+	return file_cmpname(a, b);
+}
+
+static int HostOemNcmp(const OEMCHAR *a, const OEMCHAR *b, UINT n)
+{
+	UINT32 ca;
+	UINT32 cb;
+
+	while (n-- != 0)
+	{
+		ca = HostOemCharValue(*a++);
+		cb = HostOemCharValue(*b++);
+		if (ca != cb) return (ca > cb) ? 1 : -1;
+		if (ca == 0) return 0;
+	}
+	return 0;
+}
+
+static UINT HostOemLen(const OEMCHAR *s)
+{
+	const OEMCHAR *p;
+
+	p = s;
+	while (*p != 0) p++;
+	return (UINT)(p - s);
+}
+
+#define HOSTDRV_SFNCACHE_COUNT 8
+
+/*
+ * Directory name-change monitoring is an optional safety aid for the SFN
+ * cache.  hostdrvs.c does not depend on any platform API: a dosio backend may
+ * define DOSIO_HAS_DIRMONITOR and provide the three file_dirmonitor_* helpers.
+ * Backends without that capability simply use an unmonitored cache and rely
+ * on HOSTDRV-originated invalidation.
+ */
+
+typedef struct {
+	BOOL valid;
+	UINT32 age;
+	OEMCHAR szPath[MAX_PATH];
+	HDRVSFNENTRY *pEntries;
+	UINT nEntries;
+	/*
+	 * Optional platform monitor.  NULL means that namespace changes cannot be
+	 * observed.  Such an entry is still cacheable; this intentionally accepts a
+	 * short stale-cache window on platforms/filesystems without monitoring.
+	 */
+	void *pNameChange;
+} HDRVSFNCACHE;
+
+static HDRVSFNCACHE s_sfnCache[HOSTDRV_SFNCACHE_COUNT];
+static UINT32 s_sfnCacheAge;
+
+static BOOL SfnNameMonitorValid(void *pMonitor)
+{
+	return (pMonitor != NULL) ? TRUE : FALSE;
+}
+
+static void SfnNameMonitorClose(void *pMonitor)
+{
+#if defined(DOSIO_HAS_DIRMONITOR)
+	if (pMonitor != NULL)
+	{
+		file_dirmonitor_close((FDIRMONH)pMonitor);
+	}
+#else
+	(void)pMonitor;
+#endif
+}
+
+static void ClearSfnCacheSlot(UINT nSlot)
+{
+	if (nSlot >= HOSTDRV_SFNCACHE_COUNT)
+	{
+		return;
+	}
+	if (s_sfnCache[nSlot].pEntries != NULL)
+	{
+		free(s_sfnCache[nSlot].pEntries);
+	}
+	SfnNameMonitorClose(s_sfnCache[nSlot].pNameChange);
+	ZeroMemory(&s_sfnCache[nSlot], sizeof(s_sfnCache[nSlot]));
+}
+
+void hostdrvs_invalidateshortnamecache(void)
+{
+	UINT i;
+
+	for (i = 0; i < HOSTDRV_SFNCACHE_COUNT; i++)
+	{
+		ClearSfnCacheSlot(i);
+	}
+	s_sfnCacheAge = 0;
+}
+
 /**
  * Short File Nameのつけ方ルール設定
  */
 void hostdrvs_setshortnamemode(UINT nMode)
 {
+	UINT nOldMode;
+
+	nOldMode = s_nShortNameMode;
 	switch (nMode)
 	{
 		case HOSTDRV_SHORTNAME_LEGACY:
@@ -57,6 +187,10 @@ void hostdrvs_setshortnamemode(UINT nMode)
 		default:
 			s_nShortNameMode = HOSTDRV_SHORTNAME_DEFAULT;
 			break;
+	}
+	if (nOldMode != s_nShortNameMode)
+	{
+		hostdrvs_invalidateshortnamecache();
 	}
 }
 
@@ -220,7 +354,7 @@ static BOOL IsExact83Name(const OEMCHAR *lpFilename, const char *lpFcbname)
 	OEMCHAR szRoundTrip[64];
 
 	Fcb2OemName(szRoundTrip, NELEMENTS(szRoundTrip), lpFcbname);
-	return (_tcsicmp(szRoundTrip, lpFilename) == 0);
+	return (HostOemIcmp(szRoundTrip, lpFilename) == 0);
 }
 
 /**
@@ -252,21 +386,108 @@ static BOOL IsMatchFcb(const HDRVFILE *phdf, const char *lpMask, UINT nAttr)
 	return TRUE;
 }
 
-/**
- * FCB 名が一致するか
- * @param[in] vpItem アイテム
- * @param[in] vpArg ユーザ引数
- * @retval TRUE 一致
- * @retval FALSE 不一致
- */
-static BOOL IsMatchName(void *vpItem, void *vpArg)
+typedef struct {
+	char fcbname[11];
+	BOOL used;
+} SFNUSEDSLOT;
+
+typedef struct {
+	SFNUSEDSLOT *pSlots;
+	UINT nMask;
+} SFNUSEDSET;
+
+static UINT32 HashFcbName(const char *lpFcbname)
 {
-	return IsMatchFcb((HDRVFILE *)vpItem, (char *)vpArg, 0x16);
+	UINT32 h;
+	UINT i;
+
+	h = 2166136261UL;
+	for (i = 0; i < 11; i++)
+	{
+		h ^= (UINT8)lpFcbname[i];
+		h *= 16777619UL;
+	}
+	return h;
 }
 
-static BOOL IsFcbUsed(LISTARRAY lst, const char *lpFcbname)
+static BRESULT SfnUsedInit(SFNUSEDSET *pSet, UINT nNames)
 {
-	return (listarray_enum(lst, IsMatchName, (void *)lpFcbname) != NULL);
+	UINT nCapacity;
+
+	if (pSet == NULL)
+	{
+		return FAILURE;
+	}
+	pSet->pSlots = NULL;
+	pSet->nMask = 0;
+	nCapacity = 64;
+	while (nCapacity < ((nNames + 1) * 2))
+	{
+		if (nCapacity > 0x40000000U)
+		{
+			return FAILURE;
+		}
+		nCapacity <<= 1;
+	}
+	pSet->pSlots = (SFNUSEDSLOT *)calloc(nCapacity, sizeof(SFNUSEDSLOT));
+	if (pSet->pSlots == NULL)
+	{
+		return FAILURE;
+	}
+	pSet->nMask = nCapacity - 1;
+	return SUCCESS;
+}
+
+static void SfnUsedDestroy(SFNUSEDSET *pSet)
+{
+	if (pSet != NULL)
+	{
+		free(pSet->pSlots);
+		pSet->pSlots = NULL;
+		pSet->nMask = 0;
+	}
+}
+
+static BOOL IsFcbUsed(const SFNUSEDSET *pSet, const char *lpFcbname)
+{
+	UINT nPos;
+
+	if ((pSet == NULL) || (pSet->pSlots == NULL))
+	{
+		return FALSE;
+	}
+	nPos = (UINT)(HashFcbName(lpFcbname) & pSet->nMask);
+	while (pSet->pSlots[nPos].used)
+	{
+		if (memcmp(pSet->pSlots[nPos].fcbname, lpFcbname, 11) == 0)
+		{
+			return TRUE;
+		}
+		nPos = (nPos + 1) & pSet->nMask;
+	}
+	return FALSE;
+}
+
+static BRESULT AddUsedFcb(SFNUSEDSET *pSet, const char *lpFcbname)
+{
+	UINT nPos;
+
+	if ((pSet == NULL) || (pSet->pSlots == NULL))
+	{
+		return FAILURE;
+	}
+	nPos = (UINT)(HashFcbName(lpFcbname) & pSet->nMask);
+	while (pSet->pSlots[nPos].used)
+	{
+		if (memcmp(pSet->pSlots[nPos].fcbname, lpFcbname, 11) == 0)
+		{
+			return SUCCESS;
+		}
+		nPos = (nPos + 1) & pSet->nMask;
+	}
+	memcpy(pSet->pSlots[nPos].fcbname, lpFcbname, 11);
+	pSet->pSlots[nPos].used = TRUE;
+	return SUCCESS;
 }
 
 static BOOL IsSjisLeadByte(UINT8 c)
@@ -338,14 +559,19 @@ static UINT CopyStemPrefix(char *lpDst, UINT nLimit, const char *lpLegacy)
 /**
  * チルダ番号で保護したSFNを生成する
  */
-static BOOL MakeTildeFcb(char *lpFcbname, const OEMCHAR *lpFilename, LISTARRAY used)
+static BOOL MakeTildeFcb(char *lpFcbname, const OEMCHAR *lpFilename,
+						 const SFNUSEDSET *used, UINT32 nStart, UINT32 *pnUsed)
 {
 	char legacy[11];
 	char digits[16];
 	UINT32 nNumber;
 
 	RealName2Fcb(legacy, lpFilename);
-	for (nNumber = 1; nNumber <= 9999999UL; nNumber++)
+	if (nStart == 0)
+	{
+		nStart = 1;
+	}
+	for (nNumber = nStart; nNumber <= 9999999UL; nNumber++)
 	{
 		UINT nDigits;
 		UINT nPrefixLimit;
@@ -377,6 +603,10 @@ static BOOL MakeTildeFcb(char *lpFcbname, const OEMCHAR *lpFilename, LISTARRAY u
 
 		if (!IsFcbUsed(used, lpFcbname))
 		{
+			if (pnUsed != NULL)
+			{
+				*pnUsed = nNumber;
+			}
 			return TRUE;
 		}
 	}
@@ -392,10 +622,10 @@ static int CompareRawByName(const void *vp1, const void *vp2)
 
 	p1 = (const HDRVSFNENTRY *)vp1;
 	p2 = (const HDRVSFNENTRY *)vp2;
-	r = _tcsicmp(p1->szFilename, p2->szFilename);
+	r = HostOemIcmp(p1->szFilename, p2->szFilename);
 	if (r == 0)
 	{
-		r = _tcscmp(p1->szFilename, p2->szFilename);
+		r = HostOemCmp(p1->szFilename, p2->szFilename);
 	}
 	if (r == 0)
 	{
@@ -429,16 +659,12 @@ static int CompareRawByOrder(const void *vp1, const void *vp2)
 	return 0;
 }
 
-static BRESULT AddFileToLists(LISTARRAY ret, LISTARRAY used,
-							  const HDRVFILE *phdf, const OEMCHAR *lpFilename,
-							  const char *lpMask, UINT nAttr, BOOL bVisible)
+static BRESULT AddFileToList(LISTARRAY ret, const HDRVFILE *phdf,
+							 const OEMCHAR *lpFilename, const char *lpMask,
+							 UINT nAttr, BOOL bVisible)
 {
 	HDRVLST hdd;
 
-	if (listarray_append(used, phdf) == NULL)
-	{
-		return FAILURE;
-	}
 	if (bVisible && IsMatchFcb(phdf, lpMask, nAttr))
 	{
 		hdd = (HDRVLST)listarray_append(ret, NULL);
@@ -452,7 +678,7 @@ static BRESULT AddFileToLists(LISTARRAY ret, LISTARRAY used,
 	return SUCCESS;
 }
 
-static BOOL IsUsableMappedFcb(const char *lpFcbname, LISTARRAY used)
+static BOOL IsUsableMappedFcb(const char *lpFcbname, const SFNUSEDSET *used)
 {
 	OEMCHAR szName[32];
 	char roundTrip[11];
@@ -470,14 +696,14 @@ static BOOL IsUsableMappedFcb(const char *lpFcbname, LISTARRAY used)
 	return !IsFcbUsed(used, lpFcbname);
 }
 
-static BRESULT AppendUsedName(LISTARRAY used, HDRVSFNENTRY *pEntry,
+static BRESULT AppendUsedName(SFNUSEDSET *used, HDRVSFNENTRY *pEntry,
 							  const char *lpFcbname)
 {
-	memcpy(pEntry->file.fcbname, lpFcbname, 11);
-	if (listarray_append(used, &pEntry->file) == NULL)
+	if (AddUsedFcb(used, lpFcbname) != SUCCESS)
 	{
 		return FAILURE;
 	}
+	memcpy(pEntry->file.fcbname, lpFcbname, 11);
 	pEntry->bAssigned = TRUE;
 	return SUCCESS;
 }
@@ -499,22 +725,37 @@ static BRESULT GatherRawEntries(const OEMCHAR *lpPath, HDRVSFNENTRY **ppEntries,
 		HDRVSFNENTRY *pNew;
 		UINT nCapacity;
 		OEMCHAR szEntryPath[MAX_PATH];
+		FLINFO freshInfo;
+		const FLINFO *pInfo;
 
 		// .と..は無視
-		if ((_tcscmp(fli.path, OEMTEXT(".")) == 0) || (_tcscmp(fli.path, OEMTEXT("..")) == 0))
+		if ((HostOemCmp(fli.path, OEMTEXT(".")) == 0) || (HostOemCmp(fli.path, OEMTEXT("..")) == 0))
 		{
 			continue;
 		}
 
-		// シンボリックリンクも不可
+		// Reject symbolic links/reparse points through the dosio abstraction.
+		// This keeps hostdrvs.c independent of Windows FILE_ATTRIBUTE_* values.
 		file_cpyname(szEntryPath, lpPath, NELEMENTS(szEntryPath));
 		file_setseparator(szEntryPath, NELEMENTS(szEntryPath));
 		file_catname(szEntryPath, fli.path, NELEMENTS(szEntryPath));
-		if (file_islink(szEntryPath))
+		if (file_infoislink(&fli, szEntryPath))
 		{
 			continue;
 		}
 
+		/* Some portable directory iterators cannot cheaply return full metadata.
+		 * Refresh only when fields used by HOSTDRV are missing; Windows/X11
+		 * normally take the zero-extra-call path. */
+		pInfo = &fli;
+		if ((fli.caps & (FLICAPS_SIZE | FLICAPS_ATTR | FLICAPS_DATE | FLICAPS_TIME)) !=
+			(FLICAPS_SIZE | FLICAPS_ATTR | FLICAPS_DATE | FLICAPS_TIME))
+		{
+			if (file_getinfo(szEntryPath, &freshInfo) == SUCCESS)
+			{
+				pInfo = &freshInfo;
+			}
+		}
 		// SFNマップ格納領域が足りなければ拡張
 		if (*pnEntries >= *pnCapacity)
 		{
@@ -533,14 +774,18 @@ static BRESULT GatherRawEntries(const OEMCHAR *lpPath, HDRVSFNENTRY **ppEntries,
 		// SFN登録
 		p = &(*ppEntries)[*pnEntries];
 		ZeroMemory(p, sizeof(*p));
-		p->file.caps = fli.caps;
-		p->file.size = fli.size;
-		p->file.attr = fli.attr;
-		p->file.date = fli.date;
-		p->file.time = fli.time;
+		p->file.caps = pInfo->caps;
+		p->file.size = pInfo->size;
+		p->file.attr = pInfo->attr;
+		p->file.date = pInfo->date;
+		p->file.time = pInfo->time;
 		file_cpyname(p->szFilename, fli.path, NELEMENTS(p->szFilename));
 		file_cpyname(p->szShortFilename, fli.shortpath,
 					 NELEMENTS(p->szShortFilename));
+		/* Preserve the pre-optimization host-SFN behavior.  Some filesystems may
+		 * leave cAlternateFileName empty while GetShortPathName still supplies a
+		 * usable host alias.  This fallback costs one query for those entries but
+		 * avoids changing which real file an existing host SFN denotes. */
 		if (p->szShortFilename[0] == '\0')
 		{
 			OEMCHAR szFullPath[MAX_PATH];
@@ -560,7 +805,7 @@ static BRESULT GatherRawEntries(const OEMCHAR *lpPath, HDRVSFNENTRY **ppEntries,
 }
 
 static BRESULT AssignHostAndExactNames(HDRVSFNENTRY *pEntries, UINT nEntries,
-									   LISTARRAY used)
+									   SFNUSEDSET *used)
 {
 	UINT i;
 	char candidate[11];
@@ -608,21 +853,34 @@ static BRESULT AssignHostAndExactNames(HDRVSFNENTRY *pEntries, UINT nEntries,
 }
 
 static BRESULT AssignGeneratedNames(HDRVSFNENTRY *pEntries, UINT nEntries,
-									LISTARRAY used)
+									SFNUSEDSET *used)
 {
 	UINT i;
 	char candidate[11];
+	char legacy[11];
+	char lastLegacy[11];
+	BOOL bHaveLast;
+	UINT32 nNext;
 
+	bHaveLast = FALSE;
+	nNext = 1;
 	for (i = 0; i < nEntries; i++)
 	{
 		HDRVSFNENTRY *p;
+		UINT32 nUsed;
 
 		p = &pEntries[i];
 		if (p->bAssigned)
 		{
 			continue;
 		}
-		if (!MakeTildeFcb(candidate, p->szFilename, used))
+		RealName2Fcb(legacy, p->szFilename);
+		if (!bHaveLast || (memcmp(lastLegacy, legacy, 11) != 0))
+		{
+			nNext = 1;
+		}
+		nUsed = 0;
+		if (!MakeTildeFcb(candidate, p->szFilename, used, nNext, &nUsed))
 		{
 			return FAILURE;
 		}
@@ -630,11 +888,14 @@ static BRESULT AssignGeneratedNames(HDRVSFNENTRY *pEntries, UINT nEntries,
 		{
 			return FAILURE;
 		}
+		memcpy(lastLegacy, legacy, 11);
+		bHaveLast = TRUE;
+		nNext = nUsed + 1;
 	}
 	return SUCCESS;
 }
 
-static BRESULT AssignLegacyNames(HDRVSFNENTRY *pEntries, UINT nEntries, LISTARRAY used)
+static BRESULT AssignLegacyNames(HDRVSFNENTRY *pEntries, UINT nEntries, SFNUSEDSET *used)
 {
 	UINT i;
 	char candidate[11];
@@ -666,12 +927,12 @@ static BRESULT AssignLegacyNames(HDRVSFNENTRY *pEntries, UINT nEntries, LISTARRA
 /// <param name="ppEntries">SFNマップ</param>
 /// <param name="pnEntries">SFNマップエントリ数</param>
 /// <returns></returns>
-BRESULT hostdrvs_getshortnamemap(const OEMCHAR *lpPath, HDRVSFNENTRY **ppEntries, UINT *pnEntries)
+static BRESULT BuildShortNameMap(const OEMCHAR *lpPath, HDRVSFNENTRY **ppEntries, UINT *pnEntries)
 {
 	HDRVSFNENTRY *entries;
 	UINT nEntries;
 	UINT nCapacity;
-	LISTARRAY used;
+	SFNUSEDSET used;
 	BRESULT r;
 
 	// パスがNULLは不可
@@ -693,51 +954,45 @@ BRESULT hostdrvs_getshortnamemap(const OEMCHAR *lpPath, HDRVSFNENTRY **ppEntries
 	}
 	if (nEntries == 0)
 	{
+#if defined(HOSTDRV_SFN_TRACE)
+		TRACEOUT(("hostdrv:sfn build %s (0)", lpPath));
+#endif
 		free(entries);
 		return SUCCESS;
 	}
+#if defined(HOSTDRV_SFN_TRACE)
+	TRACEOUT(("hostdrv:sfn build %s (%u)", lpPath, nEntries));
+#endif
 
-	used = listarray_new(sizeof(HDRVFILE), 64);
-	if (used == NULL)
+	ZeroMemory(&used, sizeof(used));
+	if (SfnUsedInit(&used, nEntries + 2) != SUCCESS)
 	{
 		free(entries);
 		return FAILURE;
 	}
+	if ((AddUsedFcb(&used, s_self) != SUCCESS) ||
+		(AddUsedFcb(&used, s_parent) != SUCCESS))
 	{
-		HDRVFILE special;
-
-		ZeroMemory(&special, sizeof(special));
-		memcpy(special.fcbname, s_self, 11);
-		if (listarray_append(used, &special) == NULL)
-		{
-			listarray_destroy(used);
-			free(entries);
-			return FAILURE;
-		}
-		memcpy(special.fcbname, s_parent, 11);
-		if (listarray_append(used, &special) == NULL)
-		{
-			listarray_destroy(used);
-			free(entries);
-			return FAILURE;
-		}
+		SfnUsedDestroy(&used);
+		free(entries);
+		return FAILURE;
 	}
 
 	if (s_nShortNameMode == HOSTDRV_SHORTNAME_LEGACY)
 	{
-		r = AssignLegacyNames(entries, nEntries, used);
+		r = AssignLegacyNames(entries, nEntries, &used);
 	}
 	else
 	{
 		qsort(entries, nEntries, sizeof(HDRVSFNENTRY), CompareRawByName);
-		r = AssignHostAndExactNames(entries, nEntries, used);
+		r = AssignHostAndExactNames(entries, nEntries, &used);
 		if (r == SUCCESS)
 		{
-			r = AssignGeneratedNames(entries, nEntries, used);
+			r = AssignGeneratedNames(entries, nEntries, &used);
 		}
 	}
 
-	listarray_destroy(used);
+	SfnUsedDestroy(&used);
 	if (r != SUCCESS)
 	{
 		free(entries);
@@ -748,6 +1003,264 @@ BRESULT hostdrvs_getshortnamemap(const OEMCHAR *lpPath, HDRVSFNENTRY **ppEntries
 	*ppEntries = entries;
 	*pnEntries = nEntries;
 	return SUCCESS;
+}
+
+static UINT FindSfnCacheSlot(const OEMCHAR *lpPath)
+{
+	UINT i;
+
+	for (i = 0; i < HOSTDRV_SFNCACHE_COUNT; i++)
+	{
+		if (s_sfnCache[i].valid && (HostOemCmp(s_sfnCache[i].szPath, lpPath) == 0))
+		{
+			return i;
+		}
+	}
+	return (UINT)-1;
+}
+
+static UINT SelectSfnCacheVictim(void)
+{
+	UINT i;
+	UINT nVictim;
+	UINT32 nOldest;
+
+	for (i = 0; i < HOSTDRV_SFNCACHE_COUNT; i++)
+	{
+		if (!s_sfnCache[i].valid)
+		{
+			return i;
+		}
+	}
+	nVictim = 0;
+	nOldest = s_sfnCache[0].age;
+	for (i = 1; i < HOSTDRV_SFNCACHE_COUNT; i++)
+	{
+		if (s_sfnCache[i].age < nOldest)
+		{
+			nOldest = s_sfnCache[i].age;
+			nVictim = i;
+		}
+	}
+	return nVictim;
+}
+
+static void *StartSfnNameChangeMonitor(const OEMCHAR *lpPath)
+{
+#if defined(DOSIO_HAS_DIRMONITOR)
+	FDIRMONH hChange;
+
+	hChange = file_dirmonitor_open(lpPath);
+	if (hChange == FDIRMONH_INVALID)
+	{
+		return NULL;
+	}
+	return (void *)hChange;
+#else
+	(void)lpPath;
+	return NULL;
+#endif
+}
+
+static BOOL SfnCacheSlotNamespaceStable(UINT nSlot)
+{
+	if (nSlot >= HOSTDRV_SFNCACHE_COUNT || !s_sfnCache[nSlot].valid)
+	{
+		return FALSE;
+	}
+	/* No monitor means "unknown", not "changed".  Cross-platform builds and
+	 * filesystems without notification support are allowed to keep using the
+	 * cache; HOSTDRV-originated mutations still invalidate it explicitly. */
+	if (!SfnNameMonitorValid(s_sfnCache[nSlot].pNameChange))
+	{
+		return TRUE;
+	}
+#if defined(DOSIO_HAS_DIRMONITOR)
+	return file_dirmonitor_changed((FDIRMONH)s_sfnCache[nSlot].pNameChange)
+		? FALSE : TRUE;
+#else
+	return TRUE;
+#endif
+}
+
+static void StoreSfnCacheOwned(const OEMCHAR *lpPath, HDRVSFNENTRY *pEntries,
+	UINT nEntries, void *pNameChange)
+{
+	UINT nSlot;
+
+	nSlot = FindSfnCacheSlot(lpPath);
+	if (nSlot == (UINT)-1)
+	{
+		nSlot = SelectSfnCacheVictim();
+	}
+	ClearSfnCacheSlot(nSlot);
+	s_sfnCache[nSlot].valid = TRUE;
+	s_sfnCache[nSlot].age = ++s_sfnCacheAge;
+	file_cpyname(s_sfnCache[nSlot].szPath, lpPath, NELEMENTS(s_sfnCache[nSlot].szPath));
+	s_sfnCache[nSlot].pEntries = pEntries;
+	s_sfnCache[nSlot].nEntries = nEntries;
+	s_sfnCache[nSlot].pNameChange = pNameChange;
+}
+
+static void StoreSfnCacheCopy(const OEMCHAR *lpPath, const HDRVSFNENTRY *pEntries,
+	UINT nEntries, void *pNameChange)
+{
+	HDRVSFNENTRY *pCopy;
+
+	pCopy = NULL;
+	if (nEntries != 0)
+	{
+		pCopy = (HDRVSFNENTRY *)malloc(nEntries * sizeof(HDRVSFNENTRY));
+		if (pCopy == NULL)
+		{
+			SfnNameMonitorClose(pNameChange);
+			return;
+		}
+		memcpy(pCopy, pEntries, nEntries * sizeof(HDRVSFNENTRY));
+	}
+	StoreSfnCacheOwned(lpPath, pCopy, nEntries, pNameChange);
+}
+
+/*
+ * On Windows, arm a directory-name notification before building the map so a
+ * rename/create/delete during the build can be detected.  On other platforms,
+ * or when the Windows filesystem cannot provide a monitor, build normally and
+ * keep an unmonitored cache entry.  The latter deliberately trades some stale
+ * namespace safety for cross-platform performance, as requested.
+ */
+static BRESULT BuildShortNameMapForCache(const OEMCHAR *lpPath,
+	HDRVSFNENTRY **ppEntries, UINT *pnEntries, void **ppNameChange)
+{
+	if (ppNameChange != NULL)
+	{
+		*ppNameChange = NULL;
+	}
+#if defined(DOSIO_HAS_DIRMONITOR)
+	{
+		UINT nAttempt;
+
+		for (nAttempt = 0; nAttempt < 2; nAttempt++)
+		{
+			void *pNameChange;
+			BRESULT r;
+
+			pNameChange = StartSfnNameChangeMonitor(lpPath);
+			*ppEntries = NULL;
+			*pnEntries = 0;
+			r = BuildShortNameMap(lpPath, ppEntries, pnEntries);
+			if (r != SUCCESS)
+			{
+				SfnNameMonitorClose(pNameChange);
+				return FAILURE;
+			}
+
+			/* Monitoring may be unavailable (network/legacy filesystem etc.).
+			 * Keep the freshly built map and cache it unmonitored. */
+			if (!SfnNameMonitorValid(pNameChange))
+			{
+				return SUCCESS;
+			}
+			if (!file_dirmonitor_changed((FDIRMONH)pNameChange))
+			{
+				if (ppNameChange != NULL)
+				{
+					*ppNameChange = pNameChange;
+				}
+				else
+				{
+					SfnNameMonitorClose(pNameChange);
+				}
+				return SUCCESS;
+			}
+
+			SfnNameMonitorClose(pNameChange);
+			free(*ppEntries);
+			*ppEntries = NULL;
+			*pnEntries = 0;
+		}
+
+		/* A monitor was available but observed repeated namespace changes.
+		 * Do not silently downgrade to an unmonitored mapping on this request. */
+		return FAILURE;
+	}
+#else
+	/* Backends without monitoring intentionally use a normal cached map. */
+	return BuildShortNameMap(lpPath, ppEntries, pnEntries);
+#endif
+}
+
+static BRESULT GetCachedShortNameMap(const OEMCHAR *lpPath,
+	const HDRVSFNENTRY **ppEntries, UINT *pnEntries, BOOL bRequireStableNamespace)
+{
+	UINT nSlot;
+	HDRVSFNENTRY *pEntries;
+	UINT nEntries;
+	void *pNameChange;
+
+	(void)bRequireStableNamespace;
+	nSlot = FindSfnCacheSlot(lpPath);
+	if (nSlot != (UINT)-1)
+	{
+		/* If a monitor exists, a signalled handle makes the whole SFN assignment
+		 * stale.  Without a monitor, accept the cached namespace until explicit
+		 * HOSTDRV invalidation or an access failure discards it. */
+		if (SfnNameMonitorValid(s_sfnCache[nSlot].pNameChange) &&
+			!SfnCacheSlotNamespaceStable(nSlot))
+		{
+			ClearSfnCacheSlot(nSlot);
+			nSlot = (UINT)-1;
+		}
+		else
+		{
+			s_sfnCache[nSlot].age = ++s_sfnCacheAge;
+			*ppEntries = s_sfnCache[nSlot].pEntries;
+			*pnEntries = s_sfnCache[nSlot].nEntries;
+#if defined(HOSTDRV_SFN_TRACE)
+			TRACEOUT(("hostdrv:sfn cache hit %s (%u)%s", lpPath, *pnEntries,
+				SfnNameMonitorValid(s_sfnCache[nSlot].pNameChange) ? " monitored" : " unmonitored"));
+#endif
+			return SUCCESS;
+		}
+	}
+
+	pEntries = NULL;
+	nEntries = 0;
+	pNameChange = NULL;
+	if (BuildShortNameMapForCache(lpPath, &pEntries, &nEntries, &pNameChange) != SUCCESS)
+	{
+		return FAILURE;
+	}
+	StoreSfnCacheOwned(lpPath, pEntries, nEntries, pNameChange);
+	nSlot = FindSfnCacheSlot(lpPath);
+	if (nSlot == (UINT)-1)
+	{
+		return FAILURE;
+	}
+	*ppEntries = s_sfnCache[nSlot].pEntries;
+	*pnEntries = s_sfnCache[nSlot].nEntries;
+#if defined(HOSTDRV_SFN_TRACE)
+	TRACEOUT(("hostdrv:sfn cache miss %s (%u)%s", lpPath, *pnEntries,
+		SfnNameMonitorValid(s_sfnCache[nSlot].pNameChange) ? " monitored" : " unmonitored"));
+#endif
+	return SUCCESS;
+}
+
+BRESULT hostdrvs_getshortnamemap(const OEMCHAR *lpPath, HDRVSFNENTRY **ppEntries, UINT *pnEntries)
+{
+	BRESULT r;
+	void *pNameChange;
+
+	pNameChange = NULL;
+	r = BuildShortNameMapForCache(lpPath, ppEntries, pnEntries, &pNameChange);
+	if (r == SUCCESS)
+	{
+		StoreSfnCacheCopy(lpPath, *ppEntries, *pnEntries, pNameChange);
+	}
+	else
+	{
+		SfnNameMonitorClose(pNameChange);
+	}
+	return r;
 }
 
 void hostdrvs_freeshortnamemap(HDRVSFNENTRY *pEntries)
@@ -766,7 +1279,7 @@ BOOL hostdrvs_lookupshortname(const HDRVSFNENTRY *pEntries, UINT nEntries,
 	}
 	for (i = 0; i < nEntries; i++)
 	{
-		if (pEntries[i].bAssigned && (_tcsicmp(pEntries[i].szFilename, lpFilename) == 0))
+		if (pEntries[i].bAssigned && (HostOemIcmp(pEntries[i].szFilename, lpFilename) == 0))
 		{
 			Fcb2OemName(lpShortName, cchShortName, pEntries[i].file.fcbname);
 			return TRUE;
@@ -794,7 +1307,7 @@ BOOL hostdrvs_lookuplongname(const HDRVSFNENTRY *pEntries, UINT nEntries,
 			continue;
 		}
 		Fcb2OemName(szCandidate, NELEMENTS(szCandidate), pEntries[i].file.fcbname);
-		if (_tcsicmp(szCandidate, lpShortName) == 0)
+		if (HostOemIcmp(szCandidate, lpShortName) == 0)
 		{
 			file_cpyname(lpFilename, pEntries[i].szFilename, cchFilename);
 			if (lpAttr != NULL)
@@ -808,6 +1321,69 @@ BOOL hostdrvs_lookuplongname(const HDRVSFNENTRY *pEntries, UINT nEntries,
 	return FALSE;
 }
 
+/*
+ * Cached lookup helpers.  The cache owns the map; callers receive only the
+ * translated name, so eviction/invalidation cannot leave dangling pointers.
+ */
+BOOL hostdrvs_lookupshortnamecached(const OEMCHAR *lpPath, const OEMCHAR *lpFilename,
+								 OEMCHAR *lpShortName, UINT cchShortName)
+{
+	const HDRVSFNENTRY *pEntries;
+	UINT nEntries;
+
+	if ((lpPath == NULL) || (lpFilename == NULL) || (lpShortName == NULL) ||
+		(cchShortName == 0))
+	{
+		return FALSE;
+	}
+	pEntries = NULL;
+	nEntries = 0;
+	if (GetCachedShortNameMap(lpPath, &pEntries, &nEntries, FALSE) != SUCCESS)
+	{
+		lpShortName[0] = '\0';
+		return FALSE;
+	}
+	return hostdrvs_lookupshortname(pEntries, nEntries, lpFilename, lpShortName, cchShortName);
+}
+
+BOOL hostdrvs_lookuplongnamecached(const OEMCHAR *lpPath, const OEMCHAR *lpShortName,
+								 OEMCHAR *lpFilename, UINT cchFilename, UINT32 *lpAttr)
+{
+	const HDRVSFNENTRY *pEntries;
+	UINT nEntries;
+	UINT nSlot;
+	BOOL bFound;
+
+	if ((lpPath == NULL) || (lpShortName == NULL) || (lpFilename == NULL) ||
+		(cchFilename == 0))
+	{
+		return FALSE;
+	}
+	pEntries = NULL;
+	nEntries = 0;
+	if (GetCachedShortNameMap(lpPath, &pEntries, &nEntries, TRUE) != SUCCESS)
+	{
+		lpFilename[0] = '\0';
+		return FALSE;
+	}
+	bFound = hostdrvs_lookuplongname(pEntries, nEntries, lpShortName,
+		lpFilename, cchFilename, lpAttr);
+
+	/* A monitored namespace change must never cause one request to be retried
+	 * against a different SFN assignment.  Discard this request and let the
+	 * next request rebuild from the new directory state. */
+	nSlot = FindSfnCacheSlot(lpPath);
+	if (nSlot != (UINT)-1 &&
+		SfnNameMonitorValid(s_sfnCache[nSlot].pNameChange) &&
+		!SfnCacheSlotNamespaceStable(nSlot))
+	{
+		ClearSfnCacheSlot(nSlot);
+		lpFilename[0] = '\0';
+		return FALSE;
+	}
+	return bFound;
+}
+
 /// <summary>
 /// 与えられたパスがHOSTDRVルートか
 /// </summary>
@@ -817,7 +1393,7 @@ static BOOL HostPathIsRoot(const OEMCHAR *lpPath)
 
 	if (lpPath == NULL) return FALSE;
 	GetHostRootPath(root, NELEMENTS(root));
-	return (_tcscmp(lpPath, root) == 0) ? TRUE : FALSE;
+	return (HostOemCmp(lpPath, root) == 0) ? TRUE : FALSE;
 }
 
 /// <summary>
@@ -831,15 +1407,15 @@ static BRESULT HostPathGoParent(OEMCHAR *lpPath, UINT cchPath)
 
 	if (lpPath == NULL || cchPath == 0) return FAILURE;
 	GetHostRootPath(root, NELEMENTS(root));
-	if (_tcscmp(lpPath, root) == 0) return FAILURE;
+	if (HostOemCmp(lpPath, root) == 0) return FAILURE;
 
 	file_cutseparator(lpPath);
 	file_cutname(lpPath);
 	file_cutseparator(lpPath);
 
-	rootLen = (UINT)_tcslen(root);
-	pathLen = (UINT)_tcslen(lpPath);
-	if (pathLen < rootLen || _tcsncmp(lpPath, root, rootLen) != 0 ||
+	rootLen = HostOemLen(root);
+	pathLen = HostOemLen(lpPath);
+	if (pathLen < rootLen || HostOemNcmp(lpPath, root, rootLen) != 0 ||
 		(pathLen > rootLen &&
 		 !(rootLen > 0 && (root[rootLen - 1] == '\\' || root[rootLen - 1] == '/')) &&
 		 lpPath[rootLen] != '\\' && lpPath[rootLen] != '/'))
@@ -855,7 +1431,6 @@ static BRESULT HostPathGoParent(OEMCHAR *lpPath, UINT cchPath)
 static LISTARRAY GetPathListCommon(const HDRVPATH *phdp, const char *lpMask, UINT nAttr)
 {
 	LISTARRAY ret;
-	LISTARRAY used;
 	HDRVSFNENTRY *entries;
 	UINT nEntries;
 	UINT i;
@@ -863,13 +1438,10 @@ static LISTARRAY GetPathListCommon(const HDRVPATH *phdp, const char *lpMask, UIN
 	int isRoot;
 
 	ret = listarray_new(sizeof(_HDRVLST), 64);
-	used = listarray_new(sizeof(HDRVFILE), 64);
 	entries = NULL;
 	nEntries = 0;
-	if ((ret == NULL) || (used == NULL))
+	if (ret == NULL)
 	{
-		if (ret != NULL) listarray_destroy(ret);
-		if (used != NULL) listarray_destroy(used);
 		return NULL;
 	}
 
@@ -878,13 +1450,13 @@ static LISTARRAY GetPathListCommon(const HDRVPATH *phdp, const char *lpMask, UIN
 	{
 		special = phdp->file;
 		memcpy(special.fcbname, s_self, 11);
-		if (AddFileToLists(ret, used, &special, OEMTEXT("."),
-						   lpMask, nAttr, !isRoot) != SUCCESS) goto memory_error;
+		if (AddFileToList(ret, &special, OEMTEXT("."),
+						  lpMask, nAttr, !isRoot) != SUCCESS) goto memory_error;
 
 		special = phdp->file;
 		memcpy(special.fcbname, s_parent, 11);
-		if (AddFileToLists(ret, used, &special, OEMTEXT(".."),
-						   lpMask, nAttr, !isRoot) != SUCCESS) goto memory_error;
+		if (AddFileToList(ret, &special, OEMTEXT(".."),
+						  lpMask, nAttr, !isRoot) != SUCCESS) goto memory_error;
 	}
 
 	if (hostdrvs_getshortnamemap(phdp->szPath, &entries, &nEntries) != SUCCESS)
@@ -905,7 +1477,6 @@ static LISTARRAY GetPathListCommon(const HDRVPATH *phdp, const char *lpMask, UIN
 	}
 
 	hostdrvs_freeshortnamemap(entries);
-	listarray_destroy(used);
 	if (listarray_getitems(ret) == 0)
 	{
 		listarray_destroy(ret);
@@ -915,7 +1486,6 @@ static LISTARRAY GetPathListCommon(const HDRVPATH *phdp, const char *lpMask, UIN
 
 memory_error:
 	hostdrvs_freeshortnamemap(entries);
-	listarray_destroy(used);
 	listarray_destroy(ret);
 	return NULL;
 }
@@ -1001,62 +1571,176 @@ static const char *DosPath2Fcb(char *lpFcbname, const char *lpDosPath)
  * 一覧生成と同じ短名割り当て処理を経由するため、FindFirstで見えた短名は
  * open/delete/rename/chdirでも必ず同じ実ファイルへ解決される。
  */
+static void FillFileInfo(HDRVFILE *pFile, const FLINFO *pInfo, const char *lpFcbname)
+{
+	memcpy(pFile->fcbname, lpFcbname, 11);
+	pFile->caps = pInfo->caps;
+	pFile->size = pInfo->size;
+	pFile->attr = pInfo->attr;
+	pFile->date = pInfo->date;
+	pFile->time = pInfo->time;
+}
+
+static BRESULT TryDirect83Path(HDRVPATH *phdp, const char *lpFcbname)
+{
+	OEMCHAR szDosName[64];
+	OEMCHAR szPath[MAX_PATH];
+	FLINFO fli;
+	char candidate[11];
+	BOOL bMatch;
+
+	Fcb2OemName(szDosName, NELEMENTS(szDosName), lpFcbname);
+	if (szDosName[0] == '\0')
+	{
+		return FAILURE;
+	}
+	file_cpyname(szPath, phdp->szPath, NELEMENTS(szPath));
+	file_setseparator(szPath, NELEMENTS(szPath));
+	file_catname(szPath, szDosName, NELEMENTS(szPath));
+
+	if (file_getinfo(szPath, &fli) != SUCCESS)
+	{
+		return FAILURE;
+	}
+	if (file_islink(szPath))
+	{
+		return FAILURE;
+	}
+
+	bMatch = FALSE;
+	if (fli.shortpath[0] != '\0')
+	{
+		RealName2Fcb(candidate, fli.shortpath);
+		if (IsExact83Name(fli.shortpath, candidate) &&
+			(memcmp(candidate, lpFcbname, 11) == 0))
+		{
+			bMatch = TRUE;
+		}
+	}
+	if (!bMatch)
+	{
+		RealName2Fcb(candidate, fli.path);
+		if (IsExact83Name(fli.path, candidate) &&
+			(memcmp(candidate, lpFcbname, 11) == 0))
+		{
+			bMatch = TRUE;
+		}
+	}
+	if (!bMatch)
+	{
+		return FAILURE;
+	}
+
+	FillFileInfo(&phdp->file, &fli, lpFcbname);
+	file_cpyname(szPath, phdp->szPath, NELEMENTS(szPath));
+	file_setseparator(szPath, NELEMENTS(szPath));
+	file_catname(szPath, fli.path, NELEMENTS(szPath));
+	file_cpyname(phdp->szPath, szPath, NELEMENTS(phdp->szPath));
+	return SUCCESS;
+}
+
+static BRESULT ApplyMappedEntry(HDRVPATH *phdp, const HDRVSFNENTRY *pEntry,
+								const char *lpFcbname)
+{
+	OEMCHAR szPath[MAX_PATH];
+	FLINFO fli;
+
+	file_cpyname(szPath, phdp->szPath, NELEMENTS(szPath));
+	file_setseparator(szPath, NELEMENTS(szPath));
+	file_catname(szPath, pEntry->szFilename, NELEMENTS(szPath));
+	if (file_getinfo(szPath, &fli) != SUCCESS)
+	{
+		return FAILURE;
+	}
+	if (file_islink(szPath))
+	{
+		return FAILURE;
+	}
+	FillFileInfo(&phdp->file, &fli, lpFcbname);
+	file_cpyname(phdp->szPath, szPath, NELEMENTS(phdp->szPath));
+	return SUCCESS;
+}
+
 static BRESULT FindSinglePath(HDRVPATH *phdp, const char *lpFcbname)
 {
-	LISTARRAY lst;
-	HDRVLST hdd;
-	UINT nIndex;
-	BRESULT r;
+	const HDRVSFNENTRY *pEntries;
+	UINT nEntries;
+	UINT i;
+	UINT nSlot;
+	HDRVFILE oldFile;
+	HDRVSFNENTRY mappedEntry;
+	OEMCHAR szParentPath[MAX_PATH];
 
-	r = FAILURE;
-	lst = hostdrvs_getpathlist(phdp, lpFcbname, 0x37);
-	if (lst != NULL)
+	if (memcmp(lpFcbname, s_self, 11) == 0)
 	{
-		nIndex = 0;
-		while (TRUE)
-		{
-			hdd = (HDRVLST)listarray_getitem(lst, nIndex++);
-			if (hdd == NULL)
-			{
-				break;
-			}
-			if (memcmp(hdd->file.fcbname, lpFcbname, 11) == 0)
-			{
-				// 親への移動はHOSTDRVルートより上にいかないようにする
-				if (_tcscmp(hdd->szFilename, OEMTEXT(".")) == 0)
-				{
-					r = SUCCESS;
-					break;
-				}
-				if (_tcscmp(hdd->szFilename, OEMTEXT("..")) == 0)
-				{
-					if (HostPathGoParent(phdp->szPath, NELEMENTS(phdp->szPath)) != SUCCESS)
-					{
-						r = FAILURE;
-						break;
-					}
-					phdp->file = HostPathIsRoot(phdp->szPath) ? s_hddroot : hdd->file;
-					r = SUCCESS;
-					break;
-				}
-
-				phdp->file = hdd->file;
-				file_setseparator(phdp->szPath, NELEMENTS(phdp->szPath));
-				file_catname(phdp->szPath, hdd->szFilename, NELEMENTS(phdp->szPath));
-				
-				// シンボリックリンクは拒否
-				if (file_islink(phdp->szPath))
-				{
-					r = FAILURE;
-					break;
-				}
-				r = SUCCESS;
-				break;
-			}
-		}
-		listarray_destroy(lst);
+		return SUCCESS;
 	}
-	return r;
+	if (memcmp(lpFcbname, s_parent, 11) == 0)
+	{
+		oldFile = phdp->file;
+		if (HostPathGoParent(phdp->szPath, NELEMENTS(phdp->szPath)) != SUCCESS)
+		{
+			return FAILURE;
+		}
+		phdp->file = HostPathIsRoot(phdp->szPath) ? s_hddroot : oldFile;
+		return SUCCESS;
+	}
+
+	/* 実在する8.3名やホストOSのSFNならディレクトリ全体のマップ生成を避ける。 */
+	if (TryDirect83Path(phdp, lpFcbname) == SUCCESS)
+	{
+		return SUCCESS;
+	}
+
+	/* 合成SFNだけディレクトリ単位のキャッシュを参照する。 */
+	file_cpyname(szParentPath, phdp->szPath, NELEMENTS(szParentPath));
+	oldFile = phdp->file;
+	pEntries = NULL;
+	nEntries = 0;
+	if (GetCachedShortNameMap(szParentPath, &pEntries, &nEntries, TRUE) != SUCCESS)
+	{
+		return FAILURE;
+	}
+	for (i = 0; i < nEntries; i++)
+	{
+		if (pEntries[i].bAssigned &&
+			(memcmp(pEntries[i].file.fcbname, lpFcbname, 11) == 0))
+		{
+			/* Copy before any monitor check can invalidate the backing cache. */
+			mappedEntry = pEntries[i];
+			nSlot = FindSfnCacheSlot(szParentPath);
+			if (nSlot != (UINT)-1 &&
+				SfnNameMonitorValid(s_sfnCache[nSlot].pNameChange) &&
+				!SfnCacheSlotNamespaceStable(nSlot))
+			{
+				ClearSfnCacheSlot(nSlot);
+				return FAILURE;
+			}
+
+			if (ApplyMappedEntry(phdp, &mappedEntry, lpFcbname) == SUCCESS)
+			{
+				/* If a monitored rename/create/delete happened while validating the
+				 * mapped target, fail this request rather than allowing it to continue
+				 * with an SFN assignment from the old namespace. */
+				nSlot = FindSfnCacheSlot(szParentPath);
+				if (nSlot != (UINT)-1 &&
+					SfnNameMonitorValid(s_sfnCache[nSlot].pNameChange) &&
+					!SfnCacheSlotNamespaceStable(nSlot))
+				{
+					ClearSfnCacheSlot(nSlot);
+					phdp->file = oldFile;
+					file_cpyname(phdp->szPath, szParentPath, NELEMENTS(phdp->szPath));
+					return FAILURE;
+				}
+				return SUCCESS;
+			}
+			/* The cached long-name target disappeared or became unsafe.  Never
+			 * rebuild and remap the same SFN within this request. */
+			hostdrvs_invalidateshortnamecache();
+			return FAILURE;
+		}
+	}
+	return FAILURE;
 }
 
 /**
@@ -1066,23 +1750,45 @@ static BRESULT FindSinglePath(HDRVPATH *phdp, const char *lpFcbname)
  * @param[in] lpDosPath DOS パス
  * @return DOS エラー コード
  */
+static BOOL HostRootPathIsRelative(const OEMCHAR *lpPath)
+{
+	/* Platform-independent subset of PathIsRelative semantics.  Leading '/'
+	 * or '\' is absolute (POSIX root or Windows rooted/UNC path), and a
+	 * drive-prefixed path is treated as non-relative on Windows-compatible
+	 * configurations. */
+	if (lpPath == NULL || lpPath[0] == '\0')
+	{
+		return TRUE;
+	}
+	if (lpPath[0] == '/' || lpPath[0] == '\\')
+	{
+		return FALSE;
+	}
+	if ((((lpPath[0] >= 'A') && (lpPath[0] <= 'Z')) ||
+		 ((lpPath[0] >= 'a') && (lpPath[0] <= 'z'))) && lpPath[1] == ':')
+	{
+		return FALSE;
+	}
+	return TRUE;
+}
+
 static void GetHostRootPath(OEMCHAR *lpPath, UINT cchPath)
 {
-	if (PathIsRelative(np2cfg.hdrvroot))
+	if (HostRootPathIsRelative(np2cfg.hdrvroot))
 	{
-		TCHAR pathbuf[MAX_PATH+1];
-		TCHAR *pathtmp;
-		initgetfile(pathbuf, _countof(pathbuf));
-		pathtmp = _tcsrchr(pathbuf, '\\');
-		if (pathtmp)
+		OEMCHAR pathbuf[MAX_PATH + 1];
+		OEMCHAR *base;
+
+		/* file_setcd() records the executable/config base on every supported
+		 * backend.  Use that abstraction instead of the Windows-only initgetfile. */
+		base = file_getcd(OEMTEXT(""));
+		if (base == NULL)
 		{
-			*(pathtmp+1) = 0;
+			lpPath[0] = '\0';
+			return;
 		}
-		else
-		{
-			pathbuf[0] = 0;
-		}
-		_tcscat(pathbuf, np2cfg.hdrvroot);
+		file_cpyname(pathbuf, base, NELEMENTS(pathbuf));
+		file_catname(pathbuf, np2cfg.hdrvroot, NELEMENTS(pathbuf));
 		file_cpyname(lpPath, pathbuf, cchPath);
 	}
 	else
@@ -1112,8 +1818,8 @@ BOOL hostdrvs_issafehostpath(const OEMCHAR *lpPath)
 	if (root[0] == '\0') return FALSE;
 
 	// パス先頭の一致確認
-	rootLen = (UINT)_tcslen(root);
-	if (_tcsncmp(lpPath, root, rootLen) != 0) return FALSE;
+	rootLen = HostOemLen(root);
+	if (HostOemNcmp(lpPath, root, rootLen) != 0) return FALSE;
 	if (lpPath[rootLen] != '\0' &&
 		!(rootLen > 0 && (root[rootLen - 1] == '\\' || root[rootLen - 1] == '/')) &&
 		lpPath[rootLen] != '\\' && lpPath[rootLen] != '/') return FALSE;
@@ -1134,8 +1840,8 @@ BOOL hostdrvs_issafehostpath(const OEMCHAR *lpPath)
 		component[len] = '\0';
 
 		// .と..は不可
-		if ((_tcscmp(component, OEMTEXT(".")) == 0) ||
-			(_tcscmp(component, OEMTEXT("..")) == 0)) return FALSE;
+		if ((HostOemCmp(component, OEMTEXT(".")) == 0) ||
+			(HostOemCmp(component, OEMTEXT("..")) == 0)) return FALSE;
 		
 		// シンボリックリンク等は不可
 		file_setseparator(current, NELEMENTS(current));

@@ -114,6 +114,10 @@ typedef signed char BOOL;
 
 #define	SUPPORT_CRT15KHZ
 #define	SUPPORT_HOSTDRV
+#if defined(CPUCORE_IA32)
+#define	SUPPORT_HOSTDRV9X
+#define	SUPPORT_HOSTDRVNT
+#endif
 #define	SUPPORT_SWSEEKSND
 #define	SUPPORT_SASI
 #define	SUPPORT_SCSI

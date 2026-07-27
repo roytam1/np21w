@@ -7,6 +7,9 @@
 
 #if defined(SUPPORT_HOSTDRVNT)
 
+#if !defined(WIN32) && !defined(_WIN32)
+#include "hostdrvwincompat.h"
+#endif
 #include "statsave.h"
 
 #define NP2HOSTDRVNT_FILES_MAX	65536

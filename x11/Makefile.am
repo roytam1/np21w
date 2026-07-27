@@ -162,6 +162,9 @@ COMMON_SOURCES=	$(real_topsrcdir)/x11/main.c \
 		$(real_topsrcdir)/generic/cmjasts.c \
 		$(real_topsrcdir)/generic/hostdrv.c \
 		$(real_topsrcdir)/generic/hostdrvs.c \
+		$(real_topsrcdir)/generic/hostdrv9x.c \
+		$(real_topsrcdir)/generic/hostdrvnt.c \
+		$(real_topsrcdir)/generic/hostdrvwincompat.c \
 		$(real_topsrcdir)/generic/unasm.c \
 		$(real_topsrcdir)/generic/np2info.c \
 		$(real_topsrcdir)/generic/memdbg32.c \

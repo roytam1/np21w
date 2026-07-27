@@ -109,6 +109,9 @@
 		BA7E83FE19063AFB00041C04 /* cmver.c in Sources */ = {isa = PBXBuildFile; fileRef = BA7E826519063AFA00041C04 /* cmver.c */; };
 		BA7E83FF19063AFB00041C04 /* dipswbmp.c in Sources */ = {isa = PBXBuildFile; fileRef = BA7E826719063AFA00041C04 /* dipswbmp.c */; };
 		BA7E840119063AFB00041C04 /* hostdrv.c in Sources */ = {isa = PBXBuildFile; fileRef = BA7E826A19063AFA00041C04 /* hostdrv.c */; };
+		F1A2000119063AFA00041C01 /* hostdrv9x.c in Sources */ = {isa = PBXBuildFile; fileRef = F1A2000119063AFA00041C11 /* hostdrv9x.c */; };
+		F1A2000119063AFA00041C02 /* hostdrvnt.c in Sources */ = {isa = PBXBuildFile; fileRef = F1A2000119063AFA00041C14 /* hostdrvnt.c */; };
+		F1A2000119063AFA00041C03 /* hostdrvwincompat.c in Sources */ = {isa = PBXBuildFile; fileRef = F1A2000119063AFA00041C17 /* hostdrvwincompat.c */; };
 		BA7E840319063AFB00041C04 /* hostdrvs.c in Sources */ = {isa = PBXBuildFile; fileRef = BA7E826D19063AFA00041C04 /* hostdrvs.c */; };
 		BA7E840419063AFB00041C04 /* keydisp.c in Sources */ = {isa = PBXBuildFile; fileRef = BA7E826F19063AFA00041C04 /* keydisp.c */; };
 		BA7E840619063AFB00041C04 /* memdbg32.c in Sources */ = {isa = PBXBuildFile; fileRef = BA7E827219063AFA00041C04 /* memdbg32.c */; };
@@ -480,6 +483,14 @@
 		BA7E826719063AFA00041C04 /* dipswbmp.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = dipswbmp.c; sourceTree = "<group>"; };
 		BA7E826819063AFA00041C04 /* dipswbmp.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = dipswbmp.h; sourceTree = "<group>"; };
 		BA7E826A19063AFA00041C04 /* hostdrv.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = hostdrv.c; sourceTree = "<group>"; };
+		F1A2000119063AFA00041C11 /* hostdrv9x.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = hostdrv9x.c; sourceTree = "<group>"; };
+		F1A2000119063AFA00041C12 /* hostdrv9x.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = hostdrv9x.h; sourceTree = "<group>"; };
+		F1A2000119063AFA00041C13 /* hostdrv9xdef.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = hostdrv9xdef.h; sourceTree = "<group>"; };
+		F1A2000119063AFA00041C14 /* hostdrvnt.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = hostdrvnt.c; sourceTree = "<group>"; };
+		F1A2000119063AFA00041C15 /* hostdrvnt.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = hostdrvnt.h; sourceTree = "<group>"; };
+		F1A2000119063AFA00041C16 /* hostdrvntdef.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = hostdrvntdef.h; sourceTree = "<group>"; };
+		F1A2000119063AFA00041C17 /* hostdrvwincompat.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = hostdrvwincompat.c; sourceTree = "<group>"; };
+		F1A2000119063AFA00041C18 /* hostdrvwincompat.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = hostdrvwincompat.h; sourceTree = "<group>"; };
 		BA7E826B19063AFA00041C04 /* hostdrv.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = hostdrv.h; sourceTree = "<group>"; };
 		BA7E826D19063AFA00041C04 /* hostdrvs.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = hostdrvs.c; sourceTree = "<group>"; };
 		BA7E826E19063AFA00041C04 /* hostdrvs.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = hostdrvs.h; sourceTree = "<group>"; };
@@ -1150,6 +1161,14 @@
 				BA7E826719063AFA00041C04 /* dipswbmp.c */,
 				BA7E826819063AFA00041C04 /* dipswbmp.h */,
 				BA7E826A19063AFA00041C04 /* hostdrv.c */,
+				F1A2000119063AFA00041C11 /* hostdrv9x.c */,
+				F1A2000119063AFA00041C12 /* hostdrv9x.h */,
+				F1A2000119063AFA00041C13 /* hostdrv9xdef.h */,
+				F1A2000119063AFA00041C14 /* hostdrvnt.c */,
+				F1A2000119063AFA00041C15 /* hostdrvnt.h */,
+				F1A2000119063AFA00041C16 /* hostdrvntdef.h */,
+				F1A2000119063AFA00041C17 /* hostdrvwincompat.c */,
+				F1A2000119063AFA00041C18 /* hostdrvwincompat.h */,
 				BA7E826B19063AFA00041C04 /* hostdrv.h */,
 				BA7E826D19063AFA00041C04 /* hostdrvs.c */,
 				BA7E826E19063AFA00041C04 /* hostdrvs.h */,
@@ -1723,6 +1742,9 @@
 				BA7E83C519063AFB00041C04 /* ucs2utf8.c in Sources */,
 				BA7E847019063AFB00041C04 /* taskmng.c in Sources */,
 				BA7E840119063AFB00041C04 /* hostdrv.c in Sources */,
+				F1A2000119063AFA00041C01 /* hostdrv9x.c in Sources */,
+				F1A2000119063AFA00041C02 /* hostdrvnt.c in Sources */,
+				F1A2000119063AFA00041C03 /* hostdrvwincompat.c in Sources */,
 				BA7E83A519063AFB00041C04 /* sxsibios.c in Sources */,
 				BA7E849219063AFB00041C04 /* tms3631g.c in Sources */,
 				BA7E83F519063AFB00041C04 /* fontmake.c in Sources */,

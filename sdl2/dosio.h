@@ -1,3 +1,6 @@
+#ifndef NP2_SDL2_DOSIO_H__
+#define NP2_SDL2_DOSIO_H__
+
 
 typedef FILE *				FILEH;
 #define	FILEH_INVALID		NULL
@@ -10,6 +13,12 @@ typedef FILE *				FILEH;
 #define	FLISTH_INVALID		0
 #endif
 
+#if defined(WIN32)
+#define DOSIO_HAS_DIRMONITOR 1
+#define FDIRMONH             HANDLE
+#define FDIRMONH_INVALID     (INVALID_HANDLE_VALUE)
+#endif
+
 #define	FSEEK_SET	SEEK_SET
 #define	FSEEK_CUR	SEEK_CUR
 #define	FSEEK_END	SEEK_END
@@ -20,7 +29,8 @@ enum {
 	FILEATTR_SYSTEM		= 0x04,
 	FILEATTR_VOLUME		= 0x08,
 	FILEATTR_DIRECTORY	= 0x10,
-	FILEATTR_ARCHIVE	= 0x20
+	FILEATTR_ARCHIVE	= 0x20,
+	FILEATTR_NORMAL		= 0x80
 };
 
 enum {
@@ -49,7 +59,7 @@ typedef struct {
 	DOSDATE	date;
 	DOSTIME	time;
 	char	path[MAX_PATH];
-	char	shortpath[14];
+	char	shortpath[64];
 } FLINFO;
 
 
@@ -59,6 +69,7 @@ extern "C" {
 
 /* ファイル操作 */
 FILEH file_open(const char *path);
+FILEH file_open_rw(const char *path);
 FILEH file_open_rb(const char *path);
 FILEH file_create(const char *path);
 FILEPOS file_seek(FILEH handle, FILEPOS pointer, int method);
@@ -69,11 +80,16 @@ FILELEN file_getsize(FILEH handle);
 short file_sync(FILEH handle);
 short file_setsize(FILEH handle, FILELEN length);
 short file_getdatetime(FILEH handle, DOSDATE *dosdate, DOSTIME *dostime);
+short file_setdatetime(FILEH handle, const DOSDATE *dosdate, const DOSTIME *dostime);
 BRESULT file_getshortname(const char *path, char *shortname, UINT cchShortName);
 BOOL file_islink(const char *path);
+BOOL file_infoislink(const FLINFO *fli, const char *path);
 short file_delete(const char *path);
 short file_attr(const char *path);
+short file_setattr(const char *path, short attr);
+short file_rename(const char *oldpath, const char *newpath);
 short file_dircreate(const char *path);
+short file_dirdelete(const char *path);
 
 /* カレントファイル操作 */
 void file_setcd(const char *exepath);
@@ -84,9 +100,16 @@ FILEH file_create_c(const char *path);
 short file_delete_c(const char *path);
 short file_attr_c(const char *path);
 
+BRESULT file_getinfo(const char *path, FLINFO *fli);
 FLISTH file_list1st(const char *dir, FLINFO *fli);
 BRESULT file_listnext(FLISTH hdl, FLINFO *fli);
 void file_listclose(FLISTH hdl);
+
+#if defined(DOSIO_HAS_DIRMONITOR)
+FDIRMONH file_dirmonitor_open(const char *path);
+BOOL file_dirmonitor_changed(FDIRMONH hMonitor);
+void file_dirmonitor_close(FDIRMONH hMonitor);
+#endif
 
 #define file_cpyname(p, n, m)	milstr_ncpy(p, n, m)
 #define file_cmpname(p, n)		milstr_cmp(p, n)
@@ -102,3 +125,4 @@ void file_setseparator(char *path, int maxlen);
 }
 #endif
 
+#endif /* NP2_SDL2_DOSIO_H__ */

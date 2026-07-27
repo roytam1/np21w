@@ -22,12 +22,18 @@
 	ホスト共有フォルダ
 */
 
+#if defined(WIN32) || defined(_WIN32)
 #include <windows.h>
 #ifndef FILE_ATTRIBUTE_REPARSE_POINT
 #define FILE_ATTRIBUTE_REPARSE_POINT 0x00000400
 #endif
 #include <shlwapi.h>
 #include <wchar.h>
+#define HD_W(s) L##s
+#define HD_WC(c) L##c
+#else
+#include "hostdrvwincompat.h"
+#endif
 #include <wctype.h>
 #include <stdlib.h>
 #include <string.h>
@@ -85,7 +91,7 @@ static void trace_fmt_ex(const char* fmt, ...)
 #define H9X_VOLUME_LABEL_HANDLE 0xfffffffeUL
 #define H9X_VOLUME_LABEL_COOKIE 0xfffeU
 #define H9X_VOLUME_LABEL_A "_HOSTDRIVE_"
-#define H9X_VOLUME_LABEL_W L"_HOSTDRIVE_"
+#define H9X_VOLUME_LABEL_W HD_W("_HOSTDRIVE_")
 #define H9X_FIND_DATA_SIZE 592
 #define H9X_BY_HANDLE_INFO_SIZE 52
 
@@ -108,6 +114,8 @@ typedef struct {
 	UINT8 findFlags;
 	UINT16 generation;
 	HANDLE handle;
+	DWORD desiredAccess;
+	DWORD shareMode;
 	WCHAR path[MAX_PATH];
 	WIN32_FIND_DATAW findData;
 	UINT32 searchAttr;
@@ -154,25 +162,25 @@ static int h9x_is_safe_stored_path(const WCHAR *path)
 	// HOSTDRVルート部分のパス一致確認
 	rootLen = (UINT32)wcslen(s_h9xRoot);
 	if (_wcsnicmp(path, s_h9xRoot, rootLen) != 0) return 0;
-	if (path[rootLen] != L'\0' &&
-		!(rootLen > 0 && s_h9xRoot[rootLen - 1] == L'\\') &&
-		path[rootLen] != L'\\') return 0;
-	if (path[rootLen] == L'\0') return 1;
+	if (path[rootLen] != HD_WC('\0') &&
+		!(rootLen > 0 && s_h9xRoot[rootLen - 1] == HD_WC('\\')) &&
+		path[rootLen] != HD_WC('\\')) return 0;
+	if (path[rootLen] == HD_WC('\0')) return 1;
 
 	// パス階層ごとに問題ないか確認
 	wcscpy(current, s_h9xRoot);
 	wcsncpy(relative, path + rootLen, NELEMENTS(relative) - 1);
-	relative[NELEMENTS(relative) - 1] = L'\0';
+	relative[NELEMENTS(relative) - 1] = HD_WC('\0');
 	p = relative;
-	while (*p == L'\\') p++;
-	while (*p != L'\0')
+	while (*p == HD_WC('\\')) p++;
+	while (*p != HD_WC('\0'))
 	{
-		WCHAR *next = wcschr(p, L'\\');
+		WCHAR *next = wcschr(p, HD_WC('\\'));
 		UINT32 len = next ? (UINT32)(next - p) : (UINT32)wcslen(p);
 		DWORD attrs;
 		if (len == 0 || len >= NELEMENTS(component)) return 0;
 		wcsncpy(component, p, len);
-		component[len] = L'\0';
+		component[len] = HD_WC('\0');
 		if (!PathCombineW(candidate, current, component)) return 0;
 		attrs = GetFileAttributesW(candidate);
 		if (attrs == INVALID_FILE_ATTRIBUTES) return 0;
@@ -180,7 +188,7 @@ static int h9x_is_safe_stored_path(const WCHAR *path)
 		wcscpy(current, candidate);
 		if (!next) break;
 		p = next + 1;
-		while (*p == L'\\') p++;
+		while (*p == HD_WC('\\')) p++;
 	}
 	return _wcsicmp(current, path) == 0;
 }
@@ -398,14 +406,14 @@ static int h9x_is_reserved_name(const WCHAR *name)
 {
 	WCHAR base[16];
 	int i = 0;
-	while (*name && *name != L'.' && i < 15) {
+	while (*name && *name != HD_WC('.') && i < 15) {
 		base[i++] = (WCHAR)towupper(*name++);
 	}
 	base[i] = 0;
-	if (!wcscmp(base, L"CON") || !wcscmp(base, L"PRN") ||
-		!wcscmp(base, L"AUX") || !wcscmp(base, L"NUL")) return 1;
-	if (i == 4 && (!wcsncmp(base, L"COM", 3) || !wcsncmp(base, L"LPT", 3)) &&
-		base[3] >= L'1' && base[3] <= L'9') return 1;
+	if (!wcscmp(base, HD_W("CON")) || !wcscmp(base, HD_W("PRN")) ||
+		!wcscmp(base, HD_W("AUX")) || !wcscmp(base, HD_W("NUL"))) return 1;
+	if (i == 4 && (!wcsncmp(base, HD_W("COM"), 3) || !wcsncmp(base, HD_W("LPT"), 3)) &&
+		base[3] >= HD_WC('1') && base[3] <= HD_WC('9')) return 1;
 	return 0;
 }
 
@@ -418,7 +426,7 @@ static int h9x_element_equal(const WCHAR *p, const WCHAR *s)
 static int h9x_resource_element_equal(const WCHAR *p, const WCHAR *s)
 {
 	if (!p || !s) return 0;
-	while (*p == L'\\' || *p == L'/') p++;
+	while (*p == HD_WC('\\') || *p == HD_WC('/')) p++;
 	return h9x_element_equal(p, s);
 }
 
@@ -475,19 +483,19 @@ static int h9x_read_unparsed_leaf(UINT32 pir, WCHAR *leaf, UINT32 leafChars)
 	}
 
 	end = path + i;
-	while (end > path && (end[-1] == L'\\' || end[-1] == L'/')) end--;
+	while (end > path && (end[-1] == HD_WC('\\') || end[-1] == HD_WC('/'))) end--;
 	if (end == path) return 0;
 	start = end;
-	while (start > path && start[-1] != L'\\' && start[-1] != L'/') start--;
+	while (start > path && start[-1] != HD_WC('\\') && start[-1] != HD_WC('/')) start--;
 	chars = (UINT32)(end - start);
 	if (!chars || chars >= leafChars) return 0;
 	memcpy(leaf, start, chars * sizeof(WCHAR));
 	leaf[chars] = 0;
 
-	if (!wcscmp(leaf, L".") || !wcscmp(leaf, L"..") || h9x_is_reserved_name(leaf))
+	if (!wcscmp(leaf, HD_W(".")) || !wcscmp(leaf, HD_W("..")) || h9x_is_reserved_name(leaf))
 		return 0;
 	for (q = leaf; *q; q++) {
-		if (*q == L'\\' || *q == L'/' || *q == L':' || *q == L'*' || *q == L'?')
+		if (*q == HD_WC('\\') || *q == HD_WC('/') || *q == HD_WC(':') || *q == HD_WC('*') || *q == HD_WC('?'))
 			return 0;
 	}
 	return 1;
@@ -501,11 +509,11 @@ static void h9x_preserve_unparsed_leaf_case(UINT32 pir, WCHAR *path)
 
 	if (!path || !*path || !h9x_read_unparsed_leaf(pir, leaf, NELEMENTS(leaf)))
 		return;
-	base = wcsrchr(path, L'\\');
-	if (!base) base = wcsrchr(path, L'/');
+	base = wcsrchr(path, HD_WC('\\'));
+	if (!base) base = wcsrchr(path, HD_WC('/'));
 	base = base ? base + 1 : path;
 
-	/* Never let ir_upath change path identity; restore spelling/case only. */
+	// パスが同じであれば大文字小文字の復元を行う
 	if (_wcsicmp(base, leaf) != 0) return;
 	prefix = (size_t)(base - path);
 	if (prefix + wcslen(leaf) >= MAX_PATH) return;
@@ -519,8 +527,8 @@ static int h9x_is_our_resource(UINT32 ppath)
 	UINT32 off = 4;
 	if (!h9x_read_path_element(ppath, &off, server, NELEMENTS(server))) return 0;
 	if (!h9x_read_path_element(ppath, &off, share, NELEMENTS(share))) return 0;
-	return h9x_resource_element_equal(server, L"NP2HOST") &&
-		h9x_resource_element_equal(share, L"HOSTFS");
+	return h9x_resource_element_equal(server, HD_W("NP2HOST")) &&
+		h9x_resource_element_equal(share, HD_W("HOSTFS"));
 }
 
 // IFSMgrのParsedPathをホストのパスへ変換
@@ -584,15 +592,15 @@ static UINT16 h9x_path_from_parsed(UINT32 ppath, WCHAR *dst, int allowWildcard)
 		// スキップ分を飛ばして読み取り開始
 		if (elementIndex >= skipElements) {
 			// .と..は不可
-			if (!wcscmp(element, L".") || !wcscmp(element, L"..")) return H9X_ERROR_ACCESS_DENIED;
+			if (!wcscmp(element, HD_W(".")) || !wcscmp(element, HD_W(".."))) return H9X_ERROR_ACCESS_DENIED;
 			
 			// 予約名を拒否
 			if (h9x_is_reserved_name(element)) return H9X_ERROR_ACCESS_DENIED;
 			
 			// 特殊文字を判定
 			for (q = element; *q; q++) {
-				if (*q == L'\\' || *q == L'/' || *q == L':') return H9X_ERROR_ACCESS_DENIED;
-				if (*q == L'*' || *q == L'?') wildcard = 1;
+				if (*q == HD_WC('\\') || *q == HD_WC('/') || *q == HD_WC(':')) return H9X_ERROR_ACCESS_DENIED;
+				if (*q == HD_WC('*') || *q == HD_WC('?')) wildcard = 1;
 			}
 
 			// ワイルドカードを除外
@@ -603,7 +611,7 @@ static UINT16 h9x_path_from_parsed(UINT32 ppath, WCHAR *dst, int allowWildcard)
 			if (used + 1 + chars >= MAX_PATH) return H9X_ERROR_FILENAME_EXCED_RANGE;
 			
 			// 特殊ファイルでないことを確認
-			dst[used++] = L'\\';
+			dst[used++] = HD_WC('\\');
 			wcscpy(dst + used, element);
 			used += chars;
 			if (!wildcard) {
@@ -621,6 +629,20 @@ static UINT16 h9x_path_from_parsed(UINT32 ppath, WCHAR *dst, int allowWildcard)
 
 
 // 短いファイル名マップ生成
+#if !defined(WIN32) && !defined(_WIN32)
+static int h9x_sfn_wtooem(const WCHAR *src, OEMCHAR *dst, UINT cchDst)
+{
+	if (!src || !dst || cchDst == 0) return 0;
+	return WideCharToMultiByte(CP_UTF8, 0, src, -1, dst, (int)cchDst, NULL, NULL) != 0;
+}
+
+static int h9x_sfn_oemtow(const OEMCHAR *src, WCHAR *dst, UINT cchDst)
+{
+	if (!src || !dst || cchDst == 0) return 0;
+	return MultiByteToWideChar(CP_UTF8, 0, src, -1, dst, (int)cchDst) != 0;
+}
+#endif
+
 static UINT16 h9x_sfn_build_map(const WCHAR *parent, H9X_SFN_ENTRY **outEntries, UINT32 *outCount)
 {
 	HDRVSFNENTRY *entries;
@@ -630,68 +652,111 @@ static UINT16 h9x_sfn_build_map(const WCHAR *parent, H9X_SFN_ENTRY **outEntries,
 	*outEntries = NULL;
 	*outCount = 0;
 	if (wcslen(parent) >= MAX_PATH) return H9X_ERROR_FILENAME_EXCED_RANGE;
+#if defined(WIN32) || defined(_WIN32)
 	if (hostdrvs_getshortnamemap(parent, &entries, &count) != SUCCESS)
 		return H9X_ERROR_NOT_ENOUGH_MEMORY;
+#else
+	{
+		OEMCHAR oemParent[MAX_PATH * 4];
+		if (!h9x_sfn_wtooem(parent, oemParent, NELEMENTS(oemParent)) ||
+			hostdrvs_getshortnamemap(oemParent, &entries, &count) != SUCCESS)
+			return H9X_ERROR_NOT_ENOUGH_MEMORY;
+	}
+#endif
 	*outEntries = entries;
 	*outCount = (UINT32)count;
 	return H9X_ERROR_SUCCESS;
 }
 
-// LFN -> SFN
 static int h9x_sfn_lookup_long(const H9X_SFN_ENTRY *entries, UINT32 count,
 	const WCHAR *longName, WCHAR *shortName, UINT32 shortChars)
 {
+#if defined(WIN32) || defined(_WIN32)
 	return hostdrvs_lookupshortname(entries, (UINT)count, longName, shortName,
 		(UINT)shortChars) ? 1 : 0;
+#else
+	OEMCHAR oemLong[MAX_PATH * 4];
+	OEMCHAR oemShort[64];
+	if (!h9x_sfn_wtooem(longName, oemLong, NELEMENTS(oemLong))) return 0;
+	if (!hostdrvs_lookupshortname(entries, (UINT)count, oemLong, oemShort,
+		NELEMENTS(oemShort))) return 0;
+	return h9x_sfn_oemtow(oemShort, shortName, shortChars);
+#endif
 }
 
-// SFN -> LFN
 static int h9x_sfn_lookup_short(const H9X_SFN_ENTRY *entries, UINT32 count,
 	const WCHAR *shortName, WCHAR *longName, UINT32 longChars, DWORD *attributes)
 {
 	UINT32 attr;
 	BOOL found;
-
 	attr = 0;
+#if defined(WIN32) || defined(_WIN32)
 	found = hostdrvs_lookuplongname(entries, (UINT)count, shortName, longName,
 		(UINT)longChars, &attr);
+#else
+	{
+		OEMCHAR oemShort[64];
+		OEMCHAR oemLong[MAX_PATH * 4];
+		if (!h9x_sfn_wtooem(shortName, oemShort, NELEMENTS(oemShort))) return 0;
+		found = hostdrvs_lookuplongname(entries, (UINT)count, oemShort, oemLong,
+			NELEMENTS(oemLong), &attr);
+		if (found && !h9x_sfn_oemtow(oemLong, longName, longChars)) found = FALSE;
+	}
+#endif
 	if (found && attributes) *attributes = (DWORD)attr;
 	return found ? 1 : 0;
 }
 
-// LFN -> SFN マップがなければ新規生成
 static UINT16 h9x_sfn_get_short(const WCHAR *parent, const WCHAR *longName,
 	WCHAR *shortName, UINT32 shortChars)
 {
-	H9X_SFN_ENTRY *entries;
-	UINT32 count;
-	UINT16 error;
-	int found;
-
-	error = h9x_sfn_build_map(parent, &entries, &count);
-	if (error) return error;
-	found = h9x_sfn_lookup_long(entries, count, longName, shortName, shortChars);
-	hostdrvs_freeshortnamemap(entries);
-	return found ? H9X_ERROR_SUCCESS : H9X_ERROR_FILE_NOT_FOUND;
+	if (!parent || !longName || !shortName || shortChars < 2)
+		return H9X_ERROR_INVALID_PARAMETER;
+#if defined(WIN32) || defined(_WIN32)
+	return hostdrvs_lookupshortnamecached(parent, longName, shortName,
+		(UINT)shortChars) ? H9X_ERROR_SUCCESS : H9X_ERROR_FILE_NOT_FOUND;
+#else
+	{
+		OEMCHAR oemParent[MAX_PATH * 4];
+		OEMCHAR oemLong[MAX_PATH * 4];
+		OEMCHAR oemShort[64];
+		if (!h9x_sfn_wtooem(parent, oemParent, NELEMENTS(oemParent)) ||
+			!h9x_sfn_wtooem(longName, oemLong, NELEMENTS(oemLong)) ||
+			!hostdrvs_lookupshortnamecached(oemParent, oemLong, oemShort, NELEMENTS(oemShort)) ||
+			!h9x_sfn_oemtow(oemShort, shortName, shortChars))
+			return H9X_ERROR_FILE_NOT_FOUND;
+		return H9X_ERROR_SUCCESS;
+	}
+#endif
 }
 
-// SFN -> LFN マップがなければ新規生成
 static UINT16 h9x_sfn_get_long(const WCHAR *parent, const WCHAR *shortName,
 	WCHAR *longName, UINT32 longChars, DWORD *attributes)
 {
-	H9X_SFN_ENTRY *entries;
-	UINT32 count;
-	UINT16 error;
-	int found;
-
-	error = h9x_sfn_build_map(parent, &entries, &count);
-	if (error) return error;
-	found = h9x_sfn_lookup_short(entries, count, shortName, longName, longChars, attributes);
-	hostdrvs_freeshortnamemap(entries);
-	return found ? H9X_ERROR_SUCCESS : H9X_ERROR_FILE_NOT_FOUND;
+	UINT32 attr;
+	if (!parent || !shortName || !longName || longChars < 2)
+		return H9X_ERROR_INVALID_PARAMETER;
+	attr = 0;
+#if defined(WIN32) || defined(_WIN32)
+	if (!hostdrvs_lookuplongnamecached(parent, shortName, longName,
+		(UINT)longChars, &attr))
+		return H9X_ERROR_FILE_NOT_FOUND;
+#else
+	{
+		OEMCHAR oemParent[MAX_PATH * 4];
+		OEMCHAR oemShort[64];
+		OEMCHAR oemLong[MAX_PATH * 4];
+		if (!h9x_sfn_wtooem(parent, oemParent, NELEMENTS(oemParent)) ||
+			!h9x_sfn_wtooem(shortName, oemShort, NELEMENTS(oemShort)) ||
+			!hostdrvs_lookuplongnamecached(oemParent, oemShort, oemLong, NELEMENTS(oemLong), &attr) ||
+			!h9x_sfn_oemtow(oemLong, longName, longChars))
+			return H9X_ERROR_FILE_NOT_FOUND;
+	}
+#endif
+	if (attributes) *attributes = (DWORD)attr;
+	return H9X_ERROR_SUCCESS;
 }
 
-// 親ディレクトリを取得
 static int h9x_find_parent_path(const WCHAR *searchPath, WCHAR *parent, UINT32 parentChars)
 {
 	WCHAR *slash;
@@ -699,9 +764,9 @@ static int h9x_find_parent_path(const WCHAR *searchPath, WCHAR *parent, UINT32 p
 	if (!searchPath || !*searchPath || !parent || parentChars < 2) return 0;
 	wcsncpy(parent, searchPath, parentChars - 1);
 	parent[parentChars - 1] = 0;
-	slash = wcsrchr(parent, L'\\');
+	slash = wcsrchr(parent, HD_WC('\\'));
 	if (!slash) return 0;
-	if (slash == parent + 2 && parent[1] == L':') slash[1] = 0;
+	if (slash == parent + 2 && parent[1] == HD_WC(':')) slash[1] = 0;
 	else *slash = 0;
 	return 1;
 }
@@ -754,7 +819,7 @@ static UINT16 h9x_resolve_existing_component(const WCHAR *parent,
 	if (used + 1 + wcslen(input) >= MAX_PATH)
 		return H9X_ERROR_FILENAME_EXCED_RANGE;
 	wcscpy(path, parent);
-	path[used++] = L'\\';
+	path[used++] = HD_WC('\\');
 	wcscpy(path + used, input);
 
 	/* 通常のホストパスとして存在する場合は、その名前を優先する。 */
@@ -773,12 +838,33 @@ static UINT16 h9x_resolve_existing_component(const WCHAR *parent,
 	/* 通常名で見つからない場合のみ、共通SFNマップでSFN -> LFN変換を試みる。 */
 	mapped = h9x_sfn_get_long(parent, input, resolved, resolvedChars, &mappedAttr);
 	if (mapped == H9X_ERROR_SUCCESS) {
-		if (requireDirectory && !(mappedAttr & FILE_ATTRIBUTE_DIRECTORY))
-			return H9X_ERROR_PATH_NOT_FOUND;
-		TRACEOUT(("HOSTDRV9X PATH SFN: parent=[%ls] input=[%ls] -> [%ls]",
-			parent, input, resolved));
-		return H9X_ERROR_SUCCESS;
+		used = wcslen(parent);
+		if (used + 1 + wcslen(resolved) >= MAX_PATH)
+			return H9X_ERROR_FILENAME_EXCED_RANGE;
+		wcscpy(path, parent);
+		path[used++] = HD_WC('\\');
+		wcscpy(path + used, resolved);
+		find = FindFirstFileW(path, &fd);
+		if (find == INVALID_HANDLE_VALUE) {
+			// Findで開けないならキャッシュ無効
+			hostdrvs_invalidateshortnamecache();
+			return requireDirectory ? H9X_ERROR_PATH_NOT_FOUND : H9X_ERROR_FILE_NOT_FOUND;
+		} else {
+			FindClose(find);
+			if (fd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)
+				return H9X_ERROR_ACCESS_DENIED;
+			if (requireDirectory && !(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
+				return H9X_ERROR_PATH_NOT_FOUND;
+			wcsncpy(resolved, fd.cFileName, resolvedChars - 1);
+			resolved[resolvedChars - 1] = 0;
+			#if defined(_WIN32) || defined(WIN32)
+			TRACEOUT(("HOSTDRV9X PATH SFN: parent=[%ls] input=[%ls] -> [%ls]",
+				parent, input, resolved));
+			#endif
+			return H9X_ERROR_SUCCESS;
+		}
 	}
+
 
 	return requireDirectory ? H9X_ERROR_PATH_NOT_FOUND : H9X_ERROR_FILE_NOT_FOUND;
 }
@@ -828,14 +914,14 @@ static UINT16 h9x_path_from_parsed_existing(UINT32 ppath, WCHAR *dst, int allowW
 
         last = (off + elen == (UINT32)total);
         if (elementIndex >= skipElements) {
-            if (!wcscmp(element, L".") || !wcscmp(element, L".."))
+            if (!wcscmp(element, HD_W(".")) || !wcscmp(element, HD_W("..")))
                 return H9X_ERROR_ACCESS_DENIED;
             if (h9x_is_reserved_name(element))
                 return H9X_ERROR_ACCESS_DENIED;
             for (q = element; *q; q++) {
-                if (*q == L'\\' || *q == L'/' || *q == L':')
+                if (*q == HD_WC('\\') || *q == HD_WC('/') || *q == HD_WC(':'))
                     return H9X_ERROR_ACCESS_DENIED;
-                if (*q == L'*' || *q == L'?') wildcard = 1;
+                if (*q == HD_WC('*') || *q == HD_WC('?')) wildcard = 1;
             }
             if (wildcard) {
                 if (!allowWildcard || !last)
@@ -843,7 +929,7 @@ static UINT16 h9x_path_from_parsed_existing(UINT32 ppath, WCHAR *dst, int allowW
                 used = wcslen(dst);
                 if (used + 1 + chars >= MAX_PATH)
                     return H9X_ERROR_FILENAME_EXCED_RANGE;
-                dst[used++] = L'\\';
+                dst[used++] = HD_WC('\\');
                 wcscpy(dst + used, element);
             } else {
                 error = h9x_resolve_existing_component(dst, element, !last,
@@ -852,7 +938,7 @@ static UINT16 h9x_path_from_parsed_existing(UINT32 ppath, WCHAR *dst, int allowW
                 used = wcslen(dst);
                 if (used + 1 + wcslen(resolved) >= MAX_PATH)
                     return H9X_ERROR_FILENAME_EXCED_RANGE;
-                dst[used++] = L'\\';
+                dst[used++] = HD_WC('\\');
                 wcscpy(dst + used, resolved);
                 {
                     DWORD attrs = GetFileAttributesW(dst);
@@ -884,7 +970,6 @@ static NP2HOSTDRV9X_HANDLE *h9x_get_handle(UINT32 cookie, UINT8 type)
 	return h;
 }
 
-/* DOS searches have only a 16-bit network-provider resume key. */
 static NP2HOSTDRV9X_HANDLE *h9x_get_search_handle(UINT16 cookie)
 {
 	UINT32 index = cookie & 0x0fff;
@@ -998,6 +1083,7 @@ static UINT16 h9x_open(UINT32 pir)
 	DWORD flags = FILE_ATTRIBUTE_NORMAL;
 	DWORD existingAttr;
 	DWORD lastError;
+	int namespaceChanged = 0;
 	UINT8 mode = h9x_r8(pir, H9X_IR_FLAGS);
 	UINT16 options = h9x_r16(pir, H9X_IR_OPTIONS);
 	UINT32 attr = h9x_r32(pir, H9X_IR_ATTR);
@@ -1037,22 +1123,17 @@ static UINT16 h9x_open(UINT32 pir)
 	}
 	if (disposition != OPEN_EXISTING && !(s_h9xAcc & H9X_PERMIT_WRITE)) return H9X_ERROR_WRITE_PROTECT;
 
-	/*
-	 * Existing targets may be addressed by the common SFN alias.
-	 * OPEN_ALWAYS / CREATE_ALWAYS keep the literal path only when the final
-	 * entry does not yet exist, so that creation can proceed normally.
-	 */
+	/* ParsedPathがSFNで渡された場合はパス解決する */
 	if (disposition != CREATE_NEW) {
 		WCHAR resolvedPath[MAX_PATH];
-		UINT16 resolveError = h9x_path_from_parsed_existing(
-			h9x_r32(pir, H9X_IR_PPATH), resolvedPath, 0);
+		UINT16 resolveError = h9x_path_from_parsed_existing(h9x_r32(pir, H9X_IR_PPATH), resolvedPath, 0);
 		if (!resolveError) {
-			if (_wcsicmp(path, resolvedPath))
+			if (_wcsicmp(path, resolvedPath)) {
 				TRACEOUT(("HOSTDRV9X OPEN: resolved existing path [%ls] -> [%ls]",
 					path, resolvedPath));
+			}
 			wcscpy(path, resolvedPath);
-		} else if (resolveError != H9X_ERROR_FILE_NOT_FOUND ||
-			(disposition != OPEN_ALWAYS && disposition != CREATE_ALWAYS)) {
+		} else if (resolveError != H9X_ERROR_FILE_NOT_FOUND || (disposition != OPEN_ALWAYS && disposition != CREATE_ALWAYS)) {
 			return resolveError;
 		}
 	}
@@ -1060,8 +1141,7 @@ static UINT16 h9x_open(UINT32 pir)
 	existingAttr = GetFileAttributesW(path);
 	if (existingAttr == INVALID_FILE_ATTRIBUTES &&
 		(disposition == CREATE_NEW || disposition == OPEN_ALWAYS || disposition == CREATE_ALWAYS)) {
-		/* ParsedPath may be uppercased by IFSMgr.  For a genuinely new entry,
-		 * recover only the original leaf-name case from ir_upath. */
+		/* ParsedPathは大文字変換されている場合があるので、可能な限り元の大文字小文字を維持する */
 		h9x_preserve_unparsed_leaf_case(pir, path);
 	}
 	if (existingAttr != INVALID_FILE_ATTRIBUTES && (existingAttr & FILE_ATTRIBUTE_DIRECTORY))
@@ -1069,9 +1149,7 @@ static UINT16 h9x_open(UINT32 pir)
 	else
 		flags = h9x_attrs_to_win(attr, FILE_ATTRIBUTE_NORMAL);
 
-	/* Reserve the emulated handle before CREATE_ALWAYS/TRUNCATE_EXISTING can
-	 * modify the host filesystem.  Otherwise an exhausted handle table would
-	 * report failure after the target had already been created or truncated. */
+	/* ハンドル割り当てを先にする。CREATE_ALWAYS/TRUNCATE_EXISTING後にハンドル枯渇で失敗すると、ファイル内容だけ消える可能性がある */
 	index = h9x_alloc_handle(H9X_HANDLE_FILE);
 	if (index < 0) return H9X_ERROR_TOO_MANY_OPEN_FILES;
 
@@ -1081,7 +1159,14 @@ static UINT16 h9x_open(UINT32 pir)
 		h9x_free_handle(&s_h9x.files[index]);
 		return h9x_map_error(lastError);
 	}
+	if (disposition == CREATE_NEW ||
+		((disposition == OPEN_ALWAYS || disposition == CREATE_ALWAYS) &&
+		 lastError != ERROR_ALREADY_EXISTS))
+		namespaceChanged = 1;
+	if (namespaceChanged) hostdrvs_invalidateshortnamecache();
 	s_h9x.files[index].handle = file;
+	s_h9x.files[index].desiredAccess = access;
+	s_h9x.files[index].shareMode = share;
 	wcsncpy(s_h9x.files[index].path, path, MAX_PATH - 1);
 
 	h9x_w32(pir, H9X_IR_FH, h9x_make_cookie(index));
@@ -1109,8 +1194,7 @@ static UINT16 h9x_close(UINT32 pir)
 	NP2HOSTDRV9X_HANDLE *h = h9x_get_handle(h9x_r32(pir, H9X_IR_FH), H9X_HANDLE_FILE);
 	UINT8 closeType = h9x_r8(pir, H9X_IR_FLAGS);
 	if (!h) return H9X_ERROR_INVALID_HANDLE;
-	/* One IFSMgr SFN may have several process handles.  The FSD cookie remains
-	 * live until the system's final close, not merely CLOSE_HANDLE. */
+	/* 最後のハンドルが閉じられた時に閉じる */
 	if (closeType == H9X_CLOSE_FINAL) h9x_free_handle(h);
 	return H9X_ERROR_SUCCESS;
 }
@@ -1154,13 +1238,7 @@ static UINT16 h9x_readwrite(UINT32 pir, int write)
 		return H9X_ERROR_INVALID_PARAMETER;
 	}
 
-	/*
-	 * Resolve the complete guest buffer before allocating host memory or
-	 * changing the host file pointer.  A missing guest page can cause the
-	 * final command OUT to be retried.  Doing the preflight here prevents
-	 * allocations from being leaked on each retry and guarantees that no
-	 * host-side I/O state has changed before a retryable page fault.
-	 */
+	/* 先にメモリアクセスをする。読み込み中にページフォールトが出て中途半端になるのを避ける。 */
 	if (requested) {
 		TRACEOUT(("HOSTDRV9X %s: preflight request begin guest=%08X len=%u access=%s",
 			write ? "WRITE" : "READ",
@@ -1183,12 +1261,7 @@ static UINT16 h9x_readwrite(UINT32 pir, int write)
 	}
 	TRACEOUT(("HOSTDRV9X %s: SetFilePointer done", write ? "WRITE" : "READ"));
 
-	/*
-	 * DOS/IFSMgr write semantics: a zero-length WRITE sets EOF at the
-	 * current file position.  Explorer uses this to preallocate/resize the
-	 * destination file before copying large files.  Win32 WriteFile(..., 0)
-	 * does not perform that operation, so use SetEndOfFile explicitly.
-	 */
+	/* DOS/IFSMgrはサイズ0で書き込むとその位置にEOFを設定する。WinAPI WriteFileはそれをしないので、SetEndOfFileで設定 */
 	if (write && requested == 0) {
 		BOOL ok;
 
@@ -1363,14 +1436,13 @@ static UINT16 h9x_delete(UINT32 pir)
 	attr = GetFileAttributesW(path);
 	if (attr == INVALID_FILE_ATTRIBUTES) return h9x_last_error();
 	if (attr & FILE_ATTRIBUTE_DIRECTORY) return H9X_ERROR_ACCESS_DENIED;
-	return DeleteFileW(path) ? H9X_ERROR_SUCCESS : h9x_last_error();
+	if (DeleteFileW(path)) {
+		hostdrvs_invalidateshortnamecache();
+		return H9X_ERROR_SUCCESS;
+	}
+	return h9x_last_error();
 }
 
-/*
- * QUERY83_DIR / QUERYLONG_DIR return a complete converted ParsedPath through
- * ir_aux1.  IFSMgr expects the complete converted path, not only the final
- * PathElement.
- */
 static UINT16 h9x_write_parsed_dir_path(UINT32 address, const WCHAR *path)
 {
 	const WCHAR *p;
@@ -1389,10 +1461,10 @@ static UINT16 h9x_write_parsed_dir_path(UINT32 address, const WCHAR *path)
 	prefix = 4;
 	p = path;
 	while (*p) {
-		while (*p == L'\\' || *p == L'/') p++;
+		while (*p == HD_WC('\\') || *p == HD_WC('/')) p++;
 		if (!*p) break;
 		q = p;
-		while (*q && *q != L'\\' && *q != L'/') q++;
+		while (*q && *q != HD_WC('\\') && *q != HD_WC('/')) q++;
 		chars = (UINT32)(q - p);
 		if (!chars || chars >= MAX_PATH)
 			return H9X_ERROR_FILENAME_EXCED_RANGE;
@@ -1411,10 +1483,10 @@ static UINT16 h9x_write_parsed_dir_path(UINT32 address, const WCHAR *path)
 	off = 4;
 	p = path;
 	while (*p) {
-		while (*p == L'\\' || *p == L'/') p++;
+		while (*p == HD_WC('\\') || *p == HD_WC('/')) p++;
 		if (!*p) break;
 		q = p;
-		while (*q && *q != L'\\' && *q != L'/') q++;
+		while (*q && *q != HD_WC('\\') && *q != HD_WC('/')) q++;
 		chars = (UINT32)(q - p);
 		elen = 2 + chars * 2;
 		cpu_kmemorywrite_w(address + off, (UINT16)elen);
@@ -1439,7 +1511,7 @@ static UINT16 h9x_append_component(WCHAR *dst, const WCHAR *component)
 	if (used + (used ? 1 : 0) + add >= MAX_PATH)
 		return H9X_ERROR_FILENAME_EXCED_RANGE;
 	if (used)
-		dst[used++] = L'\\';
+		dst[used++] = HD_WC('\\');
 	wcscpy(dst + used, component);
 	return H9X_ERROR_SUCCESS;
 }
@@ -1477,8 +1549,8 @@ static UINT16 h9x_query_dir_path(UINT32 pir, int wantShort)
 	off = 4;
 	if (h9x_read_path_element(ppath, &off, first, NELEMENTS(first)) &&
 		h9x_read_path_element(ppath, &off, second, NELEMENTS(second)) &&
-		h9x_resource_element_equal(first, L"NP2HOST") &&
-		h9x_resource_element_equal(second, L"HOSTFS"))
+		h9x_resource_element_equal(first, HD_W("NP2HOST")) &&
+		h9x_resource_element_equal(second, HD_W("HOSTFS")))
 		skipElements = 2;
 
 	converted[0] = 0;
@@ -1502,12 +1574,14 @@ static UINT16 h9x_query_dir_path(UINT32 pir, int wantShort)
 			continue;
 		}
 
-		/* Resolve the normal host name first, then the common SFN alias. */
+		/* LFNで名前解決できなければSFNを使う */
 		error = h9x_resolve_existing_component(host, input, 1,
 			canonical, NELEMENTS(canonical));
 		if (error) {
+			#if defined(_WIN32) || defined(WIN32)
 			TRACEOUT(("HOSTDRV9X DIR %s: component resolve failed parent=[%ls] input=[%ls] error=%u",
 				wantShort ? "QUERY83" : "QUERYLONG", host, input, (unsigned)error));
+			#endif
 			return error;
 		}
 
@@ -1516,7 +1590,7 @@ static UINT16 h9x_query_dir_path(UINT32 pir, int wantShort)
 			return H9X_ERROR_FILENAME_EXCED_RANGE;
 		wcscpy(search, host);
 		used = wcslen(search);
-		search[used++] = L'\\';
+		search[used++] = HD_WC('\\');
 		wcscpy(search + used, canonical);
 
 		find = FindFirstFileW(search, &fd);
@@ -1530,8 +1604,10 @@ static UINT16 h9x_query_dir_path(UINT32 pir, int wantShort)
 
 			error = h9x_sfn_get_short(host, fd.cFileName, shortName, NELEMENTS(shortName));
 			if (error) {
+				#if defined(_WIN32) || defined(WIN32)
 				TRACEOUT(("HOSTDRV9X DIR QUERY83: alias generation failed parent=[%ls] name=[%ls] error=%u",
 					host, fd.cFileName, (unsigned)error));
+				#endif
 				return error;
 			}
 			wcsncpy(input, shortName, MAX_PATH - 1);
@@ -1551,9 +1627,11 @@ static UINT16 h9x_query_dir_path(UINT32 pir, int wantShort)
 	error = h9x_write_parsed_dir_path(output, converted);
 	if (error) return error;
 
+	#if defined(_WIN32) || defined(WIN32)
 	TRACEOUT(("HOSTDRV9X DIR %s: in=%08X out=%08X converted=[%ls]",
 		wantShort ? "QUERY83" : "QUERYLONG",
 		(unsigned)ppath, (unsigned)output, converted));
+	#endif
 	h9x_trace_parsed_path(output);
 	return H9X_ERROR_SUCCESS;
 }
@@ -1585,12 +1663,20 @@ static UINT16 h9x_dir(UINT32 pir)
 		if (!(s_h9xAcc & H9X_PERMIT_WRITE)) return H9X_ERROR_WRITE_PROTECT;
 		if (GetFileAttributesW(path) == INVALID_FILE_ATTRIBUTES)
 			h9x_preserve_unparsed_leaf_case(pir, path);
-		return CreateDirectoryW(path, NULL) ? H9X_ERROR_SUCCESS : h9x_last_error();
+		if (CreateDirectoryW(path, NULL)) {
+			hostdrvs_invalidateshortnamecache();
+			return H9X_ERROR_SUCCESS;
+		}
+		return h9x_last_error();
 	case H9X_DELETE_DIR:
 		if (!(s_h9xAcc & H9X_PERMIT_DELETE)) return H9X_ERROR_ACCESS_DENIED;
-		/* The configured share root is a mount point, never a guest-deletable directory. */
+		/* HOSTDRVルートの削除は拒否 */
 		if (_wcsicmp(path, s_h9xRoot) == 0) return H9X_ERROR_ACCESS_DENIED;
-		return RemoveDirectoryW(path) ? H9X_ERROR_SUCCESS : h9x_last_error();
+		if (RemoveDirectoryW(path)) {
+			hostdrvs_invalidateshortnamecache();
+			return H9X_ERROR_SUCCESS;
+		}
+		return h9x_last_error();
 	case H9X_CHECK_DIR:
 		attr = GetFileAttributesW(path);
 		if (attr == INVALID_FILE_ATTRIBUTES) return h9x_last_error();
@@ -1666,10 +1752,12 @@ static UINT16 h9x_rename(UINT32 pir)
 	if (_wcsicmp(from, s_h9xRoot) == 0) return H9X_ERROR_ACCESS_DENIED;
 	error = h9x_path_from_parsed(h9x_r32(pir, H9X_IR_PPATH2), to, 0);
 	if (error) return error;
-	/* For rename, ir_upath describes the unparsed destination path on Win9x.
-	 * Use it only when it differs from ParsedPath by case. */
 	h9x_preserve_unparsed_leaf_case(pir, to);
-	return MoveFileW(from, to) ? H9X_ERROR_SUCCESS : h9x_last_error();
+	if (MoveFileW(from, to)) {
+		hostdrvs_invalidateshortnamecache();
+		return H9X_ERROR_SUCCESS;
+	}
+	return h9x_last_error();
 }
 
 static int h9x_find_accept(const WIN32_FIND_DATAW* fd, UINT32 searchAttr, int allowDotEntry)
@@ -1677,7 +1765,7 @@ static int h9x_find_accept(const WIN32_FIND_DATAW* fd, UINT32 searchAttr, int al
 	UINT32 attr = h9x_attrs_from_win(fd->dwFileAttributes);
 	UINT32 must = (searchAttr >> 8) & 0x3f;
 	UINT32 asked = searchAttr & 0x3f;
-	if ((!wcscmp(fd->cFileName, L".") || !wcscmp(fd->cFileName, L"..")) && !allowDotEntry) return 0;
+	if ((!wcscmp(fd->cFileName, HD_W(".")) || !wcscmp(fd->cFileName, HD_W(".."))) && !allowDotEntry) return 0;
 	if (((attr ^ asked) & must) != 0) return 0;
 	if ((attr & (H9X_FILE_ATTRIBUTE_HIDDEN | H9X_FILE_ATTRIBUTE_SYSTEM |
 		H9X_FILE_ATTRIBUTE_DIRECTORY)) & ~asked) return 0;
@@ -1692,10 +1780,8 @@ static void h9x_make_dot_find_data(NP2HOSTDRV9X_HANDLE *h, WIN32_FIND_DATAW *fd,
 	ZeroMemory(fd, sizeof(*fd));
 	fd->dwFileAttributes = FILE_ATTRIBUTE_DIRECTORY;
 	if (h && h9x_find_parent_path(h->path, target, NELEMENTS(target))) {
-		if (!wcscmp(name, L"..")) {
-			/* h->path is <current directory>\<pattern>.  Move one more
-			 * component up for the parent-directory pseudo entry. */
-			if (!PathRemoveFileSpecW(target)) target[0] = L'\0';
+		if (!wcscmp(name, HD_W(".."))) {
+			if (!PathRemoveFileSpecW(target)) target[0] = HD_WC('\0');
 		}
 		if (target[0] && GetFileAttributesExW(target, GetFileExInfoStandard, &info)) {
 			fd->dwFileAttributes = info.dwFileAttributes;
@@ -1708,7 +1794,7 @@ static void h9x_make_dot_find_data(NP2HOSTDRV9X_HANDLE *h, WIN32_FIND_DATAW *fd,
 	}
 	fd->dwFileAttributes |= FILE_ATTRIBUTE_DIRECTORY;
 	wcsncpy(fd->cFileName, name, NELEMENTS(fd->cFileName) - 1);
-	fd->cFileName[NELEMENTS(fd->cFileName) - 1] = L'\0';
+	fd->cFileName[NELEMENTS(fd->cFileName) - 1] = HD_WC('\0');
 }
 
 static int h9x_find_next_accepted(NP2HOSTDRV9X_HANDLE *h)
@@ -1716,7 +1802,7 @@ static int h9x_find_next_accepted(NP2HOSTDRV9X_HANDLE *h)
 	for (;;) {
 		if (h->findFlags & H9X_FIND_DOT_PENDING) {
 			h->findFlags &= (UINT8)~H9X_FIND_DOT_PENDING;
-			h9x_make_dot_find_data(h, &h->findData, L".");
+			h9x_make_dot_find_data(h, &h->findData, HD_W("."));
 			if (h9x_find_accept(&h->findData, h->searchAttr, 1)) {
 				TRACEOUT(("HOSTDRV9X FIND: synthetic accepted=[.]"));
 				return 1;
@@ -1725,7 +1811,7 @@ static int h9x_find_next_accepted(NP2HOSTDRV9X_HANDLE *h)
 		}
 		if (h->findFlags & H9X_FIND_DOTDOT_PENDING) {
 			h->findFlags &= (UINT8)~H9X_FIND_DOTDOT_PENDING;
-			h9x_make_dot_find_data(h, &h->findData, L"..");
+			h9x_make_dot_find_data(h, &h->findData, HD_W(".."));
 			if (h9x_find_accept(&h->findData, h->searchAttr, 1)) {
 				TRACEOUT(("HOSTDRV9X FIND: synthetic accepted=[..]"));
 				return 1;
@@ -1740,9 +1826,11 @@ static int h9x_find_next_accepted(NP2HOSTDRV9X_HANDLE *h)
 				TRACEOUT(("HOSTDRV9X FIND: FindFirstFileW failed winerr=%u", (unsigned)GetLastError()));
 				return 0;
 			}
+			#if defined(_WIN32) || defined(WIN32)
 			TRACEOUT(("HOSTDRV9X FIND: first candidate=[%ls] alt=[%ls] attr=%08X searchAttr=%08X",
 				h->findData.cFileName, h->findData.cAlternateFileName,
 				(unsigned)h->findData.dwFileAttributes, (unsigned)h->searchAttr));
+			#endif
 		}
 		else {
 			if (h->handle == NULL || h->handle == INVALID_HANDLE_VALUE) {
@@ -1753,15 +1841,21 @@ static int h9x_find_next_accepted(NP2HOSTDRV9X_HANDLE *h)
 				TRACEOUT(("HOSTDRV9X FIND: FindNextFileW failed winerr=%u", (unsigned)GetLastError()));
 				return 0;
 			}
+			#if defined(_WIN32) || defined(WIN32)
 			TRACEOUT(("HOSTDRV9X FIND: next candidate=[%ls] alt=[%ls] attr=%08X searchAttr=%08X",
 				h->findData.cFileName, h->findData.cAlternateFileName,
 				(unsigned)h->findData.dwFileAttributes, (unsigned)h->searchAttr));
+			#endif
 		}
 		if (h9x_find_accept(&h->findData, h->searchAttr, 0)) {
+			#if defined(_WIN32) || defined(WIN32)
 			TRACEOUT(("HOSTDRV9X FIND: accepted=[%ls]", h->findData.cFileName));
+			#endif
 			return 1;
 		}
+		#if defined(_WIN32) || defined(WIN32)
 		TRACEOUT(("HOSTDRV9X FIND: rejected=[%ls]", h->findData.cFileName));
+		#endif
 	}
 }
 
@@ -1785,12 +1879,6 @@ static void h9x_write_unicode_fixed(UINT32 addr, const WCHAR *text, UINT32 chars
 }
 
 
-/*
- * Build the IFSMgr ParsedPath representation expected by Query(level 0) and
- * ENUMH_GETFILENAME.  pp_totalLength excludes the final zero PathElement,
- * while IFSPathSize() includes that final WORD.  pp_prefixLength points to
- * the last non-empty PathElement (or offset 4 for a root path).
- */
 static UINT16 h9x_write_parsed_path(UINT32 address, const WCHAR *path)
 {
 	WCHAR copy[MAX_PATH];
@@ -1804,14 +1892,14 @@ static UINT16 h9x_write_parsed_path(UINT32 address, const WCHAR *path)
 	wcscpy(copy, path);
 
 	element = copy;
-	while (*element == L'\\' || *element == L'/') element++;
+	while (*element == HD_WC('\\') || *element == HD_WC('/')) element++;
 	while (*element) {
 		WCHAR *end = element;
 		UINT32 chars;
 		UINT16 length;
 		UINT32 i;
 
-		while (*end && *end != L'\\' && *end != L'/') end++;
+		while (*end && *end != HD_WC('\\') && *end != HD_WC('/')) end++;
 		chars = (UINT32)(end - element);
 		if (chars) {
 			length = (UINT16)(2 + chars * 2);
@@ -1823,7 +1911,7 @@ static UINT16 h9x_write_parsed_path(UINT32 address, const WCHAR *path)
 			offset += length;
 			haveElement = 1;
 		}
-		while (*end == L'\\' || *end == L'/') end++;
+		while (*end == HD_WC('\\') || *end == HD_WC('/')) end++;
 		element = end;
 	}
 
@@ -1844,14 +1932,14 @@ static int h9x_find_pattern_is_root(const WCHAR *path)
 	if (!path || !*path) return 0;
 	wcsncpy(dir, path, MAX_PATH - 1);
 	dir[MAX_PATH - 1] = 0;
-	slash1 = wcsrchr(dir, L'\\');
-	slash2 = wcsrchr(dir, L'/');
+	slash1 = wcsrchr(dir, HD_WC('\\'));
+	slash2 = wcsrchr(dir, HD_WC('/'));
 	slash = (slash1 && slash2) ? ((slash1 > slash2) ? slash1 : slash2) :
 		(slash1 ? slash1 : slash2);
 	if (!slash) return 0;
 	*slash = 0;
 	length = (UINT32)wcslen(dir);
-	while (length > 3 && (dir[length - 1] == L'\\' || dir[length - 1] == L'/'))
+	while (length > 3 && (dir[length - 1] == HD_WC('\\') || dir[length - 1] == HD_WC('/')))
 		dir[--length] = 0;
 	return (_wcsicmp(dir, s_h9xRoot) == 0);
 }
@@ -1864,16 +1952,13 @@ static int h9x_find_pattern_matches_dot(const WCHAR *path, const WCHAR *name)
 	const WCHAR *pattern;
 
 	if (!path || !name) return 0;
-	slash1 = wcsrchr(path, L'\\');
-	slash2 = wcsrchr(path, L'/');
+	slash1 = wcsrchr(path, HD_WC('\\'));
+	slash2 = wcsrchr(path, HD_WC('/'));
 	slash = (slash1 && slash2) ? ((slash1 > slash2) ? slash1 : slash2) :
 		(slash1 ? slash1 : slash2);
 	pattern = slash ? slash + 1 : path;
 
-	/* DOS DIR normally searches with *.*.  Treat the two all-name patterns
-	 * explicitly because shell wildcard helpers do not have identical DOS
-	 * semantics for the pseudo entries on every Windows version. */
-	if (!wcscmp(pattern, L"*") || !wcscmp(pattern, L"*.*")) return 1;
+	if (!wcscmp(pattern, HD_W("*")) || !wcscmp(pattern, HD_W("*.*"))) return 1;
 	return PathMatchSpecW(name, pattern) ? 1 : 0;
 }
 
@@ -1888,8 +1973,10 @@ static void h9x_fill_find_data(UINT32 address, const WIN32_FIND_DATAW *fd, NP2HO
 		_wcsicmp(synthetic, out.cFileName)) {
 		wcsncpy(out.cAlternateFileName, synthetic, 13);
 		out.cAlternateFileName[13] = 0;
+		#if defined(_WIN32) || defined(WIN32)
 		TRACEOUT(("HOSTDRV9X SFN: generated long=[%ls] short=[%ls]",
 			out.cFileName, out.cAlternateFileName));
+		#endif
 	}
 
 	h9x_w32(address, 0, out.dwFileAttributes);
@@ -1907,13 +1994,13 @@ static void h9x_fill_find_data(UINT32 address, const WIN32_FIND_DATAW *fd, NP2HO
 static int h9x_is_83_char(WCHAR c)
 {
 	c = (WCHAR)towupper(c);
-	if (c >= L'A' && c <= L'Z') return 1;
-	if (c >= L'0' && c <= L'9') return 1;
+	if (c >= HD_WC('A') && c <= HD_WC('Z')) return 1;
+	if (c >= HD_WC('0') && c <= HD_WC('9')) return 1;
 	switch (c) {
-	case L'$': case L'%': case L'\'': case L'-': case L'_':
-	case L'@': case L'~': case L'`': case L'!': case L'(':
-	case L')': case L'{': case L'}': case L'^': case L'#':
-	case L'&':
+	case HD_WC('$'): case HD_WC('%'): case HD_WC('\''): case HD_WC('-'): case HD_WC('_'):
+	case HD_WC('@'): case HD_WC('~'): case HD_WC('`'): case HD_WC('!'): case HD_WC('('):
+	case HD_WC(')'): case HD_WC('{'): case HD_WC('}'): case HD_WC('^'): case HD_WC('#'):
+	case HD_WC('&'):
 		return 1;
 	}
 	return 0;
@@ -1928,7 +2015,7 @@ static int h9x_is_plain_83_name(const WCHAR *src)
 
 	if (!src || !*src) return 0;
 	for (p = src; *p; p++) {
-		if (*p == L'.') {
+		if (*p == HD_WC('.')) {
 			if (dot) return 0;
 			dot = p;
 		} else if (!h9x_is_83_char(*p)) {
@@ -1953,10 +2040,8 @@ static void h9x_make_83_name(NP2HOSTDRV9X_HANDLE *h,
 
 	ZeroMemory(name, 13);
 
-	/* "." and ".." are DOS directory pseudo entries, not generated short
-	 * names.  They stay out of the common SFN map for confinement safety and
-	 * are converted explicitly only when classic SEARCH exposes them. */
-	if (!wcscmp(fd->cFileName, L".") || !wcscmp(fd->cFileName, L"..")) {
+	/* "."と".."はSFNアルゴリズムで名前変換しない */
+	if (!wcscmp(fd->cFileName, HD_W(".")) || !wcscmp(fd->cFileName, HD_W(".."))) {
 		WideCharToMultiByte(CP_OEMCP, 0, fd->cFileName, -1, name, 13, NULL, NULL);
 		return;
 	}
@@ -1967,11 +2052,7 @@ static void h9x_make_83_name(NP2HOSTDRV9X_HANDLE *h,
 		ZeroMemory(name, 13);
 	}
 
-	/*
-	 * No emulator-side alias is generated here.  If the common DOS map could
-	 * not be built, retain only names already supplied by the host or names
-	 * that are themselves valid 8.3 names.
-	 */
+	/* ホストファイルシステムがSFN情報を持っていたらそれを使う。そうでなければここでは空を返す */
 	if (fd->cAlternateFileName[0]) {
 		if (WideCharToMultiByte(CP_OEMCP, 0, fd->cAlternateFileName, -1,
 			name, 13, NULL, NULL))
@@ -1987,14 +2068,6 @@ static void h9x_make_83_name(NP2HOSTDRV9X_HANDLE *h,
 	}
 }
 
-/*
- * Resolve the classic SEARCH result buffer.
- *
- * Win95 may pass the srch_entry destination in ir_data while leaving
- * ir_aux1 as 0xffffffff.  Other IFSMgr paths may expose CurDTA through
- * ir_aux1 instead.  Prefer ir_data when it is a usable pointer, then fall
- * back to ir_aux1.  Never allow 0xffffffff to reach guest-memory writes.
- */
 static UINT32 h9x_search_result_address(UINT32 pir)
 {
 	UINT32 data = h9x_r32(pir, H9X_IR_DATA);
@@ -2022,10 +2095,12 @@ static void h9x_fill_search_entry(UINT32 address, UINT32 cookie, NP2HOSTDRV9X_HA
 	h9x_w32(address, H9X_SE_SIZE, fd->nFileSizeLow);
 	h9x_make_83_name(h, fd, name);
 	h9x_memwrite(address + H9X_SE_NAME, name, 13);
+	#if defined(_WIN32) || defined(WIN32)
 	TRACEOUT(("HOSTDRV9X SEARCHENTRY: addr=%08X cookie=%04X attr=%02X size=%u name=[%s] long=[%ls] alt=[%ls]",
 		(unsigned)address, (unsigned)(cookie & 0xffff),
 		(unsigned)h9x_attrs_from_win(fd->dwFileAttributes),
 		(unsigned)fd->nFileSizeLow, name, fd->cFileName, fd->cAlternateFileName));
+	#endif
 	h9x_trace_guest_bytes("DTA-after", address, 48);
 }
 
@@ -2041,7 +2116,6 @@ static void h9x_fill_volume_label_search_entry(UINT32 address)
 	ZeroMemory(name, sizeof(name));
 	memcpy(name, H9X_VOLUME_LABEL_A, sizeof(H9X_VOLUME_LABEL_A));
 
-	/* Volume labels are 11-character DOS names, not ordinary 8.3 file names. */
 	h9x_w16(address, H9X_SE_NETKEY, H9X_VOLUME_LABEL_COOKIE);
 	h9x_w8(address, H9X_SE_ATTRIB, H9X_FILE_ATTRIBUTE_LABEL);
 	h9x_w16(address, H9X_SE_TIME, 0);
@@ -2063,8 +2137,10 @@ static void h9x_fill_volume_label_find_data(UINT32 address)
 	wcscpy(fd.cFileName, H9X_VOLUME_LABEL_W);
 	h9x_fill_find_data(address, &fd, NULL);
 
+	#if defined(_WIN32) || defined(WIN32)
 	TRACEOUT(("HOSTDRV9X VOLUME LABEL: lfn addr=%08X label=[%ls]",
 		(unsigned)address, H9X_VOLUME_LABEL_W));
+	#endif
 }
 
 static UINT16 h9x_findopen_volume_label(UINT32 pir, int lfn)
@@ -2104,11 +2180,7 @@ static UINT16 h9x_findopen_common(UINT32 pir, int lfn)
 		(unsigned)h9x_r32(pir, H9X_IR_LENGTH)));
 	h9x_trace_parsed_path(h9x_r32(pir, H9X_IR_PPATH));
 
-	/*
-	 * Attribute 0x08 is a volume-label query for both classic SEARCH and the
-	 * Win9x LFN FINDOPEN path.  Return the synthetic label directly instead of
-	 * enumerating the host directory.
-	 */
+	/* ボリュームラベルの要求ならボリュームラベルを返す */
 	if ((attr & 0x3f) & H9X_FILE_ATTRIBUTE_LABEL) {
 		TRACEOUT(("HOSTDRV9X FINDOPEN_COMMON: volume-label search lfn=%d -> [%s]",
 			lfn, H9X_VOLUME_LABEL_A));
@@ -2121,13 +2193,15 @@ static UINT16 h9x_findopen_common(UINT32 pir, int lfn)
 			(unsigned)error));
 		return error;
 	}
+	#if defined(_WIN32) || defined(WIN32)
 	TRACEOUT(("HOSTDRV9X FINDOPEN_COMMON: host path=[%ls]", path));
+	#endif
 	index = h9x_alloc_handle(H9X_HANDLE_FIND);
 	if (index < 0) return H9X_ERROR_TOO_MANY_OPEN_FILES;
 
 	s_h9x.files[index].searchAttr = attr;
 	wcsncpy(s_h9x.files[index].path, path, MAX_PATH - 1);
-	s_h9x.files[index].path[MAX_PATH - 1] = L'\0';
+	s_h9x.files[index].path[MAX_PATH - 1] = HD_WC('\0');
 	s_h9x.files[index].findFlags = H9X_FIND_HOST_NOT_STARTED;
 
 	// ルートでないなら.と..を足す
@@ -2135,13 +2209,13 @@ static UINT16 h9x_findopen_common(UINT32 pir, int lfn)
 		WIN32_FIND_DATAW dotData;
 		ZeroMemory(&dotData, sizeof(dotData));
 		dotData.dwFileAttributes = FILE_ATTRIBUTE_DIRECTORY;
-		if (h9x_find_pattern_matches_dot(path, L".")) {
-			wcscpy(dotData.cFileName, L".");
+		if (h9x_find_pattern_matches_dot(path, HD_W("."))) {
+			wcscpy(dotData.cFileName, HD_W("."));
 			if (h9x_find_accept(&dotData, attr, 1))
 				s_h9x.files[index].findFlags |= H9X_FIND_DOT_PENDING;
 		}
-		if (h9x_find_pattern_matches_dot(path, L"..")) {
-			wcscpy(dotData.cFileName, L"..");
+		if (h9x_find_pattern_matches_dot(path, HD_W(".."))) {
+			wcscpy(dotData.cFileName, HD_W(".."));
 			if (h9x_find_accept(&dotData, attr, 1))
 				s_h9x.files[index].findFlags |= H9X_FIND_DOTDOT_PENDING;
 		}
@@ -2151,31 +2225,21 @@ static UINT16 h9x_findopen_common(UINT32 pir, int lfn)
 		h9x_free_handle(&s_h9x.files[index]);
 		return error;
 	}
+	#if defined(_WIN32) || defined(WIN32)
 	TRACEOUT(("HOSTDRV9X FINDOPEN_COMMON: handle index=%d generation=%u cookie=%08X accepted=[%ls]",
 		index, (unsigned)s_h9x.files[index].generation,
 		(unsigned)h9x_make_cookie(index), s_h9x.files[index].findData.cFileName));
+	#endif
 	h9x_w32(pir, H9X_IR_FH, h9x_make_cookie(index));
 	if (lfn) {
 		UINT32 data = h9x_r32(pir, H9X_IR_DATA);
 
-		/*
-		 * IFSFN_FINDOPEN returns a fixed-size _WIN32_FIND_DATA through ir_data.
-		 * ir_length is not a caller-supplied buffer capacity here; on FINDOPEN it
-		 * aliases ir_attr and contains the search attribute/must-match mask.
-		 * Therefore validating or overwriting ir_length corrupts the request ABI.
-		 */
 		if (!data) {
 			h9x_free_handle(&s_h9x.files[index]);
 			return H9X_ERROR_INVALID_PARAMETER;
 		}
 		h9x_fill_find_data(data, &s_h9x.files[index].findData, &s_h9x.files[index]);
 	} else {
-		/*
-		 * VFN_SEARCH is the classic DOS FindFirst/FindNext path.
-		 * Win95 can place the srch_entry destination in ir_data and set
-		 * ir_aux1 to 0xffffffff.  Prefer ir_data, but retain ir_aux1 as a
-		 * compatibility fallback for IFSMgr variants that expose CurDTA there.
-		 */
 		UINT32 data = h9x_search_result_address(pir);
 		if (!data) {
 			TRACEOUT(("HOSTDRV9X SEARCH FIRST: invalid result buffer data=%08X aux1=%08X",
@@ -2204,19 +2268,16 @@ static UINT16 h9x_findnext(UINT32 pir)
 	h = h9x_get_handle(fh, H9X_HANDLE_FIND);
 	if (!h) return H9X_ERROR_INVALID_HANDLE;
 
-	/*
-	 * IFSFN_FINDNEXT reuses the fixed _WIN32_FIND_DATA buffer in ir_data.
-	 * Win98 IFSMgr legitimately calls us with ir_length == 0, as seen in the
-	 * trace.  ir_length is therefore not a buffer-size input for this function.
-	 */
 	if (!data) return H9X_ERROR_INVALID_PARAMETER;
 	if (!h9x_find_next_accepted(h)) {
 		UINT16 error = h9x_last_error();
 		TRACEOUT(("HOSTDRV9X FINDNEXT: no next entry error=%u", (unsigned)error));
 		return error;
 	}
+	#if defined(_WIN32) || defined(WIN32)
 	TRACEOUT(("HOSTDRV9X FINDNEXT: accepted=[%ls] alt=[%ls]",
 		h->findData.cFileName, h->findData.cAlternateFileName));
+	#endif
 	h9x_fill_find_data(data, &h->findData, h);
 	return H9X_ERROR_SUCCESS;
 }
@@ -2239,12 +2300,6 @@ static UINT16 h9x_findclose(UINT32 pir)
 static UINT16 h9x_search(UINT32 pir)
 {
 	UINT8 fn = h9x_r8(pir, H9X_IR_FLAGS);
-	/*
-	 * Classic DOS searches return an srch_entry.  Win95 has been observed
-	 * passing the destination through ir_data with ir_aux1 == 0xffffffff.
-	 * Use the common resolver so SEARCH_FIRST and SEARCH_NEXT follow the same
-	 * safe rule and never write through an invalid sentinel pointer.
-	 */
 	UINT32 data = h9x_search_result_address(pir);
 	NP2HOSTDRV9X_HANDLE *h;
 	UINT32 cookie;
@@ -2290,18 +2345,13 @@ static UINT16 h9x_search(UINT32 pir)
 		return e;
 	}
 	h9x_fill_search_entry(data, h9x_make_cookie((int)(h - s_h9x.files)), h, &h->findData);
+	#if defined(_WIN32) || defined(WIN32)
 	TRACEOUT(("HOSTDRV9X SEARCH NEXT: success file=[%ls]", h->findData.cFileName));
+	#endif
 	return H9X_ERROR_SUCCESS;
 }
 
-/*
- * The original Win95 disk-space path may consume/truncate the cluster counts
- * as 16-bit values.  With the default 2 GiB/1 GiB dummy capacity and
- * 4 KiB allocation units the counts are 0x80000/0x40000, whose low 16 bits
- * are both zero.  Re-express the same byte counts with larger allocation units
- * so the counts fit in 1..0xffff.  This is only enabled when the VxD reports
- * a Win95 VMM; Win98/Me keep the HOSTDRVNT-compatible 4 KiB geometry.
- */
+/* Win95の場合ディスク容量が大きすぎるとおかしくなるので修正する */
 static void h9x_fit_win95_disk_geometry(UINT64 totalBytes, UINT64 freeBytes,
 	DWORD *sectorsPerCluster, DWORD *bytesPerSector,
 	DWORD *freeClusters, DWORD *totalClusters)
@@ -2312,11 +2362,9 @@ static void h9x_fit_win95_disk_geometry(UINT64 totalBytes, UINT64 freeBytes,
 	UINT64 total;
 	UINT64 freec;
 
-	/* Keep normal power-of-two DOS/FAT-like allocation units where possible. */
 	for (;;) {
 		clusterBytes = (UINT64)spc * bps;
 		total = totalBytes / clusterBytes;
-		/* 0x10000 is allowed here and is clipped to 0xffff below. */
 		if (total <= (UINT64)0x10000UL || spc >= 0x8000) break;
 		spc <<= 1;
 	}
@@ -2342,10 +2390,12 @@ static UINT16 h9x_getdiskinfo(UINT32 pir)
 	UINT64 totalBytes;
 	UINT64 freeBytes;
 
+	#if defined(_WIN32) || defined(WIN32)
 	TRACEOUT(("HOSTDRV9X GETDISKINFO: options=%04X root=[%ls] real=%u win95=%u fake=%u/%uMB",
 		(unsigned)h9x_r16(pir, H9X_IR_OPTIONS), s_h9xRoot,
 		(unsigned)s_h9xUseRealCapacity, (unsigned)s_h9xWin95Compat,
 		(unsigned)s_h9xFakeFreeMB, (unsigned)s_h9xFakeTotalMB));
+	#endif
 
 	if (s_h9xUseRealCapacity) {
 		if (!GetDiskFreeSpaceW(s_h9xRoot, &sectorsPerCluster, &bytesPerSector,
@@ -2359,19 +2409,16 @@ static UINT16 h9x_getdiskinfo(UINT32 pir)
 			clusterBytes = (UINT64)sectorsPerCluster * bytesPerSector;
 			totalBytes = (UINT64)totalClusters * clusterBytes;
 			freeBytes = (UINT64)freeClusters * clusterBytes;
-			h9x_fit_win95_disk_geometry(totalBytes, freeBytes,
-				&sectorsPerCluster, &bytesPerSector, &freeClusters, &totalClusters);
+			h9x_fit_win95_disk_geometry(totalBytes, freeBytes, &sectorsPerCluster, &bytesPerSector, &freeClusters, &totalClusters);
 		}
 	}
 	else {
 		totalBytes = (UINT64)s_h9xFakeTotalMB * 1024 * 1024;
 		freeBytes = (UINT64)s_h9xFakeFreeMB * 1024 * 1024;
 		if (s_h9xWin95Compat) {
-			h9x_fit_win95_disk_geometry(totalBytes, freeBytes,
-				&sectorsPerCluster, &bytesPerSector, &freeClusters, &totalClusters);
+			h9x_fit_win95_disk_geometry(totalBytes, freeBytes, &sectorsPerCluster, &bytesPerSector, &freeClusters, &totalClusters);
 		}
 		else {
-			/* HOSTDRVNT-compatible geometry: 4 KiB allocation units. */
 			sectorsPerCluster = 8;
 			bytesPerSector = 512;
 			clusterBytes = (UINT64)sectorsPerCluster * bytesPerSector;
@@ -2409,13 +2456,6 @@ static UINT16 h9x_handleinfo(UINT32 pir)
 {
 	NP2HOSTDRV9X_HANDLE *h = h9x_get_handle(h9x_r32(pir, H9X_IR_FH), H9X_HANDLE_FILE);
 
-	/*
-	 * FS_NetHandleInfo is a network-FSD handle-based entry point.  HOSTDRV9X
-	 * has no additional server-side handle object beyond ir_fh, so the useful
-	 * operation here is to validate that the FSD cookie still identifies a
-	 * live file handle.  Preserve all request fields because Win9x versions
-	 * differ in the undocumented auxiliary values supplied with this call.
-	 */
 	TRACEOUT(("HOSTDRV9X HANDLEINFO: fh=%08X flags=%02X sfn=%04X len=%08X data=%08X aux1=%08X aux2=%08X aux3=%08X",
 		(unsigned)h9x_r32(pir, H9X_IR_FH),
 		(unsigned)h9x_r8(pir, H9X_IR_FLAGS),
@@ -2495,9 +2535,8 @@ static UINT16 h9x_query(UINT32 pir)
 
 	if (level == 0) {
 		UINT32 ppath = h9x_r32(pir, H9X_IR_PPATH);
-		/* IFSMgr may pass NULL when it only wants to verify the connection. */
 		if (ppath) {
-			UINT16 error = h9x_write_parsed_path(ppath, L"NP2HOST\\HOSTFS");
+			UINT16 error = h9x_write_parsed_path(ppath, HD_W("NP2HOST\\HOSTFS"));
 			if (error) return error;
 		}
 		h9x_w16(pir, H9X_IR_OPTIONS, H9X_RESSTAT_OK);
@@ -2677,12 +2716,6 @@ static void h9x_invoke(void)
 	UINT32 callAddr;
 	UINT16 error;
 	if (!s_h9x.dataAddr) return;
-	/*
-	 * Do not clear dataAddr here.  A guest #PF raised while servicing the final
-	 * command OUT aborts this C call via the CPU exception path.  Keeping the
-	 * address lets the retried OUT re-enter the same request.  h9x_o7e6 clears
-	 * it only after h9x_invoke() returns normally.
-	 */
 	callAddr = s_h9x.dataAddr;
 #if defined(SUPPORT_IA32_HAXM)
 	i386haxfunc_vcpu_getREGs(&np2haxstat.state);
@@ -2819,12 +2852,7 @@ static void IOOUTCALL h9x_o7e6(UINT port, REG8 dat)
 	if (dat == (REG8)command[s_h9x.commandPos]) {
 		s_h9x.commandPos++;
 		if (s_h9x.commandPos == sizeof(command) - 1) {
-			/*
-			 * Keep the parser positioned on the final command byte until the
-			 * request completes normally.  If h9x_invoke() raises a guest #PF,
-			 * the OUT instruction is retried and the same final byte invokes the
-			 * request again after the page has been made present.
-			 */
+			/* ページフォールト時に戻ってこられるようにコマンド位置更新は成功まで保留 */
 			s_h9x.commandPos = sizeof(command) - 2;
 			TRACEOUT(("HOSTDRV9X CMD: invoke begin dataAddr=%08X", (unsigned)s_h9x.dataAddr));
 			h9x_invoke();
@@ -2856,6 +2884,7 @@ void hostdrv9x_updateHDrvRoot(void)
 	TCHAR full[MAX_PATH + 1];
 	DWORD length;
 	DWORD attributes;
+	hostdrvs_invalidateshortnamecache();
 	ZeroMemory(s_h9xRoot, sizeof(s_h9xRoot));
 	s_h9xAcc = 0;
 	if (_tcslen(np2cfg.hdrvroot) >= MAX_PATH) return;
@@ -2863,7 +2892,15 @@ void hostdrv9x_updateHDrvRoot(void)
 	if (PathIsRelative(configured)) {
 		TCHAR base[MAX_PATH + 1];
 		TCHAR *last;
+#if defined(WIN32) || defined(_WIN32)
 		initgetfile(base, NELEMENTS(base));
+#else
+		{
+			const OEMCHAR *hostBase = file_getcd(OEMTEXT(""));
+			if (hostBase == NULL) return;
+			file_cpyname((OEMCHAR *)base, hostBase, NELEMENTS(base));
+		}
+#endif
 		last = _tcsrchr(base, '\\');
 		if (last) *(last + 1) = 0; else base[0] = 0;
 		if (_tcslen(base) + _tcslen(configured) >= MAX_PATH) return;
@@ -2882,7 +2919,7 @@ void hostdrv9x_updateHDrvRoot(void)
 	}
 #endif
 	length = (DWORD)wcslen(s_h9xRoot);
-	while (length > 3 && (s_h9xRoot[length - 1] == L'\\' || s_h9xRoot[length - 1] == L'/'))
+	while (length > 3 && (s_h9xRoot[length - 1] == HD_WC('\\') || s_h9xRoot[length - 1] == HD_WC('/')))
 		s_h9xRoot[--length] = 0;
 	attributes = GetFileAttributesW(s_h9xRoot);
 	if (attributes == INVALID_FILE_ATTRIBUTES ||
@@ -2896,6 +2933,7 @@ void hostdrv9x_updateHDrvRoot(void)
 void hostdrv9x_initialize(void)
 {
 	ZeroMemory(&s_h9x, sizeof(s_h9x));
+	hostdrvs_invalidateshortnamecache();
 	h9x_config_defaults();
 	hostdrv9x_updateHDrvRoot();
 }
@@ -2903,6 +2941,7 @@ void hostdrv9x_initialize(void)
 void hostdrv9x_deinitialize(void)
 {
 	h9x_close_all();
+	hostdrvs_invalidateshortnamecache();
 }
 
 void hostdrv9x_reset(void)
@@ -2931,19 +2970,122 @@ void hostdrv9x_bind(void)
 #endif
 }
 
+#define H9X_SF_FILES_MAGIC   0x31465839UL /* "9XF1" */
+#define H9X_SF_FILES_VERSION 1UL
+
+#pragma pack(push, 1)
+typedef struct {
+	UINT32 magic;
+	UINT32 version;
+	UINT32 count;
+} H9X_SF_FILES_HEADER;
+
+typedef struct {
+	UINT32 index;
+	UINT16 generation;
+	UINT8 type;
+	UINT8 reserved;
+	UINT32 desiredAccess;
+	UINT32 shareMode;
+	UINT32 volumeSerialNumber;
+	UINT32 fileIndexHigh;
+	UINT32 fileIndexLow;
+	UINT32 fileSizeHigh;
+	UINT32 fileSizeLow;
+	UINT32 lastWriteTimeLow;
+	UINT32 lastWriteTimeHigh;
+	WCHAR path[MAX_PATH];
+} H9X_SF_FILE_RECORD;
+#pragma pack(pop)
+
+static int h9x_sf_file_identity(HANDLE file, H9X_SF_FILE_RECORD *record)
+{
+	BY_HANDLE_FILE_INFORMATION info;
+
+	if (!record || file == NULL || file == INVALID_HANDLE_VALUE)
+		return 0;
+	if (!GetFileInformationByHandle(file, &info))
+		return 0;
+
+	record->volumeSerialNumber = info.dwVolumeSerialNumber;
+	record->fileIndexHigh = info.nFileIndexHigh;
+	record->fileIndexLow = info.nFileIndexLow;
+	record->fileSizeHigh = info.nFileSizeHigh;
+	record->fileSizeLow = info.nFileSizeLow;
+	record->lastWriteTimeLow = info.ftLastWriteTime.dwLowDateTime;
+	record->lastWriteTimeHigh = info.ftLastWriteTime.dwHighDateTime;
+	return 1;
+}
+
+static int h9x_sf_file_identity_matches(const H9X_SF_FILE_RECORD *record,
+	const BY_HANDLE_FILE_INFORMATION *info)
+{
+	if (!record || !info) return 0;
+	return record->volumeSerialNumber == info->dwVolumeSerialNumber &&
+		record->fileIndexHigh == info->nFileIndexHigh &&
+		record->fileIndexLow == info->nFileIndexLow &&
+		record->fileSizeHigh == info->nFileSizeHigh &&
+		record->fileSizeLow == info->nFileSizeLow &&
+		record->lastWriteTimeLow == info->ftLastWriteTime.dwLowDateTime &&
+		record->lastWriteTimeHigh == info->ftLastWriteTime.dwHighDateTime;
+}
+
 int hostdrv9x_sfsave(STFLAGH sfh, const SFENTRY* tbl)
 {
 	NP2HOSTDRV9X_SFCONFIG config;
+	H9X_SF_FILES_HEADER filesHeader;
+	H9X_SF_FILE_RECORD record;
+	UINT32 count;
+	UINT32 i;
+	int ret;
+
+	count = 0;
+	for (i = 1; i < NP2HOSTDRV9X_FILES_MAX; i++) {
+		NP2HOSTDRV9X_HANDLE *h = &s_h9x.files[i];
+		if (h->type == H9X_HANDLE_FILE &&
+			h->handle != NULL && h->handle != INVALID_HANDLE_VALUE && h->path[0])
+			count++;
+	}
 
 	ZeroMemory(&config, sizeof(config));
 	config.version = 0;
-	config.size = sizeof(config);
+	config.size = sizeof(config) + sizeof(filesHeader) +
+		count * sizeof(H9X_SF_FILE_RECORD);
 	config.useRealCapacity = s_h9xUseRealCapacity;
 	config.win95Compat = s_h9xWin95Compat;
 	config.fakeTotalMB = s_h9xFakeTotalMB;
 	config.fakeFreeMB = s_h9xFakeFreeMB;
+
+	ret = statflag_write(sfh, &config, sizeof(config));
+	if (ret != STATFLAG_SUCCESS) return ret;
+
+	filesHeader.magic = H9X_SF_FILES_MAGIC;
+	filesHeader.version = H9X_SF_FILES_VERSION;
+	filesHeader.count = count;
+	ret = statflag_write(sfh, &filesHeader, sizeof(filesHeader));
+	if (ret != STATFLAG_SUCCESS) return ret;
+
+	for (i = 1; i < NP2HOSTDRV9X_FILES_MAX; i++) {
+		NP2HOSTDRV9X_HANDLE *h = &s_h9x.files[i];
+		if (h->type != H9X_HANDLE_FILE ||
+			h->handle == NULL || h->handle == INVALID_HANDLE_VALUE || !h->path[0])
+			continue;
+
+		ZeroMemory(&record, sizeof(record));
+		(void)h9x_sf_file_identity(h->handle, &record);
+		record.index = i;
+		record.generation = h->generation;
+		record.type = H9X_HANDLE_FILE;
+		record.desiredAccess = h->desiredAccess;
+		record.shareMode = h->shareMode;
+		wcsncpy(record.path, h->path, MAX_PATH - 1);
+		record.path[MAX_PATH - 1] = L'\0';
+		ret = statflag_write(sfh, &record, sizeof(record));
+		if (ret != STATFLAG_SUCCESS) return ret;
+	}
+
 	(void)tbl;
-	return statflag_write(sfh, &config, sizeof(config));
+	return STATFLAG_SUCCESS;
 }
 
 static int h9x_sfread_discard(STFLAGH sfh, UINT32 size)
@@ -2961,16 +3103,76 @@ static int h9x_sfread_discard(STFLAGH sfh, UINT32 size)
 	return STATFLAG_SUCCESS;
 }
 
+static void h9x_sf_restore_file(const H9X_SF_FILE_RECORD *record)
+{
+	NP2HOSTDRV9X_HANDLE *h;
+	BY_HANDLE_FILE_INFORMATION info;
+	DWORD attr;
+	DWORD flags;
+	HANDLE file;
+
+	if (!record || record->type != H9X_HANDLE_FILE ||
+		record->index == 0 || record->index >= NP2HOSTDRV9X_FILES_MAX)
+		return;
+
+	h = &s_h9x.files[record->index];
+	h->generation = record->generation;
+
+	if (!record->path[0] || !h9x_is_safe_stored_path(record->path)) {
+		TRACEOUT(("HOSTDRV9X SFLOAD: rejected saved path index=%u", (unsigned)record->index));
+		return;
+	}
+
+	attr = GetFileAttributesW(record->path);
+	if (attr == INVALID_FILE_ATTRIBUTES) {
+		TRACEOUT(("HOSTDRV9X SFLOAD: missing file index=%u path=[%ls]",
+			(unsigned)record->index, record->path));
+		return;
+	}
+	flags = (attr & FILE_ATTRIBUTE_DIRECTORY) ?
+		FILE_FLAG_BACKUP_SEMANTICS : FILE_ATTRIBUTE_NORMAL;
+
+	file = CreateFileW(record->path, record->desiredAccess, record->shareMode, NULL, OPEN_EXISTING, flags, NULL);
+	if (file == INVALID_HANDLE_VALUE) {
+		TRACEOUT(("HOSTDRV9X SFLOAD: reopen failed index=%u path=[%ls] winerr=%u",
+			(unsigned)record->index, record->path, (unsigned)GetLastError()));
+		return;
+	}
+
+	if (!GetFileInformationByHandle(file, &info) || !h9x_sf_file_identity_matches(record, &info)) {
+		TRACEOUT(("HOSTDRV9X SFLOAD: file identity changed index=%u path=[%ls]",
+			(unsigned)record->index, record->path));
+		CloseHandle(file);
+		return;
+	}
+
+	h->type = H9X_HANDLE_FILE;
+	h->handle = file;
+	h->desiredAccess = record->desiredAccess;
+	h->shareMode = record->shareMode;
+	wcsncpy(h->path, record->path, MAX_PATH - 1);
+	h->path[MAX_PATH - 1] = L'\0';
+	TRACEOUT(("HOSTDRV9X SFLOAD: restored file index=%u generation=%u cookie=%08X path=[%ls]",
+		(unsigned)record->index, (unsigned)record->generation,
+		(unsigned)h9x_make_cookie((int)record->index), h->path));
+}
+
 int hostdrv9x_sfload(STFLAGH sfh, const SFENTRY* tbl)
 {
 	NP2HOSTDRV9X_SFCONFIG config;
+	H9X_SF_FILES_HEADER filesHeader;
+	H9X_SF_FILE_RECORD record;
 	UINT32 header[2];
 	UINT32 savedSize;
 	UINT32 payloadSize;
 	UINT32 copySize;
+	UINT32 extraSize;
+	UINT32 i;
 	const UINT32 headerSize = (UINT32)sizeof(header);
 	const UINT32 configSize = (UINT32)sizeof(config);
 	int ret;
+
+	h9x_close_all();
 
 	ZeroMemory(&config, sizeof(config));
 	ret = statflag_read(sfh, header, sizeof(header));
@@ -2980,22 +3182,22 @@ int hostdrv9x_sfload(STFLAGH sfh, const SFENTRY* tbl)
 	config.version = header[0];
 	config.size = header[1];
 	savedSize = header[1];
+	if (savedSize < headerSize) return STATFLAG_FAILURE;
 
-	if (savedSize > headerSize) {
-		payloadSize = savedSize - headerSize;
-		copySize = payloadSize;
-		if (copySize > configSize - headerSize)
-			copySize = configSize - headerSize;
+	payloadSize = savedSize - headerSize;
+	copySize = payloadSize;
+	if (copySize > configSize - headerSize)
+		copySize = configSize - headerSize;
 
-		if (copySize) {
-			ret = statflag_read(sfh,
-				((UINT8*)&config) + headerSize, copySize);
-			if (ret != STATFLAG_SUCCESS) return ret;
-		}
-		if (payloadSize > copySize) {
-			ret = h9x_sfread_discard(sfh, payloadSize - copySize);
-			if (ret != STATFLAG_SUCCESS) return ret;
-		}
+	if (copySize) {
+		ret = statflag_read(sfh, ((UINT8*)&config) + headerSize, copySize);
+		if (ret != STATFLAG_SUCCESS) return ret;
+	}
+
+	extraSize = (savedSize > configSize) ? savedSize - configSize : 0;
+	if (payloadSize > copySize && savedSize <= configSize) {
+		ret = h9x_sfread_discard(sfh, payloadSize - copySize);
+		if (ret != STATFLAG_SUCCESS) return ret;
 	}
 
 	s_h9xUseRealCapacity = config.useRealCapacity ? 1 : 0;
@@ -3006,6 +3208,31 @@ int hostdrv9x_sfload(STFLAGH sfh, const SFENTRY* tbl)
 		s_h9xFakeFreeMB = config.fakeFreeMB;
 	else
 		s_h9xFakeFreeMB = s_h9xFakeTotalMB;
+
+	if (extraSize >= sizeof(filesHeader)) {
+		ret = statflag_read(sfh, &filesHeader, sizeof(filesHeader));
+		if (ret != STATFLAG_SUCCESS) return ret;
+		extraSize -= sizeof(filesHeader);
+
+		if (filesHeader.magic == H9X_SF_FILES_MAGIC &&
+			filesHeader.version == H9X_SF_FILES_VERSION &&
+			filesHeader.count <= NP2HOSTDRV9X_FILES_MAX - 1 &&
+			filesHeader.count <= extraSize / sizeof(record)) {
+			for (i = 0; i < filesHeader.count; i++) {
+				ret = statflag_read(sfh, &record, sizeof(record));
+				if (ret != STATFLAG_SUCCESS) return ret;
+				extraSize -= sizeof(record);
+				record.path[MAX_PATH - 1] = L'\0';
+				h9x_sf_restore_file(&record);
+			}
+		}
+	}
+
+	if (extraSize) {
+		ret = h9x_sfread_discard(sfh, extraSize);
+		if (ret != STATFLAG_SUCCESS) return ret;
+	}
+
 	(void)tbl;
 	return STATFLAG_SUCCESS;
 }

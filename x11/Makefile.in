@@ -220,6 +220,8 @@ am__objects_2 = $(real_topsrcdir)/x11/xnp2-main.$(OBJEXT) \
 	$(real_topsrcdir)/cbus/xnp2-board14.$(OBJEXT) \
 	$(real_topsrcdir)/cbus/xnp2-board26k.$(OBJEXT) \
 	$(real_topsrcdir)/cbus/xnp2-board86.$(OBJEXT) \
+	$(real_topsrcdir)/cbus/xnp2-cbuspnp.$(OBJEXT) \
+	$(real_topsrcdir)/cbus/xnp2-boardws.$(OBJEXT) \
 	$(real_topsrcdir)/cbus/xnp2-boardso.$(OBJEXT) \
 	$(real_topsrcdir)/cbus/xnp2-boardspb.$(OBJEXT) \
 	$(real_topsrcdir)/cbus/xnp2-boardx2.$(OBJEXT) \
@@ -500,6 +502,8 @@ am__objects_9 = $(real_topsrcdir)/x11/xnp21-main.$(OBJEXT) \
 	$(real_topsrcdir)/cbus/xnp21-board14.$(OBJEXT) \
 	$(real_topsrcdir)/cbus/xnp21-board26k.$(OBJEXT) \
 	$(real_topsrcdir)/cbus/xnp21-board86.$(OBJEXT) \
+	$(real_topsrcdir)/cbus/xnp21-cbuspnp.$(OBJEXT) \
+	$(real_topsrcdir)/cbus/xnp21-boardws.$(OBJEXT) \
 	$(real_topsrcdir)/cbus/xnp21-boardso.$(OBJEXT) \
 	$(real_topsrcdir)/cbus/xnp21-boardspb.$(OBJEXT) \
 	$(real_topsrcdir)/cbus/xnp21-boardx2.$(OBJEXT) \
@@ -1016,6 +1020,8 @@ COMMON_SOURCES = $(real_topsrcdir)/x11/main.c \
 		$(real_topsrcdir)/cbus/board14.c \
 		$(real_topsrcdir)/cbus/board26k.c \
 		$(real_topsrcdir)/cbus/board86.c \
+		$(real_topsrcdir)/cbus/cbuspnp.c \
+		$(real_topsrcdir)/cbus/boardws.c \
 		$(real_topsrcdir)/cbus/boardso.c \
 		$(real_topsrcdir)/cbus/boardspb.c \
 		$(real_topsrcdir)/cbus/boardx2.c \
@@ -1551,6 +1557,10 @@ $(real_topsrcdir)/cbus/xnp2-board14.$(OBJEXT):  \
 $(real_topsrcdir)/cbus/xnp2-board26k.$(OBJEXT):  \
 	$(real_topsrcdir)/cbus/$(am__dirstamp)
 $(real_topsrcdir)/cbus/xnp2-board86.$(OBJEXT):  \
+	$(real_topsrcdir)/cbus/$(am__dirstamp)
+$(real_topsrcdir)/cbus/xnp2-cbuspnp.$(OBJEXT):  \
+	$(real_topsrcdir)/cbus/$(am__dirstamp)
+$(real_topsrcdir)/cbus/xnp2-boardws.$(OBJEXT):  \
 	$(real_topsrcdir)/cbus/$(am__dirstamp)
 $(real_topsrcdir)/cbus/xnp2-boardso.$(OBJEXT):  \
 	$(real_topsrcdir)/cbus/$(am__dirstamp)
@@ -2136,6 +2146,10 @@ $(real_topsrcdir)/cbus/xnp21-board14.$(OBJEXT):  \
 $(real_topsrcdir)/cbus/xnp21-board26k.$(OBJEXT):  \
 	$(real_topsrcdir)/cbus/$(am__dirstamp)
 $(real_topsrcdir)/cbus/xnp21-board86.$(OBJEXT):  \
+	$(real_topsrcdir)/cbus/$(am__dirstamp)
+$(real_topsrcdir)/cbus/xnp21-cbuspnp.$(OBJEXT):  \
+	$(real_topsrcdir)/cbus/$(am__dirstamp)
+$(real_topsrcdir)/cbus/xnp21-boardws.$(OBJEXT):  \
 	$(real_topsrcdir)/cbus/$(am__dirstamp)
 $(real_topsrcdir)/cbus/xnp21-boardso.$(OBJEXT):  \
 	$(real_topsrcdir)/cbus/$(am__dirstamp)
@@ -2987,9 +3001,19 @@ $(real_topsrcdir)/cbus/xnp2-board26k.obj: $(real_topsrcdir)/cbus/board26k.c
 
 $(real_topsrcdir)/cbus/xnp2-board86.o: $(real_topsrcdir)/cbus/board86.c
 	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(xnp2_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o $(real_topsrcdir)/cbus/xnp2-board86.o `test -f '$(real_topsrcdir)/cbus/board86.c' || echo '$(srcdir)/'`$(real_topsrcdir)/cbus/board86.c
+$(real_topsrcdir)/cbus/xnp2-cbuspnp.o: $(real_topsrcdir)/cbus/cbuspnp.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(xnp2_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o $(real_topsrcdir)/cbus/xnp2-cbuspnp.o `test -f '$(real_topsrcdir)/cbus/cbuspnp.c' || echo '$(srcdir)/'`$(real_topsrcdir)/cbus/cbuspnp.c
+
+$(real_topsrcdir)/cbus/xnp2-boardws.o: $(real_topsrcdir)/cbus/boardws.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(xnp2_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o $(real_topsrcdir)/cbus/xnp2-boardws.o `test -f '$(real_topsrcdir)/cbus/boardws.c' || echo '$(srcdir)/'`$(real_topsrcdir)/cbus/boardws.c
 
 $(real_topsrcdir)/cbus/xnp2-board86.obj: $(real_topsrcdir)/cbus/board86.c
 	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(xnp2_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o $(real_topsrcdir)/cbus/xnp2-board86.obj `if test -f '$(real_topsrcdir)/cbus/board86.c'; then $(CYGPATH_W) '$(real_topsrcdir)/cbus/board86.c'; else $(CYGPATH_W) '$(srcdir)/$(real_topsrcdir)/cbus/board86.c'; fi`
+$(real_topsrcdir)/cbus/xnp2-cbuspnp.obj: $(real_topsrcdir)/cbus/cbuspnp.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(xnp2_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o $(real_topsrcdir)/cbus/xnp2-cbuspnp.obj `if test -f '$(real_topsrcdir)/cbus/cbuspnp.c'; then $(CYGPATH_W) '$(real_topsrcdir)/cbus/cbuspnp.c'; else $(CYGPATH_W) '$(srcdir)/$(real_topsrcdir)/cbus/cbuspnp.c'; fi`
+
+$(real_topsrcdir)/cbus/xnp2-boardws.obj: $(real_topsrcdir)/cbus/boardws.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(xnp2_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o $(real_topsrcdir)/cbus/xnp2-boardws.obj `if test -f '$(real_topsrcdir)/cbus/boardws.c'; then $(CYGPATH_W) '$(real_topsrcdir)/cbus/boardws.c'; else $(CYGPATH_W) '$(srcdir)/$(real_topsrcdir)/cbus/boardws.c'; fi`
 
 $(real_topsrcdir)/cbus/xnp2-boardso.o: $(real_topsrcdir)/cbus/boardso.c
 	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(xnp2_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o $(real_topsrcdir)/cbus/xnp2-boardso.o `test -f '$(real_topsrcdir)/cbus/boardso.c' || echo '$(srcdir)/'`$(real_topsrcdir)/cbus/boardso.c
@@ -4481,9 +4505,19 @@ $(real_topsrcdir)/cbus/xnp21-board26k.obj: $(real_topsrcdir)/cbus/board26k.c
 
 $(real_topsrcdir)/cbus/xnp21-board86.o: $(real_topsrcdir)/cbus/board86.c
 	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(xnp21_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o $(real_topsrcdir)/cbus/xnp21-board86.o `test -f '$(real_topsrcdir)/cbus/board86.c' || echo '$(srcdir)/'`$(real_topsrcdir)/cbus/board86.c
+$(real_topsrcdir)/cbus/xnp21-cbuspnp.o: $(real_topsrcdir)/cbus/cbuspnp.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(xnp21_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o $(real_topsrcdir)/cbus/xnp21-cbuspnp.o `test -f '$(real_topsrcdir)/cbus/cbuspnp.c' || echo '$(srcdir)/'`$(real_topsrcdir)/cbus/cbuspnp.c
+
+$(real_topsrcdir)/cbus/xnp21-boardws.o: $(real_topsrcdir)/cbus/boardws.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(xnp21_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o $(real_topsrcdir)/cbus/xnp21-boardws.o `test -f '$(real_topsrcdir)/cbus/boardws.c' || echo '$(srcdir)/'`$(real_topsrcdir)/cbus/boardws.c
 
 $(real_topsrcdir)/cbus/xnp21-board86.obj: $(real_topsrcdir)/cbus/board86.c
 	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(xnp21_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o $(real_topsrcdir)/cbus/xnp21-board86.obj `if test -f '$(real_topsrcdir)/cbus/board86.c'; then $(CYGPATH_W) '$(real_topsrcdir)/cbus/board86.c'; else $(CYGPATH_W) '$(srcdir)/$(real_topsrcdir)/cbus/board86.c'; fi`
+$(real_topsrcdir)/cbus/xnp21-cbuspnp.obj: $(real_topsrcdir)/cbus/cbuspnp.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(xnp21_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o $(real_topsrcdir)/cbus/xnp21-cbuspnp.obj `if test -f '$(real_topsrcdir)/cbus/cbuspnp.c'; then $(CYGPATH_W) '$(real_topsrcdir)/cbus/cbuspnp.c'; else $(CYGPATH_W) '$(srcdir)/$(real_topsrcdir)/cbus/cbuspnp.c'; fi`
+
+$(real_topsrcdir)/cbus/xnp21-boardws.obj: $(real_topsrcdir)/cbus/boardws.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(xnp21_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o $(real_topsrcdir)/cbus/xnp21-boardws.obj `if test -f '$(real_topsrcdir)/cbus/boardws.c'; then $(CYGPATH_W) '$(real_topsrcdir)/cbus/boardws.c'; else $(CYGPATH_W) '$(srcdir)/$(real_topsrcdir)/cbus/boardws.c'; fi`
 
 $(real_topsrcdir)/cbus/xnp21-boardso.o: $(real_topsrcdir)/cbus/boardso.c
 	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(xnp21_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o $(real_topsrcdir)/cbus/xnp21-boardso.o `test -f '$(real_topsrcdir)/cbus/boardso.c' || echo '$(srcdir)/'`$(real_topsrcdir)/cbus/boardso.c

@@ -2,6 +2,7 @@
 #include	"pccore.h"
 #include	"iocore.h"
 #include	"cbuscore.h"
+#include	"cbuspnp.h"
 #include	"ideio.h"
 #include	"sasiio.h"
 #include	"scsiio.h"
@@ -27,6 +28,7 @@
 #endif
 
 static const FNIORESET resetfn[] = {
+			cbuspnp_reset,
 #if defined(SUPPORT_IDEIO)
 			ideio_reset,
 #endif
@@ -64,6 +66,7 @@ static const FNIORESET resetfn[] = {
 	};
 
 static const FNIOBIND bindfn[] = {
+			cbuspnp_bind,
 #if defined(SUPPORT_IDEIO)
 			ideio_bind,
 #endif

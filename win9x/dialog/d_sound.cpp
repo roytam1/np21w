@@ -25,6 +25,7 @@
 #include "generic/dipswbmp.h"
 #include "sound/sound.h"
 #include "sound/fmboard.h"
+#include "cbus/boardws.h"
 #include "sound/tms3631.h"
 #if defined(SUPPORT_FMGEN)
 #include "sound/opna.h"
@@ -158,11 +159,8 @@ void SndOptMixerPage::OnOK()
 	//}
 
 	UINT volex = 15;
-	if(g_nSoundID == SOUNDID_WAVESTAR){
-		volex = cs4231.devvolume[0xff];
-	}
 	if (g_nSoundID == SOUNDID_WAVESTAR) {
-		volex = cs4231.devvolume[0xff];
+		volex = boardws_getfmvolume();
 	}
 	const UINT8 cFM = static_cast<UINT8>(m_fm.GetPos());
 	if (np2cfg.vol_fm != cFM || bMasterChange)
@@ -1597,7 +1595,167 @@ LRESULT SndOptWSSPage::WindowProc(UINT nMsg, WPARAM wParam, LPARAM lParam)
 }
 
 
-	
+// ---- Q-Vision WaveStar
+
+/**
+ * @brief WaveStar page
+ */
+class SndOptWaveStarPage : public CPropPageProc
+{
+public:
+	SndOptWaveStarPage();
+	virtual ~SndOptWaveStarPage();
+
+protected:
+	virtual BOOL OnInitDialog();
+	virtual void OnOK();
+	virtual BOOL OnCommand(WPARAM wParam, LPARAM lParam);
+
+private:
+	UINT16 m_io;
+	UINT8 m_dma;
+	UINT8 m_irq;
+	UINT8 m_pnp;
+	UINT8 m_pcm86;
+	CComboData m_cmbio;
+	CComboData m_cmbdma;
+	CComboData m_cmbirq;
+	CWndProc m_chkpnp;
+	CWndProc m_chkpcm;
+};
+
+static const CComboData::Entry s_iowavestar[] =
+{
+	{MAKEINTRESOURCE(IDS_0188), 0x0188},
+	{MAKEINTRESOURCE(IDS_0288), 0x0288},
+};
+
+static const CComboData::Entry s_dmawavestar[] =
+{
+	{MAKEINTRESOURCE(IDS_DMA0), 0},
+	{MAKEINTRESOURCE(IDS_DMA3), 3},
+};
+
+static const CComboData::Entry s_irqwavestar[] =
+{
+	{MAKEINTRESOURCE(IDS_INT5IRQ12), 12},
+	{MAKEINTRESOURCE(IDS_INT6IRQ13), 13},
+};
+
+SndOptWaveStarPage::SndOptWaveStarPage()
+	: CPropPageProc(IDD_SNDWAVESTAR)
+	, m_io(0x0188)
+	, m_dma(3)
+	, m_irq(12)
+	, m_pnp(1)
+	, m_pcm86(1)
+{
+}
+
+SndOptWaveStarPage::~SndOptWaveStarPage()
+{
+}
+
+BOOL SndOptWaveStarPage::OnInitDialog()
+{
+	m_io = np2cfg.sndwsio;
+	m_dma = np2cfg.sndwsdma;
+	m_irq = np2cfg.sndwsirq;
+	m_pnp = np2cfg.sndwspnp;
+	m_pcm86 = np2cfg.sndwspcm;
+
+	m_cmbio.SubclassDlgItem(IDC_SND118IO, this);
+	m_cmbio.Add(s_iowavestar, _countof(s_iowavestar));
+	m_cmbio.SetCurItemData(m_io);
+
+	m_cmbdma.SubclassDlgItem(IDC_SND118DMA, this);
+	m_cmbdma.Add(s_dmawavestar, _countof(s_dmawavestar));
+	m_cmbdma.SetCurItemData(m_dma);
+
+	m_cmbirq.SubclassDlgItem(IDC_SND118INTF, this);
+	m_cmbirq.Add(s_irqwavestar, _countof(s_irqwavestar));
+	m_cmbirq.SetCurItemData(m_irq);
+
+	m_chkpnp.SubclassDlgItem(IDC_SNDWSPNP, this);
+	m_chkpnp.SendMessage(BM_SETCHECK, m_pnp ? BST_CHECKED : BST_UNCHECKED, 0);
+	m_chkpcm.SubclassDlgItem(IDC_SNDWSPCM, this);
+	m_chkpcm.SendMessage(BM_SETCHECK, m_pcm86 ? BST_CHECKED : BST_UNCHECKED, 0);
+
+	m_cmbio.SetFocus();
+	return FALSE;
+}
+
+void SndOptWaveStarPage::OnOK()
+{
+	UINT update = 0;
+
+	if (np2cfg.sndwsio != m_io) {
+		np2cfg.sndwsio = m_io;
+		update |= SYS_UPDATECFG;
+	}
+	if (np2cfg.sndwsdma != m_dma) {
+		np2cfg.sndwsdma = m_dma;
+		update |= SYS_UPDATECFG;
+	}
+	if (np2cfg.sndwsirq != m_irq) {
+		np2cfg.sndwsirq = m_irq;
+		update |= SYS_UPDATECFG;
+	}
+	if (np2cfg.sndwspnp != m_pnp) {
+		np2cfg.sndwspnp = m_pnp;
+		update |= SYS_UPDATECFG;
+	}
+	if (np2cfg.sndwspcm != m_pcm86) {
+		np2cfg.sndwspcm = m_pcm86;
+		update |= SYS_UPDATECFG;
+	}
+	if (update) {
+		::sysmng_update(update);
+	}
+}
+
+BOOL SndOptWaveStarPage::OnCommand(WPARAM wParam, LPARAM lParam)
+{
+	(void)lParam;
+	switch (LOWORD(wParam))
+	{
+		case IDC_SND118IO:
+			m_io = (UINT16)m_cmbio.GetCurItemData(0x0188);
+			return TRUE;
+
+		case IDC_SND118DMA:
+			m_dma = m_cmbdma.GetCurItemData(3);
+			return TRUE;
+
+		case IDC_SND118INTF:
+			m_irq = m_cmbirq.GetCurItemData(12);
+			return TRUE;
+
+		case IDC_SNDWSPNP:
+			m_pnp = (m_chkpnp.SendMessage(BM_GETCHECK, 0, 0) != BST_UNCHECKED) ? 1 : 0;
+			return TRUE;
+
+		case IDC_SNDWSPCM:
+			m_pcm86 = (m_chkpcm.SendMessage(BM_GETCHECK, 0, 0) != BST_UNCHECKED) ? 1 : 0;
+			return TRUE;
+
+		case IDC_SND118DEF:
+			m_io = 0x0188;
+			m_dma = 3;
+			m_irq = 12;
+			m_pnp = 1;
+			m_pcm86 = 1;
+			m_cmbio.SetCurItemData(m_io);
+			m_cmbdma.SetCurItemData(m_dma);
+			m_cmbirq.SetCurItemData(m_irq);
+			m_chkpnp.SendMessage(BM_SETCHECK, BST_CHECKED, 0);
+			m_chkpcm.SendMessage(BM_SETCHECK, BST_CHECKED, 0);
+			return TRUE;
+	}
+	return FALSE;
+}
+
+
 #if defined(SUPPORT_SOUND_SB16)
 
 // ---- Sound Blaster 16(98)
@@ -2397,7 +2555,7 @@ void dialog_sndopt(HWND hwndParent)
 	
 	SndOptWSSPage wss;
 	prop.AddPage(&wss);
-	
+
 #if defined(SUPPORT_SOUND_SB16)
 	SndOptSB16Page sb16;
 	prop.AddPage(&sb16);
@@ -2405,6 +2563,9 @@ void dialog_sndopt(HWND hwndParent)
 
 	SndOptSpbPage spb;
 	prop.AddPage(&spb);
+
+	SndOptWaveStarPage wavestar;
+	prop.AddPage(&wavestar);
 
 	SndOptPadPage pad;
 	prop.AddPage(&pad);

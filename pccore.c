@@ -131,6 +131,8 @@ const OEMCHAR np2version[] = OEMTEXT(NP2VER_CORE);
 
 				0x70, 1, 3, // Mate-X PCM
 
+				0x0188, 3, 12, 1, 1, // WaveStar
+
 #if defined(SUPPORT_SOUND_SB16)
 				0xd2, 3, 5, 0,
 #endif	/* SUPPORT_FMGEN */

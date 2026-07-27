@@ -52,6 +52,8 @@
 		BAF84D64195AA10500183062 /* board14.c in Sources */ = {isa = PBXBuildFile; fileRef = BAF84B6A195AA10400183062 /* board14.c */; };
 		BAF84D65195AA10500183062 /* board26k.c in Sources */ = {isa = PBXBuildFile; fileRef = BAF84B6C195AA10400183062 /* board26k.c */; };
 		BAF84D66195AA10500183062 /* board86.c in Sources */ = {isa = PBXBuildFile; fileRef = BAF84B6E195AA10400183062 /* board86.c */; };
+		F1B00001195AA10500183062 /* cbuspnp.c in Sources */ = {isa = PBXBuildFile; fileRef = F1B00002195AA10400183062 /* cbuspnp.c */; };
+		F1A00001195AA10500183062 /* boardws.c in Sources */ = {isa = PBXBuildFile; fileRef = F1A00002195AA10400183062 /* boardws.c */; };
 		BAF84D67195AA10500183062 /* boardpx.c in Sources */ = {isa = PBXBuildFile; fileRef = BAF84B70195AA10400183062 /* boardpx.c */; };
 		BAF84D68195AA10500183062 /* boardspb.c in Sources */ = {isa = PBXBuildFile; fileRef = BAF84B72195AA10400183062 /* boardspb.c */; };
 		BAF84D69195AA10500183062 /* boardx2.c in Sources */ = {isa = PBXBuildFile; fileRef = BAF84B74195AA10400183062 /* boardx2.c */; };
@@ -345,6 +347,10 @@
 		BAF84B6D195AA10400183062 /* board26k.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = board26k.h; sourceTree = "<group>"; };
 		BAF84B6E195AA10400183062 /* board86.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = board86.c; sourceTree = "<group>"; };
 		BAF84B6F195AA10400183062 /* board86.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = board86.h; sourceTree = "<group>"; };
+		F1B00002195AA10400183062 /* cbuspnp.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = cbuspnp.c; sourceTree = "<group>"; };
+		F1B00003195AA10400183062 /* cbuspnp.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = cbuspnp.h; sourceTree = "<group>"; };
+		F1A00002195AA10400183062 /* boardws.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = boardws.c; sourceTree = "<group>"; };
+		F1A00003195AA10400183062 /* boardws.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = boardws.h; sourceTree = "<group>"; };
 		BAF84B70195AA10400183062 /* boardpx.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = boardpx.c; sourceTree = "<group>"; };
 		BAF84B71195AA10400183062 /* boardpx.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = boardpx.h; sourceTree = "<group>"; };
 		BAF84B72195AA10400183062 /* boardspb.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = boardspb.c; sourceTree = "<group>"; };
@@ -924,6 +930,10 @@
 				BAF84B6D195AA10400183062 /* board26k.h */,
 				BAF84B6E195AA10400183062 /* board86.c */,
 				BAF84B6F195AA10400183062 /* board86.h */,
+				F1B00002195AA10400183062 /* cbuspnp.c */,
+				F1B00003195AA10400183062 /* cbuspnp.h */,
+				F1A00002195AA10400183062 /* boardws.c */,
+				F1A00003195AA10400183062 /* boardws.h */,
 				BAF84B70195AA10400183062 /* boardpx.c */,
 				BAF84B71195AA10400183062 /* boardpx.h */,
 				BADADEB51BDF7F9B00137975 /* boardso.c */,
@@ -1548,6 +1558,8 @@
 				BAF84DDC195AA10500183062 /* v30patch.c in Sources */,
 				BAF84D9B195AA10500183062 /* menusys.c in Sources */,
 				BAF84D66195AA10500183062 /* board86.c in Sources */,
+				F1B00001195AA10500183062 /* cbuspnp.c in Sources */,
+				F1A00001195AA10500183062 /* boardws.c in Sources */,
 				BAF84E98195AA38300183062 /* psggenc.c in Sources */,
 				BAF84D8C195AA10500183062 /* strres.c in Sources */,
 				BAF84D8B195AA10500183062 /* resize.c in Sources */,
@@ -1828,6 +1840,11 @@
 				);
 				GCC_PRECOMPILE_PREFIX_HEADER = YES;
 				GCC_PREFIX_HEADER = np2sdl2/compiler.pch;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					SUPPORT_LARGE_HDD,
+					SUPPORT_VPCVHD,
+				);
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
 					./np2sdl2,
@@ -1862,6 +1879,11 @@
 				);
 				GCC_PRECOMPILE_PREFIX_HEADER = YES;
 				GCC_PREFIX_HEADER = np2sdl2/compiler.pch;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					SUPPORT_LARGE_HDD,
+					SUPPORT_VPCVHD,
+				);
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
 					./np2sdl2,

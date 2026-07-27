@@ -3,7 +3,7 @@ REGEDIT4
 [HKEY_LOCAL_MACHINE\System\CurrentControlSet\Services\VxD\HOSTD9X]
 "StaticVxD"="HOSTD9X.VXD"
 "DriveMode"=dword:00000000
-"DriveLetter"="F:"
+"DriveLetter"="Z:"
 "FallbackToAuto"=dword:00000001
 "UseRealCapacity"=dword:00000000
 "FakeCapacityMB"=dword:00000800

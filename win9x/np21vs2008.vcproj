@@ -477,6 +477,14 @@
 					>
 				</File>
 				<File
+					RelativePath="..\cbus\cbuspnp.c"
+					>
+				</File>
+				<File
+					RelativePath="..\cbus\boardws.c"
+					>
+				</File>
+				<File
 					RelativePath="..\cbus\boardpx.c"
 					>
 				</File>
@@ -2056,6 +2064,14 @@
 				</File>
 				<File
 					RelativePath="..\cbus\board86.h"
+					>
+				</File>
+				<File
+					RelativePath="..\cbus\cbuspnp.h"
+					>
+				</File>
+				<File
+					RelativePath="..\cbus\boardws.h"
 					>
 				</File>
 				<File

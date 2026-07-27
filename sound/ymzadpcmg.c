@@ -10,7 +10,7 @@
 
 #define	ADPCM_NBR	0x80000000
 
-#if 1
+#if 0
 static void trace_fmt_ex2(const char* fmt, ...)
 {
 	char stmp[2048];

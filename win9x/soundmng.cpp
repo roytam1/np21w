@@ -161,7 +161,7 @@ bool CSoundMng::Open(DeviceType nType, LPCTSTR lpName, HWND hWnd)
 
 	if (pSoundDevice == NULL)
 	{
-		LeaveSoundCriticalSection();
+		LeaveAllCriticalSection();
 		return false;
 	}
 
@@ -257,7 +257,7 @@ UINT CSoundMng::CreateStream(UINT nSamplingRate, UINT ms)
 	EnterAllCriticalSection();
 	if (m_pSoundDevice == NULL)
 	{
-		LeaveSoundCriticalSection();
+		LeaveAllCriticalSection();
 		return 0;
 	}
 
@@ -275,7 +275,7 @@ UINT CSoundMng::CreateStream(UINT nSamplingRate, UINT ms)
 	nBuffer = m_pSoundDevice->CreateStream(nSamplingRate, 2, nBuffer);
 	if (nBuffer == 0)
 	{
-		LeaveSoundCriticalSection();
+		LeaveAllCriticalSection();
 		return 0;
 	}
 	m_pSoundDevice->SetStreamData(this);
@@ -477,17 +477,14 @@ void CSoundMng::SetPCMVolume(SoundPCMNumber nNum, int nVolume)
  */
 inline bool CSoundMng::PlayPCM(SoundPCMNumber nNum, BOOL bLoop)
 {
+	bool result = false;
 	EnterSoundCriticalSection();
-	if (!m_nMute)
+	if ((!m_nMute) && (m_pSoundDevice))
 	{
-		if (m_pSoundDevice)
-		{
-			LeaveSoundCriticalSection();
-			return m_pSoundDevice->PlayPCM(nNum, bLoop);
-		}
+		result = m_pSoundDevice->PlayPCM(nNum, bLoop);
 	}
 	LeaveSoundCriticalSection();
-	return false;
+	return result;
 }
 
 /**

@@ -1,17 +1,22 @@
-ï»¿
+#pragma once
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+#define CS4231IO_BIND_CTRL_C2X 0x01
+#define CS4231IO_BIND_CTRL_480 0x02
+
 void cs4231io_reset(void);
+void cs4231io_reset_ex(UINT8 sndirq, UINT8 snddma, UINT16 soundid_port,
+                       UINT16 midi_port, UINT8 chipid);
 void cs4231io_bind(void);
 void cs4231io_unbind(void);
+void cs4231io_bind_ex(UINT flags);
+void cs4231io_unbind_ex(UINT flags);
 
 void IOOUTCALL cs4231io0_w8(UINT port, REG8 value);
 REG8 IOINPCALL cs4231io0_r8(UINT port);
-void IOOUTCALL cs4231io0_w8_wavestar(UINT port, REG8 value);
-REG8 IOINPCALL cs4231io0_r8_wavestar(UINT port);
 void IOOUTCALL cs4231io2_w8(UINT port, REG8 value);
 REG8 IOINPCALL cs4231io2_r8(UINT port);
 void IOOUTCALL cs4231io5_w8(UINT port, REG8 value);
@@ -39,7 +44,7 @@ REG8 IOINPCALL cs4231io5_r8(UINT port);
 //cs4231.reg.iface(9)
 #define PEN (1 << 0) //bit0 Playback Enable set and reset without MCE
 #define CEN (1 << 1) //bit1 Capture Enable
-#define SDC (1 << 2) //bit2 Single DMA Channel 0 Dual 1 Single é€†ã¨æ€ã£ã¦ãŸã®ã§ä¿®æ­£ã™ã¹ã—
+#define SDC (1 << 2) //bit2 Single DMA Channel 0 Dual 1 Single ‹t‚ÆŽv‚Á‚Ä‚½‚Ì‚ÅC³‚·‚×‚µ
 #define CAL0 (1 << 3) //bit3 Calibration 0 No Calibration 1 Converter calibration
 #define CAL1 (1 << 4) //bit4 2 DAC calibration 3 Full Calibration
 #define PPIO (1 << 6) //bit6 Playback PIO Enable 0 DMA 1 PIO

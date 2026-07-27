@@ -1,7 +1,13 @@
+
+#if !defined(_FILE_OFFSET_BITS)
+#define _FILE_OFFSET_BITS 64
+#endif
+
 #include "compiler.h"
 
 #include <sys/stat.h>
 #include <time.h>
+#include <unistd.h>
 
 #include "codecnv/codecnv.h"
 #include "dosio.h"
@@ -53,12 +59,19 @@ file_create(const OEMCHAR *path)
 	return fopen(path, "wb+");
 }
 
-long
-file_seek(FILEH handle, long pointer, int method)
+FILEPOS
+file_seek(FILEH handle, FILEPOS pointer, int method)
 {
+	off_t pos;
 
-	fseek(handle, pointer, method);
-	return ftell(handle);
+	if ((FILEPOS)(off_t)pointer != pointer)
+		return (FILEPOS)-1;
+	if (fseeko(handle, (off_t)pointer, method) != 0)
+		return (FILEPOS)-1;
+	pos = ftello(handle);
+	if ((pos == (off_t)-1) || ((off_t)(FILEPOS)pos != pos))
+		return (FILEPOS)-1;
+	return (FILEPOS)pos;
 }
 
 UINT
@@ -83,14 +96,41 @@ file_close(FILEH handle)
 	return 0;
 }
 
-UINT
+FILELEN
 file_getsize(FILEH handle)
 {
 	struct stat sb;
+	FILELEN size;
 
-	if (fstat(fileno(handle), &sb) == 0)
-		return sb.st_size;
-	return 0;
+	if (fstat(fileno(handle), &sb) != 0 || sb.st_size < 0)
+		return 0;
+	size = (FILELEN)sb.st_size;
+	if ((off_t)size != sb.st_size)
+		return 0;
+	return size;
+}
+
+short
+file_sync(FILEH handle)
+{
+	if (fflush(handle) != 0)
+		return -1;
+	return (fsync(fileno(handle)) == 0) ? 0 : -1;
+}
+
+short
+file_setsize(FILEH handle, FILELEN length)
+{
+	off_t size;
+
+	if (length < 0)
+		return -1;
+	size = (off_t)length;
+	if ((FILELEN)size != length)
+		return -1;
+	if (fflush(handle) != 0)
+		return -1;
+	return (ftruncate(fileno(handle), size) == 0) ? 0 : -1;
 }
 
 short

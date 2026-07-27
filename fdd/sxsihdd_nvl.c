@@ -45,6 +45,7 @@ BOOL nvl_check()
 
 	return TRUE;
 check_err:
+	FreeLibrary(hModule);
 	return FALSE;
 }
 

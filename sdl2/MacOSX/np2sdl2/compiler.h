@@ -28,8 +28,22 @@ typedef	signed short		SINT16;
 typedef	unsigned short		UINT16;
 typedef	signed int			SINT32;
 typedef	unsigned int		UINT32;
+typedef	signed long long	SINT64;
+typedef	unsigned long long	UINT64;
 
 #define	BRESULT				UINT
+
+#if defined(SUPPORT_LARGE_HDD)
+typedef	SINT64				FILEPOS;
+typedef	SINT64				FILELEN;
+#define	NHD_MAXSIZE		8000
+#define	NHD_MAXSIZE2	32000
+#else
+typedef	SINT32				FILEPOS;
+typedef	SINT32				FILELEN;
+#define	NHD_MAXSIZE		2000
+#define	NHD_MAXSIZE2	2000
+#endif
 #define	OEMCHAR				char
 #define	OEMTEXT(string)		string
 #define	OEMSPRINTF			sprintf

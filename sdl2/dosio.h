@@ -61,11 +61,13 @@ extern "C" {
 FILEH file_open(const char *path);
 FILEH file_open_rb(const char *path);
 FILEH file_create(const char *path);
-long file_seek(FILEH handle, long pointer, int method);
+FILEPOS file_seek(FILEH handle, FILEPOS pointer, int method);
 UINT file_read(FILEH handle, void *data, UINT length);
 UINT file_write(FILEH handle, const void *data, UINT length);
 short file_close(FILEH handle);
-UINT file_getsize(FILEH handle);
+FILELEN file_getsize(FILEH handle);
+short file_sync(FILEH handle);
+short file_setsize(FILEH handle, FILELEN length);
 short file_getdatetime(FILEH handle, DOSDATE *dosdate, DOSTIME *dostime);
 BRESULT file_getshortname(const char *path, char *shortname, UINT cchShortName);
 BOOL file_islink(const char *path);

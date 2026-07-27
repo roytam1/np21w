@@ -36,6 +36,8 @@
 		BA7E83AA19063AFB00041C04 /* board14.c in Sources */ = {isa = PBXBuildFile; fileRef = BA7E81CB19063AFA00041C04 /* board14.c */; };
 		BA7E83AB19063AFB00041C04 /* board26k.c in Sources */ = {isa = PBXBuildFile; fileRef = BA7E81CD19063AFA00041C04 /* board26k.c */; };
 		BA7E83AC19063AFB00041C04 /* board86.c in Sources */ = {isa = PBXBuildFile; fileRef = BA7E81CF19063AFA00041C04 /* board86.c */; };
+		F2B0000119063AFB00041C04 /* cbuspnp.c in Sources */ = {isa = PBXBuildFile; fileRef = F2B0000219063AFA00041C04 /* cbuspnp.c */; };
+		F2A0000119063AFB00041C04 /* boardws.c in Sources */ = {isa = PBXBuildFile; fileRef = F2A0000219063AFA00041C04 /* boardws.c */; };
 		BA7E83AD19063AFB00041C04 /* boardpx.c in Sources */ = {isa = PBXBuildFile; fileRef = BA7E81D119063AFA00041C04 /* boardpx.c */; };
 		BA7E83AE19063AFB00041C04 /* boardspb.c in Sources */ = {isa = PBXBuildFile; fileRef = BA7E81D319063AFA00041C04 /* boardspb.c */; };
 		BA7E83AF19063AFB00041C04 /* boardx2.c in Sources */ = {isa = PBXBuildFile; fileRef = BA7E81D519063AFA00041C04 /* boardx2.c */; };
@@ -342,6 +344,10 @@
 		BA7E81CE19063AFA00041C04 /* board26k.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = board26k.h; sourceTree = "<group>"; };
 		BA7E81CF19063AFA00041C04 /* board86.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = board86.c; sourceTree = "<group>"; };
 		BA7E81D019063AFA00041C04 /* board86.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = board86.h; sourceTree = "<group>"; };
+		F2B0000219063AFA00041C04 /* cbuspnp.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = cbuspnp.c; sourceTree = "<group>"; };
+		F2B0000319063AFA00041C04 /* cbuspnp.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = cbuspnp.h; sourceTree = "<group>"; };
+		F2A0000219063AFA00041C04 /* boardws.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = boardws.c; sourceTree = "<group>"; };
+		F2A0000319063AFA00041C04 /* boardws.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = boardws.h; sourceTree = "<group>"; };
 		BA7E81D119063AFA00041C04 /* boardpx.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = boardpx.c; sourceTree = "<group>"; };
 		BA7E81D219063AFA00041C04 /* boardpx.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = boardpx.h; sourceTree = "<group>"; };
 		BA7E81D319063AFA00041C04 /* boardspb.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = boardspb.c; sourceTree = "<group>"; };
@@ -951,6 +957,10 @@
 				BA7E81CE19063AFA00041C04 /* board26k.h */,
 				BA7E81CF19063AFA00041C04 /* board86.c */,
 				BA7E81D019063AFA00041C04 /* board86.h */,
+				F2B0000219063AFA00041C04 /* cbuspnp.c */,
+				F2B0000319063AFA00041C04 /* cbuspnp.h */,
+				F2A0000219063AFA00041C04 /* boardws.c */,
+				F2A0000319063AFA00041C04 /* boardws.h */,
 				BA7E81D119063AFA00041C04 /* boardpx.c */,
 				BA7E81D219063AFA00041C04 /* boardpx.h */,
 				BADADEBB1BDF804700137975 /* boardso.c */,
@@ -1669,6 +1679,8 @@
 				BA7E847719063AFB00041C04 /* adpcmc.c in Sources */,
 				BA7E848619063AFB00041C04 /* opngenc.c in Sources */,
 				BA7E83AC19063AFB00041C04 /* board86.c in Sources */,
+				F2B0000119063AFB00041C04 /* cbuspnp.c in Sources */,
+				F2A0000119063AFB00041C04 /* boardws.c in Sources */,
 				BA7E849019063AFB00041C04 /* soundrom.c in Sources */,
 				BA7E845C19063AFB00041C04 /* fontmng.c in Sources */,
 				BA7E840A19063AFB00041C04 /* softkbd.c in Sources */,
@@ -1730,6 +1742,11 @@
 				GCC_OPTIMIZATION_LEVEL = 0;
 				GCC_PRECOMPILE_PREFIX_HEADER = YES;
 				GCC_PREFIX_HEADER = ./compiler.pch;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					SUPPORT_LARGE_HDD,
+					SUPPORT_VPCVHD,
+				);
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
@@ -1766,6 +1783,11 @@
 				COPY_PHASE_STRIP = YES;
 				GCC_PRECOMPILE_PREFIX_HEADER = YES;
 				GCC_PREFIX_HEADER = ./compiler.pch;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					SUPPORT_LARGE_HDD,
+					SUPPORT_VPCVHD,
+				);
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,

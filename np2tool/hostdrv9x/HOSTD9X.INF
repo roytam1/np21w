@@ -19,7 +19,7 @@ HOSTD9X.DLL
 [HostD9x.AddReg]
 HKLM,System\CurrentControlSet\Services\VxD\HOSTD9X,StaticVxD,0,"HOSTD9X.VXD"
 HKLM,System\CurrentControlSet\Services\VxD\HOSTD9X,DriveMode,0x00010001,0
-HKLM,System\CurrentControlSet\Services\VxD\HOSTD9X,DriveLetter,0,"F:"
+HKLM,System\CurrentControlSet\Services\VxD\HOSTD9X,DriveLetter,0,"Z:"
 HKLM,System\CurrentControlSet\Services\VxD\HOSTD9X,FallbackToAuto,0x00010001,1
 HKLM,System\CurrentControlSet\Services\VxD\HOSTD9X,UseRealCapacity,0x00010001,0
 HKLM,System\CurrentControlSet\Services\VxD\HOSTD9X,FakeCapacityMB,0x00010001,2048

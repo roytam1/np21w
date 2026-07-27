@@ -166,6 +166,12 @@ struct tagNP2Config
 	UINT8	sndwssid;
 	UINT8	sndwssdma;
 	UINT8	sndwssirq;
+
+	UINT16	sndwsio;
+	UINT8	sndwsdma;
+	UINT8	sndwsirq;
+	UINT8	sndwspnp;
+	UINT8	sndwspcm;
 	
 #if defined(SUPPORT_SOUND_SB16)
 	UINT8	sndsb16io;

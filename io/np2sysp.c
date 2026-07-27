@@ -16,6 +16,7 @@
 #include	"sound/fmboard.h"
 #include	"sound/soundrom.h"
 #include	"cbus/mpu98ii.h"
+#include	"cbus/boardws.h"
 #if defined(SUPPORT_SMPU98)
 #include	"cbus/smpu98.h"
 #endif
@@ -307,7 +308,7 @@ static void np2sysp_getconfig(const void *arg1, long arg2) {
 	{
 		UINT8 targetvalue = (np2sysp.outval >> 16) & 0xff;
 		int opna_idx;
-		if (g_nSoundID == SOUNDID_PC_9801_86_WSS || g_nSoundID == SOUNDID_PC_9801_86_118 || g_nSoundID == SOUNDID_WAVESTAR || g_nSoundID == SOUNDID_PC_9801_86_WSS_SB16 || g_nSoundID == SOUNDID_PC_9801_86_118_SB16) {
+		if (g_nSoundID == SOUNDID_PC_9801_86_WSS || g_nSoundID == SOUNDID_PC_9801_86_118 || g_nSoundID == SOUNDID_PC_9801_86_WSS_SB16 || g_nSoundID == SOUNDID_PC_9801_86_118_SB16) {
 			opna_idx = 1;
 		}
 		else {
@@ -327,7 +328,10 @@ static void np2sysp_getconfig(const void *arg1, long arg2) {
 			}
 			break;
 		case NP21W_SWITCH_SETDEVICEIRQ_SND_86:
-			if (g_nSoundID == SOUNDID_PC_9801_86 ||
+			if (g_nSoundID == SOUNDID_WAVESTAR) {
+				configvalue = boardws_getirq();
+			}
+			else if (g_nSoundID == SOUNDID_PC_9801_86 ||
 				g_nSoundID == SOUNDID_PC_9801_86_26K ||
 				g_nSoundID == SOUNDID_PC_9801_86_118 || 
 				g_nSoundID == SOUNDID_PC_9801_86_118_SB16 || 
@@ -348,7 +352,10 @@ static void np2sysp_getconfig(const void *arg1, long arg2) {
 			}
 			break;
 		case NP21W_SWITCH_SETDEVICEIRQ_SND_MATEX:
-			if (g_nSoundID == SOUNDID_MATE_X_PCM ||
+			if (g_nSoundID == SOUNDID_WAVESTAR) {
+				configvalue = boardws_getirq();
+			}
+			else if (g_nSoundID == SOUNDID_MATE_X_PCM ||
 				g_nSoundID == SOUNDID_WSS_SB16 ||
 				g_nSoundID == SOUNDID_PC_9801_86_WSS ||
 				g_nSoundID == SOUNDID_PC_9801_86_WSS_SB16) {
@@ -377,7 +384,7 @@ static void np2sysp_getconfig(const void *arg1, long arg2) {
 			break;
 		case NP21W_SWITCH_SETDEVICEIRQ_MIDI_MPU:
 			if (mpu98.enable) {
-				configvalue = mpu98.irqnum;
+				configvalue = (g_nSoundID == SOUNDID_WAVESTAR) ? boardws_getmpuirq() : mpu98.irqnum;
 			}
 			break;
 #if defined(SUPPORT_SMPU98)
@@ -458,13 +465,20 @@ static void np2sysp_cngconfig(const void *arg1, long arg2) {
 			}
 			soundrom_reset();
 			fmboard_reset(&np2cfg, (SOUNDID)configvalue);
+			pccore.sound = (SOUNDID)g_nSoundID;
 			fmboard_bind();
 			if (((pccore.model & PCMODELMASK) >= PCMODEL_VX) &&
 				(pccore.sound & 0x7e)) {
 				if(g_nSoundID == SOUNDID_MATE_X_PCM || ((g_nSoundID == SOUNDID_PC_9801_118 || g_nSoundID == SOUNDID_PC_9801_86_118 || g_nSoundID == SOUNDID_PC_9801_118_SB16 || g_nSoundID == SOUNDID_PC_9801_86_118_SB16) && np2cfg.snd118irqf == np2cfg.snd118irqp) || g_nSoundID == SOUNDID_PC_9801_86_WSS || g_nSoundID == SOUNDID_WAVESTAR || g_nSoundID==SOUNDID_PC_9801_86_WSS_SB16){
-					iocore_out8(0x188, 0x27);
-					iocore_out8(0x18a, 0x30);
-					if(g_nSoundID == SOUNDID_PC_9801_118 || g_nSoundID == SOUNDID_PC_9801_86_118 || g_nSoundID==SOUNDID_WAVESTAR || g_nSoundID == SOUNDID_PC_9801_118_SB16 || g_nSoundID == SOUNDID_PC_9801_86_118_SB16){
+					if (g_nSoundID == SOUNDID_WAVESTAR) {
+						iocore_out8(np2cfg.sndwsio, 0x27);
+						iocore_out8(np2cfg.sndwsio + 2, 0x30);
+					}
+					else {
+						iocore_out8(0x188, 0x27);
+						iocore_out8(0x18a, 0x30);
+					}
+					if(g_nSoundID == SOUNDID_PC_9801_118 || g_nSoundID == SOUNDID_PC_9801_86_118 || g_nSoundID == SOUNDID_PC_9801_118_SB16 || g_nSoundID == SOUNDID_PC_9801_86_118_SB16){
 						iocore_out8(cs4231.port[4], 0x27);
 						iocore_out8(cs4231.port[4]+2, 0x30);
 					}
@@ -564,7 +578,7 @@ static void np2sysp_cngconfig(const void *arg1, long arg2) {
 		UINT8 retvalue = 0xfe; // デバイスがない場合は0xfeを返す
 		UINT8 irqvalue = (np2sysp.outval >> 8) & 0xff;
 		int opna_idx;
-		if (g_nSoundID == SOUNDID_PC_9801_86_WSS || g_nSoundID == SOUNDID_PC_9801_86_118 || g_nSoundID == SOUNDID_WAVESTAR || g_nSoundID == SOUNDID_PC_9801_86_WSS_SB16 || g_nSoundID == SOUNDID_PC_9801_86_118_SB16) {
+		if (g_nSoundID == SOUNDID_PC_9801_86_WSS || g_nSoundID == SOUNDID_PC_9801_86_118 || g_nSoundID == SOUNDID_PC_9801_86_WSS_SB16 || g_nSoundID == SOUNDID_PC_9801_86_118_SB16) {
 			opna_idx = 1;
 		}
 		else {
@@ -587,7 +601,12 @@ static void np2sysp_cngconfig(const void *arg1, long arg2) {
 			}
 			break;
 		case NP21W_SWITCH_SETDEVICEIRQ_SND_86:
-			if (irqvalue == 0x03 || irqvalue == 0x0d || irqvalue == 0x0a || irqvalue == 0x0c || irqvalue == 0xff) {
+			if (g_nSoundID == SOUNDID_WAVESTAR) {
+				if (boardws_setirq(irqvalue)) {
+					retvalue = irqvalue;
+				}
+			}
+			else if (irqvalue == 0x03 || irqvalue == 0x0d || irqvalue == 0x0a || irqvalue == 0x0c || irqvalue == 0xff) {
 				g_opna[0].s.irq = irqvalue;
 				g_pcm86.irq = irqvalue;
 				retvalue = irqvalue; // 受付されたらその値を返す
@@ -601,7 +620,12 @@ static void np2sysp_cngconfig(const void *arg1, long arg2) {
 			}
 			break;
 		case NP21W_SWITCH_SETDEVICEIRQ_SND_MATEX:
-			if (irqvalue == 0x03 || irqvalue == 0x06 || irqvalue == 0x0a || irqvalue == 0x0c || irqvalue == 0xff) {
+			if (g_nSoundID == SOUNDID_WAVESTAR) {
+				if (boardws_setirq(irqvalue)) {
+					retvalue = irqvalue;
+				}
+			}
+			else if (irqvalue == 0x03 || irqvalue == 0x06 || irqvalue == 0x0a || irqvalue == 0x0c || irqvalue == 0xff) {
 				cs4231.dmairq = irqvalue;
 				retvalue = irqvalue; // 受付されたらその値を返す
 			}
@@ -623,7 +647,12 @@ static void np2sysp_cngconfig(const void *arg1, long arg2) {
 			}
 			break;
 		case NP21W_SWITCH_SETDEVICEIRQ_MIDI_MPU:
-			if (irqvalue == 3 || irqvalue == 5 || irqvalue == 6 || irqvalue == 12 || irqvalue == 0xff) {
+			if (g_nSoundID == SOUNDID_WAVESTAR) {
+				if (boardws_setmpuirq(irqvalue)) {
+					retvalue = irqvalue;
+				}
+			}
+			else if (irqvalue == 3 || irqvalue == 5 || irqvalue == 6 || irqvalue == 12 || irqvalue == 0xff) {
 				mpu98.irqnum = irqvalue;
 				retvalue = irqvalue; // 受付されたらその値を返す
 			}

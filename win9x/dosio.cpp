@@ -125,6 +125,29 @@ UINT DOSIOCALL file_write(FILEH hFile, const void* lpBuffer, UINT cbBuffer)
 	return 0;
 }
 
+short DOSIOCALL file_sync(FILEH hFile)
+{
+	return ::FlushFileBuffers(hFile) ? 0 : -1;
+}
+
+short DOSIOCALL file_setsize(FILEH hFile, FILELEN length)
+{
+	FILEPOS current;
+
+	if (length < 0)
+		return -1;
+	current = file_seek(hFile, 0, FSEEK_CUR);
+	if (current < 0)
+		return -1;
+	if (file_seek(hFile, (FILEPOS)length, FSEEK_SET) != (FILEPOS)length)
+		return -1;
+	if (!::SetEndOfFile(hFile)) {
+		file_seek(hFile, current, FSEEK_SET);
+		return -1;
+	}
+	return (file_seek(hFile, current, FSEEK_SET) == current) ? 0 : -1;
+}
+
 /**
  * ファイル ハンドルを閉じる
  * @param[in] hFile ファイル ハンドル

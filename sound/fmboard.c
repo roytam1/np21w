@@ -9,6 +9,7 @@
 #include	"board86.h"
 #include	"boardx2.h"
 #include	"board118.h"
+#include	"boardws.h"
 #include	"boardspb.h"
 #if defined(SUPPORT_PX)
 #include	"boardpx.h"
@@ -96,7 +97,7 @@ void fmboard_updatevolume(){
 	UINT volex = 15;
 	UINT i;
 	if(g_nSoundID==SOUNDID_WAVESTAR){
-		volex = cs4231.devvolume[0xff];
+		volex = boardws_getfmvolume();
 	}
 	opngen_setvol(np2cfg.vol_fm * volex / 15 * np2cfg.vol_master / 100);
 #if defined(SUPPORT_FMGEN)
@@ -264,8 +265,7 @@ void fmboard_reset(const NP2CFG *pConfig, SOUNDID nSoundID)
 			break;
 
 		case SOUNDID_WAVESTAR:
-			board118_reset(pConfig);
-			board86_reset(pConfig, FALSE);
+			boardws_reset(pConfig);
 			break;
 
 		case SOUNDID_SPEAKBOARD:
@@ -396,8 +396,7 @@ void fmboard_bind(void) {
 			break;
 
 		case SOUNDID_WAVESTAR:
-			board118_bind();
-			board86_bind();
+			boardws_bind();
 			break;
 			
 		case SOUNDID_SPEAKBOARD:
@@ -519,8 +518,7 @@ void fmboard_unbind(void) {
 			break;
 
 		case SOUNDID_WAVESTAR:
-			board118_unbind();
-			board86_unbind();
+			boardws_unbind();
 			break;
 			
 		case SOUNDID_SPEAKBOARD:

@@ -7,11 +7,13 @@
 #include "dosio.h"
 #if defined(WIN32)
 #include <direct.h>
+#include <io.h>
 #ifndef FILE_ATTRIBUTE_REPARSE_POINT
 #define FILE_ATTRIBUTE_REPARSE_POINT 0x00000400
 #endif
 #else
 #include <dirent.h>
+#include <unistd.h>
 #endif
 
 static	char	curpath[MAX_PATH] = "./";
@@ -51,10 +53,27 @@ FILEH file_create(const char *path) {
 #endif
 }
 
-long file_seek(FILEH handle, long pointer, int method) {
+FILEPOS file_seek(FILEH handle, FILEPOS pointer, int method) {
 
-	fseek(handle, pointer, method);
-	return(ftell(handle));
+#if defined(WIN32)
+	__int64 pos;
+	if (_fseeki64(handle, (__int64)pointer, method) != 0)
+		return (FILEPOS)-1;
+	pos = _ftelli64(handle);
+	if ((pos < 0) || ((__int64)(FILEPOS)pos != pos))
+		return (FILEPOS)-1;
+	return (FILEPOS)pos;
+#else
+	off_t pos;
+	if ((FILEPOS)(off_t)pointer != pointer)
+		return (FILEPOS)-1;
+	if (fseeko(handle, (off_t)pointer, method) != 0)
+		return (FILEPOS)-1;
+	pos = ftello(handle);
+	if ((pos == (off_t)-1) || ((off_t)(FILEPOS)pos != pos))
+		return (FILEPOS)-1;
+	return (FILEPOS)pos;
+#endif
 }
 
 UINT file_read(FILEH handle, void *data, UINT length) {
@@ -73,15 +92,52 @@ short file_close(FILEH handle) {
 	return(0);
 }
 
-UINT file_getsize(FILEH handle) {
-
+FILELEN file_getsize(FILEH handle) {
+#if defined(WIN32)
+	struct _stat64 sb;
+#else
 	struct stat sb;
+#endif
+	FILELEN size;
 
-	if (fstat(fileno(handle), &sb) == 0)
+#if defined(WIN32)
+	if (_fstat64(_fileno(handle), &sb) != 0 || sb.st_size < 0)
+		return 0;
+#else
+	if (fstat(fileno(handle), &sb) != 0 || sb.st_size < 0)
+		return 0;
+#endif
+	size = (FILELEN)sb.st_size;
+	if ((SINT64)size != (SINT64)sb.st_size)
+		return 0;
+	return size;
+}
+
+short file_sync(FILEH handle) {
+	if (fflush(handle) != 0)
+		return -1;
+#if defined(WIN32)
+	return (_commit(_fileno(handle)) == 0) ? 0 : -1;
+#else
+	return (fsync(fileno(handle)) == 0) ? 0 : -1;
+#endif
+}
+
+short file_setsize(FILEH handle, FILELEN length) {
+	if (length < 0)
+		return -1;
+	if (fflush(handle) != 0)
+		return -1;
+#if defined(WIN32)
+	return (_chsize_s(_fileno(handle), (__int64)length) == 0) ? 0 : -1;
+#else
 	{
-		return (UINT)sb.st_size;
+		off_t size = (off_t)length;
+		if ((FILELEN)size != length)
+			return -1;
+		return (ftruncate(fileno(handle), size) == 0) ? 0 : -1;
 	}
-	return(0);
+#endif
 }
 
 short file_attr(const char *path) {

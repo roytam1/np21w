@@ -10,6 +10,7 @@
 #include "strres.h"
 #include "cpucore.h"
 #include "pccore.h"
+#include "cbus/cbuspnp.h"
 #include "iocore.h"
 #include "lio/lio.h"
 #include "vram.h"
@@ -341,9 +342,9 @@ static void bios_reinitbyswitch(void) {
 	}else{
 		mem[0xF8E80+0x0004] &= ~0x20;
 	}
-	//mem[0x5B7] = (0x277 >> 2); // READ_DATA port address
-	mem[0x5B8] = 0x00; // No C-Bus PnP boards
 #endif
+	/* Reflect all registered C-Bus PnP boards in the BIOS work area. */
+	cbuspnp_bios_update();
 	mem[0xF8E80+0x0002] |= 0x04; // set 19200bps support flag
 #if defined(SUPPORT_RS232C_FIFO)
 	mem[0xF8E80+0x0011] |= 0x10; // set 115200bps support flag
@@ -351,6 +352,11 @@ static void bios_reinitbyswitch(void) {
 	mem[0xF8E80+0x0011] &= ~0x10; // clear 115200bps support flag
 #endif
 	mem[0xF8E80+0x0011] &= ~0x08; // clear 2nd serial interface flag
+#if defined(SUPPORT_PEGC)
+	if (np2cfg.usepegcplane) {
+		mem[0xF8E80 + 0x0005] &= ~0x80; // clear X-MATE (No PEGC Plane Mode) flag
+	}
+#endif
 	
 #if defined(SUPPORT_HRTIMER)
 	{
@@ -991,8 +997,14 @@ UINT MEMCALL biosfunc(UINT32 adrs) {
 			if (((pccore.model & PCMODELMASK) >= PCMODEL_VX) &&
 				(pccore.sound & 0x7e)) {
 				if(g_nSoundID == SOUNDID_MATE_X_PCM || ((g_nSoundID == SOUNDID_PC_9801_118 || g_nSoundID == SOUNDID_PC_9801_86_118 || g_nSoundID == SOUNDID_PC_9801_118_SB16 || g_nSoundID == SOUNDID_PC_9801_86_118_SB16) && np2cfg.snd118irqf == np2cfg.snd118irqp) || g_nSoundID == SOUNDID_PC_9801_86_WSS || g_nSoundID == SOUNDID_WAVESTAR || g_nSoundID == SOUNDID_PC_9801_86_WSS_SB16){
-					iocore_out8(0x188, 0x27);
-					iocore_out8(0x18a, 0x30);
+					if (g_nSoundID == SOUNDID_WAVESTAR) {
+						iocore_out8(np2cfg.sndwsio, 0x27);
+						iocore_out8(np2cfg.sndwsio + 2, 0x30);
+					}
+					else {
+						iocore_out8(0x188, 0x27);
+						iocore_out8(0x18a, 0x30);
+					}
 					if(g_nSoundID == SOUNDID_PC_9801_118 || g_nSoundID == SOUNDID_PC_9801_86_118 || g_nSoundID == SOUNDID_PC_9801_118_SB16 || g_nSoundID == SOUNDID_PC_9801_86_118_SB16){
 						iocore_out8(cs4231.port[4], 0x27);
 						iocore_out8(cs4231.port[4]+2, 0x30);

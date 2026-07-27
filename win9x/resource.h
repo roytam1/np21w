@@ -34,6 +34,7 @@
 #define IDD_SNDSB16                     162
 #define IDD_SMPU98                      163
 #define IDD_SNDMAPPER                   164
+#define IDD_SNDWAVESTAR                 165
 #define IDD_ABOUT                       171
 #define IDD_LGY98                       180
 #define IDD_NETWORK                     181
@@ -285,6 +286,8 @@
 #define IDC_SND118DEF                   15557
 #define IDC_SND118ROM                   15558
 #define IDC_SND118JMP                   15559
+#define IDC_SNDWSPNP                    15560
+#define IDC_SNDWSPCM                    15561
 #define IDC_SPBIO                       15601
 #define IDC_SPBINT                      15602
 #define IDC_SPBROM                      15603

@@ -17,6 +17,7 @@
 #include "iocore.h"
 #include "gdc_sub.h"
 #include "cbuscore.h"
+#include "cbuspnp.h"
 #include "ideio.h"
 #include "sasiio.h"
 #include "scsiio.h"
@@ -33,6 +34,7 @@
 #include "maketext.h"
 #include "sound.h"
 #include "fmboard.h"
+#include "boardws.h"
 #ifdef SUPPORT_SOUND_SB16
 #include "ct1741io.h"
 #endif
@@ -1039,7 +1041,10 @@ static int flagload_fm(STFLAGH sfh, const SFENTRY *tbl)
 		// new statsave
 		// 新方式ステートセーブ：原則として構造体サイズを書くように変更。復元時に足りない部分は0で埋められる。メンバ順を入れ替えず追記していけば工夫により互換性維持が可能。
 		ret = statflag_read(sfh, &nSoundID, sizeof(nSoundID));
-		fmboard_reset(&np2cfg, nSoundID);
+		if (g_nSoundID != nSoundID) {
+			fmboard_reset(&np2cfg, nSoundID);
+		}
+		pccore.sound = nSoundID;
 
 		nSaveFlags = GetSoundFlags(g_nSoundID);
 		if (nSaveFlags & FLAG_MG)
@@ -1543,6 +1548,8 @@ int statsave_save(const OEMCHAR *filename) {
 const SFENTRY	*tbl;
 const SFENTRY	*tblterm;
 
+	pccore.sound = g_nSoundID;
+
 	sffh = statflag_create(filename);
 	if (sffh == NULL) {
 		return(STATFLAG_FAILURE);
@@ -1988,14 +1995,14 @@ const SFENTRY	*tblterm;
 	}
 #endif
 	if(g_nSoundID == SOUNDID_WAVESTAR){
-		opngen_setvol(np2cfg.vol_fm * cs4231.devvolume[0xff] / 15 * np2cfg.vol_master / 100);
-		psggen_setvol(np2cfg.vol_ssg * cs4231.devvolume[0xff] / 15 * np2cfg.vol_master / 100);
-		rhythm_setvol(np2cfg.vol_rhythm * cs4231.devvolume[0xff] / 15 * np2cfg.vol_master / 100);
+		opngen_setvol(np2cfg.vol_fm * boardws_getfmvolume() / 15 * np2cfg.vol_master / 100);
+		psggen_setvol(np2cfg.vol_ssg * boardws_getfmvolume() / 15 * np2cfg.vol_master / 100);
+		rhythm_setvol(np2cfg.vol_rhythm * boardws_getfmvolume() / 15 * np2cfg.vol_master / 100);
 #if defined(SUPPORT_FMGEN)
 		if(usefmgen) {
-			opna_fmgen_setallvolumeFM_linear(np2cfg.vol_fm * cs4231.devvolume[0xff] / 15 * np2cfg.vol_master / 100);
-			opna_fmgen_setallvolumePSG_linear(np2cfg.vol_ssg * cs4231.devvolume[0xff] / 15 * np2cfg.vol_master / 100);
-			opna_fmgen_setallvolumeRhythmTotal_linear(np2cfg.vol_rhythm * cs4231.devvolume[0xff] / 15 * np2cfg.vol_master / 100);
+			opna_fmgen_setallvolumeFM_linear(np2cfg.vol_fm * boardws_getfmvolume() / 15 * np2cfg.vol_master / 100);
+			opna_fmgen_setallvolumePSG_linear(np2cfg.vol_ssg * boardws_getfmvolume() / 15 * np2cfg.vol_master / 100);
+			opna_fmgen_setallvolumeRhythmTotal_linear(np2cfg.vol_rhythm * boardws_getfmvolume() / 15 * np2cfg.vol_master / 100);
 		}
 #endif
 	}else{

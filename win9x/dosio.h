@@ -104,6 +104,8 @@ UINT DOSIOCALL file_read(FILEH hFile, void *data, UINT length);
 UINT DOSIOCALL file_write(FILEH hFile, const void *data, UINT length);
 short DOSIOCALL file_close(FILEH hFile);
 FILELEN DOSIOCALL file_getsize(FILEH hFile);
+short DOSIOCALL file_sync(FILEH hFile);
+short DOSIOCALL file_setsize(FILEH hFile, FILELEN length);
 short DOSIOCALL file_getdatetime(FILEH hFile, DOSDATE* dosdate, DOSTIME* dostime);
 BRESULT DOSIOCALL file_getshortname(const OEMCHAR* lpPathName, OEMCHAR* lpShortName, UINT cchShortName);
 BOOL DOSIOCALL file_islink(const OEMCHAR* lpPathName);

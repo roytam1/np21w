@@ -244,6 +244,7 @@ void MEMCALL memp_mmio_map_reset(void)
 	else {
 		memp_mmio_range_add(USE_HIMEM, 0 - USE_HIMEM); // メモリがない領域
 	}
+	memp_mmio_range_add(0xfff00000, 0xfff80000 - 0xfff00000); // 256色モード
 }
 
 // ページング時にメモリ直接アクセス可能かどうか調べて可能ならポインタを返す。不可ならNULLを返す。
@@ -1270,7 +1271,7 @@ static void MEMCALL memp_write8_slow(UINT32 address, REG8 value) {
 }
 
 static void MEMCALL memp_write16_slow(UINT32 address, REG16 value) {
-	if (((address + 1) & 0x7fff) && ((address + 2) & 0x7fff) && ((address + 3) & 0x7fff)) {			// non 32kb boundary
+	if ((address + 1) & 0x7fff) {			// non 32kb boundary
 #if defined(SUPPORT_WAB_GA1280A)
 		if (ga1280a_memp_try_write16(address, value)) return;
 #endif
@@ -1388,7 +1389,7 @@ static void MEMCALL memp_write16_slow(UINT32 address, REG16 value) {
 }
 
 static void MEMCALL memp_write32_slow(UINT32 address, UINT32 value) {
-	if ((address + 1) & 0x7fff) {			// non 32kb boundary
+	if ((address & 0x7fff) <= 0x8000 - 4) {			// non 32kb boundary
 #if defined(SUPPORT_WAB_GA1280A)
 		if (ga1280a_memp_try_write32(address, value)) return;
 #endif
@@ -2407,7 +2408,7 @@ void MEMCALL memp_write16(UINT32 address, REG16 value) {
 		STOREINTELWORD(mem + address, value);
 	}
 	else{
-		if (((address + 1) & 0x7fff) && ((address + 2) & 0x7fff) && ((address + 3) & 0x7fff)) {			// non 32kb boundary
+		if ((address + 1) & 0x7fff) {			// non 32kb boundary
 #if defined(SUPPORT_WAB_GA1280A)
 			if (ga1280a_memp_try_write16(address, value)) return;
 #endif
@@ -2548,7 +2549,7 @@ void MEMCALL memp_write32(UINT32 address, UINT32 value) {
 		return;
 	}
 	else{
-		if ((address + 1) & 0x7fff) {			// non 32kb boundary
+		if ((address & 0x7fff) <= 0x8000 - 4) {			// non 32kb boundary
 #if defined(SUPPORT_WAB_GA1280A)
 			if (ga1280a_memp_try_write32(address, value)) return;
 #endif

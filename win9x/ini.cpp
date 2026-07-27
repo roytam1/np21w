@@ -553,6 +553,12 @@ static const PFTBL s_IniItems[] =
 	PFVAL("optwssdm", PFTYPE_UINT8,		&np2cfg.sndwssdma),
 	PFVAL("optwssip", PFTYPE_UINT8,		&np2cfg.sndwssirq),
 	
+	PFVAL("optwsio",  PFTYPE_HEX16,		&np2cfg.sndwsio),
+	PFVAL("optwsdm",  PFTYPE_UINT8,		&np2cfg.sndwsdma),
+	PFVAL("optwsirq", PFTYPE_UINT8,		&np2cfg.sndwsirq),
+	PFVAL("optwspnp", PFTYPE_BOOL,		&np2cfg.sndwspnp),
+	PFVAL("optwspcm", PFTYPE_BOOL,		&np2cfg.sndwspcm),
+	
 #if defined(SUPPORT_SOUND_SB16)
 	PFVAL("optsb16p", PFTYPE_HEX8,		&np2cfg.sndsb16io),
 	PFVAL("optsb16d", PFTYPE_UINT8,		&np2cfg.sndsb16dma),

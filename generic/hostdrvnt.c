@@ -319,6 +319,78 @@ static int hostdrvNT_sfn_oemtow(const OEMCHAR *src, WCHAR *dst, UINT cchDst)
 }
 #endif
 
+// SFNマップからSFNを引く
+static int hostdrvNT_getAlternateShortName(const NP2HOSTDRVNT_FILEINFO *fi, WCHAR *shortName, UINT cchShortName)
+{
+	WCHAR parent[MAX_PATH];
+	WCHAR longName[MAX_PATH];
+	WCHAR *sep;
+
+	if (fi == NULL || fi->hostFileName == NULL || shortName == NULL ||
+		cchShortName == 0 || fi->isRoot)
+	{
+		return 0;
+	}
+	if (wcslen(fi->hostFileName) >= NELEMENTS(parent))
+	{
+		return 0;
+	}
+
+	wcscpy(parent, fi->hostFileName);
+	sep = wcsrchr(parent, HD_WC('\\'));
+#if !defined(WIN32) && !defined(_WIN32)
+	{
+		WCHAR *slash = wcsrchr(parent, HD_WC('/'));
+		if (slash != NULL && (sep == NULL || slash > sep))
+		{
+			sep = slash;
+		}
+	}
+#endif
+	if (sep == NULL || sep[1] == HD_WC('\0'))
+	{
+		return 0;
+	}
+	if (wcslen(sep + 1) >= NELEMENTS(longName))
+	{
+		return 0;
+	}
+	wcscpy(longName, sep + 1);
+
+	// ルートの時は\を残す
+	if (sep == parent + 2 && parent[1] == HD_WC(':'))
+	{
+		sep[1] = HD_WC('\0');
+	}
+	else if (sep == parent)
+	{
+		sep[1] = HD_WC('\0');
+	}
+	else
+	{
+		*sep = HD_WC('\0');
+	}
+
+#if defined(WIN32) || defined(_WIN32)
+	return hostdrvs_lookupshortnamecached(parent, longName, shortName, cchShortName) ? 1 : 0;
+#else
+	{
+		OEMCHAR oemParent[MAX_PATH * 4];
+		OEMCHAR oemLong[MAX_PATH * 4];
+		OEMCHAR oemShort[64];
+
+		if (!hostdrvNT_sfn_wtooem(parent, oemParent, NELEMENTS(oemParent)) ||
+			!hostdrvNT_sfn_wtooem(longName, oemLong, NELEMENTS(oemLong)) ||
+			!hostdrvs_lookupshortnamecached(oemParent, oemLong, oemShort, NELEMENTS(oemShort)) ||
+			!hostdrvNT_sfn_oemtow(oemShort, shortName, cchShortName))
+		{
+			return 0;
+		}
+		return 1;
+	}
+#endif
+}
+
 static int hostdrvNT_getEmptyFile()
 {
 	int i;
@@ -2452,6 +2524,30 @@ static void hostdrvNT_IRP_MJ_QUERY_INFORMATION(HOSTDRVNT_INVOKEINFO* invokeInfo)
 		}
 
 		// 結果をセット
+		hostdrvNT_setQueryInformationResult(invokeInfo, returnData, dataLen, allowOverflow);
+	}
+	else if (infoClass == FileAlternateNameInformation)
+	{
+		NP2_FILE_NAME_INFORMATION_FIXED info = { 0 };
+		WCHAR shortName[64];
+
+		ZeroMemory(shortName, sizeof(shortName));
+		if (hostdrvNT_getAlternateShortName(fi, shortName, NELEMENTS(shortName)))
+		{
+			UINT32 shortNameBytes = (UINT32)wcslen(shortName) * sizeof(WCHAR);
+
+			if (shortNameBytes < sizeof(info.FileName))
+			{
+				info.FileNameLength = shortNameBytes;
+				memcpy(info.FileName, shortName, shortNameBytes);
+
+				// ファイル名の実際の長さに基づいて計算
+				dataLen = sizeof(info.FileNameLength) + shortNameBytes;
+				returnData = &info;
+			}
+		}
+
+		TRACEOUTW((HD_W("FileAlternateNameInformation: %s -> %s"), fi->fileName, returnData ? shortName : HD_W("<none>")));
 		hostdrvNT_setQueryInformationResult(invokeInfo, returnData, dataLen, allowOverflow);
 	}
 	else if (infoClass == FileNamesInformation)

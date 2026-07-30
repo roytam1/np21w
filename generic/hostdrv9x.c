@@ -87,6 +87,7 @@ static void trace_fmt_ex(const char* fmt, ...)
 #define H9X_FIND_DOT_PENDING       0x01
 #define H9X_FIND_DOTDOT_PENDING    0x02
 #define H9X_FIND_HOST_NOT_STARTED  0x04
+#define H9X_FIND_SFN_PATTERN_FALLBACK 0x08
 #define H9X_ROOT_HANDLE 1
 #define H9X_VOLUME_LABEL_HANDLE 0xfffffffeUL
 #define H9X_VOLUME_LABEL_COOKIE 0xfffeU
@@ -1430,7 +1431,7 @@ static UINT16 h9x_delete(UINT32 pir)
 {
 	WCHAR path[MAX_PATH];
 	DWORD attr;
-	UINT16 error = h9x_path_from_parsed(h9x_r32(pir, H9X_IR_PPATH), path, 0);
+	UINT16 error = h9x_path_from_parsed_existing(h9x_r32(pir, H9X_IR_PPATH), path, 0);
 	if (error) return error;
 	if (!(s_h9xAcc & H9X_PERMIT_DELETE)) return H9X_ERROR_ACCESS_DENIED;
 	attr = GetFileAttributesW(path);
@@ -1656,7 +1657,10 @@ static UINT16 h9x_dir(UINT32 pir)
 	if (fn == H9X_QUERYLONG_DIR)
 		return h9x_query_dir_path(pir, 0);
 
-	error = h9x_path_from_parsed(h9x_r32(pir, H9X_IR_PPATH), path, 0);
+	if (fn == H9X_CREATE_DIR)
+		error = h9x_path_from_parsed(h9x_r32(pir, H9X_IR_PPATH), path, 0);
+	else
+		error = h9x_path_from_parsed_existing(h9x_r32(pir, H9X_IR_PPATH), path, 0);
 	if (error) return error;
 	switch (fn) {
 	case H9X_CREATE_DIR:
@@ -1692,7 +1696,7 @@ static UINT16 h9x_fileattrib(UINT32 pir)
 	WCHAR path[MAX_PATH];
 	WIN32_FILE_ATTRIBUTE_DATA data;
 	UINT8 fn = h9x_r8(pir, H9X_IR_FLAGS);
-	UINT16 error = h9x_path_from_parsed(h9x_r32(pir, H9X_IR_PPATH), path, 0);
+	UINT16 error = h9x_path_from_parsed_existing(h9x_r32(pir, H9X_IR_PPATH), path, 0);
 	if (error) return error;
 	if (!GetFileAttributesExW(path, GetFileExInfoStandard, &data)) return h9x_last_error();
 	switch (fn) {
@@ -1747,7 +1751,7 @@ static UINT16 h9x_rename(UINT32 pir)
 	WCHAR from[MAX_PATH], to[MAX_PATH];
 	UINT16 error;
 	if (!(s_h9xAcc & H9X_PERMIT_DELETE) || !(s_h9xAcc & H9X_PERMIT_WRITE)) return H9X_ERROR_ACCESS_DENIED;
-	error = h9x_path_from_parsed(h9x_r32(pir, H9X_IR_PPATH), from, 0);
+	error = h9x_path_from_parsed_existing(h9x_r32(pir, H9X_IR_PPATH), from, 0);
 	if (error) return error;
 	if (_wcsicmp(from, s_h9xRoot) == 0) return H9X_ERROR_ACCESS_DENIED;
 	error = h9x_path_from_parsed(h9x_r32(pir, H9X_IR_PPATH2), to, 0);
@@ -1797,6 +1801,58 @@ static void h9x_make_dot_find_data(NP2HOSTDRV9X_HANDLE *h, WIN32_FIND_DATAW *fd,
 	fd->cFileName[NELEMENTS(fd->cFileName) - 1] = HD_WC('\0');
 }
 
+static const WCHAR *h9x_find_leaf_pattern(const WCHAR *path)
+{
+	const WCHAR *slash1;
+	const WCHAR *slash2;
+
+	if (!path) return NULL;
+	slash1 = wcsrchr(path, HD_WC('\\'));
+	slash2 = wcsrchr(path, HD_WC('/'));
+	if (slash1 && slash2) return ((slash1 > slash2) ? slash1 : slash2) + 1;
+	if (slash1) return slash1 + 1;
+	if (slash2) return slash2 + 1;
+	return path;
+}
+
+// SFN‘Î‰žŒŸõ
+static int h9x_find_start_sfn_pattern_fallback(NP2HOSTDRV9X_HANDLE *h)
+{
+	WCHAR parent[MAX_PATH];
+	WCHAR enumPath[MAX_PATH];
+	const WCHAR *pattern;
+
+	if (!h) return 0;
+	pattern = h9x_find_leaf_pattern(h->path);
+	if (!pattern || !wcschr(pattern, HD_WC('~'))) return 0;
+	if (!h9x_find_parent_path(h->path, parent, NELEMENTS(parent))) return 0;
+	if (!PathCombineW(enumPath, parent, HD_W("*"))) return 0;
+
+	h->handle = FindFirstFileW(enumPath, &h->findData);
+	if (h->handle == INVALID_HANDLE_VALUE) return 0;
+	h->findFlags |= H9X_FIND_SFN_PATTERN_FALLBACK;
+	#if defined(_WIN32) || defined(WIN32)
+	TRACEOUT(("HOSTDRV9X FIND: synthetic-SFN pattern fallback pattern=[%ls] enum=[%ls]", pattern, enumPath));
+	#endif
+	return 1;
+}
+
+static int h9x_find_candidate_matches_pattern(NP2HOSTDRV9X_HANDLE *h,
+	const WIN32_FIND_DATAW *fd)
+{
+	WCHAR shortName[14];
+	const WCHAR *pattern;
+
+	if (!h || !fd) return 0;
+	pattern = h9x_find_leaf_pattern(h->path);
+	if (!pattern || !*pattern) return 0;
+
+	if (PathMatchSpecW(fd->cFileName, pattern)) return 1;
+	if (fd->cAlternateFileName[0] && PathMatchSpecW(fd->cAlternateFileName, pattern)) return 1;
+	if (h9x_find_get_short_name(h, fd, shortName, NELEMENTS(shortName)) && PathMatchSpecW(shortName, pattern)) return 1;
+	return 0;
+}
+
 static int h9x_find_next_accepted(NP2HOSTDRV9X_HANDLE *h)
 {
 	for (;;) {
@@ -1820,11 +1876,17 @@ static int h9x_find_next_accepted(NP2HOSTDRV9X_HANDLE *h)
 		}
 
 		if (h->findFlags & H9X_FIND_HOST_NOT_STARTED) {
+			DWORD directError;
+
 			h->findFlags &= (UINT8)~H9X_FIND_HOST_NOT_STARTED;
 			h->handle = FindFirstFileW(h->path, &h->findData);
 			if (h->handle == INVALID_HANDLE_VALUE) {
-				TRACEOUT(("HOSTDRV9X FIND: FindFirstFileW failed winerr=%u", (unsigned)GetLastError()));
-				return 0;
+				directError = GetLastError();
+				if (!h9x_find_start_sfn_pattern_fallback(h)) {
+					SetLastError(directError);
+					TRACEOUT(("HOSTDRV9X FIND: FindFirstFileW failed winerr=%u", (unsigned)directError));
+					return 0;
+				}
 			}
 			#if defined(_WIN32) || defined(WIN32)
 			TRACEOUT(("HOSTDRV9X FIND: first candidate=[%ls] alt=[%ls] attr=%08X searchAttr=%08X",
@@ -1846,6 +1908,13 @@ static int h9x_find_next_accepted(NP2HOSTDRV9X_HANDLE *h)
 				h->findData.cFileName, h->findData.cAlternateFileName,
 				(unsigned)h->findData.dwFileAttributes, (unsigned)h->searchAttr));
 			#endif
+		}
+		if ((h->findFlags & H9X_FIND_SFN_PATTERN_FALLBACK) && !h9x_find_candidate_matches_pattern(h, &h->findData)) { 
+#if defined(_WIN32) || defined(WIN32)
+			TRACEOUT(("HOSTDRV9X FIND: synthetic-pattern rejected=[%ls]",
+				h->findData.cFileName));
+#endif
+			continue;
 		}
 		if (h9x_find_accept(&h->findData, h->searchAttr, 0)) {
 			#if defined(_WIN32) || defined(WIN32)

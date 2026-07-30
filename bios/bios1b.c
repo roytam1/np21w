@@ -307,6 +307,13 @@ static REG8 fdd_operate(REG8 type, REG8 rpm, BOOL ndensity) {
 
 	// とりあえずBIOSの時は無視する
 	fdc.mf = 0xff;
+#ifdef SUPPORT_KAI_IMAGES
+	//	NFD r1だけBIOS経由のコマンド値を参照する
+	if (fddfile[CPU_AL & 3].type == DISKTYPE_NFD &&
+		fddfile[CPU_AL & 3].inf.nfd.revision) {
+		fddbioscmd = (UINT8)(CPU_AH & 0x0f);
+	}
+#endif
 
 //	TRACE_("int 1Bh", CPU_AH);
 
@@ -396,6 +403,7 @@ static REG8 fdd_operate(REG8 type, REG8 rpm, BOOL ndensity) {
 			}
 			size = CPU_BX;
 			while(size) {
+				//	NFD r1以外は従来通りsecsize単位で処理する
 				if (size > secsize) {
 					accesssize = secsize;
 				}
@@ -405,6 +413,16 @@ static REG8 fdd_operate(REG8 type, REG8 rpm, BOOL ndensity) {
 				if (fdd_read()) {
 					break;
 				}
+#ifdef SUPPORT_KAI_IMAGES
+				//	NFD r1特殊読み込みだけ実転送長を使用する
+				if (fddfile[fdc.us].type == DISKTYPE_NFD &&
+					fddfile[fdc.us].inf.nfd.revision) {
+					if (fdc.bufcnt <= 0) {
+						break;
+					}
+					accesssize = (fdc.bufcnt < size) ? (UINT16)fdc.bufcnt : size;
+				}
+#endif
 				size -= accesssize;
 				mtr_r += accesssize;
 				if ((fdc.R++ == (UINT8)para) &&
@@ -564,6 +582,7 @@ static REG8 fdd_operate(REG8 type, REG8 rpm, BOOL ndensity) {
 				break;
 			}
 			while(size) {
+				//	D88/XDF/DCP/VFDD等は従来通りsecsize単位で処理する
 				if (size > secsize) {
 					accesssize = secsize;
 				}
@@ -573,6 +592,15 @@ static REG8 fdd_operate(REG8 type, REG8 rpm, BOOL ndensity) {
 				if (fdd_read()) {
 					break;
 				}
+#ifdef SUPPORT_KAI_IMAGES
+				if (fddfile[fdc.us].type == DISKTYPE_NFD &&
+					fddfile[fdc.us].inf.nfd.revision) {
+					if (fdc.bufcnt <= 0) {
+						break;
+					}
+					accesssize = (fdc.bufcnt < size) ? (UINT16)fdc.bufcnt : size;
+				}
+#endif
 				MEML_WRITES(addr, fdc.buf, accesssize);
 				addr += accesssize;
 				size -= accesssize;

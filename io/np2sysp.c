@@ -701,7 +701,7 @@ static void np2sysp_cngconfig(const void *arg1, long arg2) {
 		}
 		configvalue = npdisp.ioenabled ? 1 : 0;
 #endif
-		return;
+		break;
 	case NP21W_SWITCH_GA1280AENABLE:
 #if defined(SUPPORT_WAB) && defined(SUPPORT_WAB_GA1280A)
 		if (configvalue) {
@@ -714,7 +714,7 @@ static void np2sysp_cngconfig(const void *arg1, long arg2) {
 		}
 		configvalue = ga1280a.enabled ? 1 : 0;
 #endif
-		return;
+		break;
 	case NP21W_SWITCH_DUMMY:
 	default:
 		break;

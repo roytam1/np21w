@@ -169,7 +169,7 @@ unsigned char YMF262Read(void* chipptr, int a)
 			// 再判定不要 割り込みも立てておく
 			tmr |= 0xa0;
 		}
-		else if (CPU_CLOCK + CPU_BASECLOCK - CPU_REMCLOCK - chipbsd->m_data.timer_startclock[1] >= pccore.realclock / 1000 * (256 - chipbsd->m_data.reg_timer1) * 3231 / 10000)
+		else if (CPU_CLOCK + CPU_BASECLOCK - CPU_REMCLOCK - chipbsd->m_data.timer_startclock[1] >= pccore.realclock / 1000 * (256 - chipbsd->m_data.reg_timer2) * 3231 / 10000)
 		{
 			// 時間経過した　分解能は 323.1 usec
 			chipbsd->m_data.timer_intr[1] = true;

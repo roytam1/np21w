@@ -11,6 +11,7 @@
 #include "sound/sound.h"
 #include "sound/soundrom.h"
 #include "sound/ymzadpcm.h"
+#include "sound/s98.h"
 
 /**
  * SNE Multimedia Orchestra
@@ -134,6 +135,7 @@ static void IOOUTCALL opl_o28a(UINT port, REG8 dat)
 		YMF262Write(g_mame_opl3[G_OPL3_INDEX], 1, dat);
 	}
 #endif
+	S98_put(NORMAL2608_2, g_opl3[G_OPL3_INDEX].s.addrl, dat);
 	opl3_writeRegister(&g_opl3[G_OPL3_INDEX], g_opl3[G_OPL3_INDEX].s.addrl, dat);
 	(void)port;
 }
@@ -158,6 +160,7 @@ static void IOOUTCALL opl_o28e(UINT port, REG8 dat)
 		YMF262Write(g_mame_opl3[G_OPL3_INDEX], 3, dat);
 	}
 #endif
+	S98_put(EXTEND2608_2, g_opl3[G_OPL3_INDEX].s.addrh, dat);
 	opl3_writeExtendedRegister(&g_opl3[G_OPL3_INDEX], g_opl3[G_OPL3_INDEX].s.addrh, dat);
 	(void)port;
 }

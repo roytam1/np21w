@@ -10,6 +10,7 @@
 #include "sound/fmboard.h"
 #include "sound/sound.h"
 #include "sound/soundrom.h"
+#include "sound/s98.h"
 
 static int opna_idx = 0;
 
@@ -92,6 +93,7 @@ static void IOOUTCALL spr_o588(UINT port, REG8 dat)
 static void IOOUTCALL spr_o58a(UINT port, REG8 dat)
 {
 //	g_opna[1].s.data = dat;
+	S98_put(NORMAL2608_2, g_opna[1].s.addrl, dat);
 	opna_writeRegister(&g_opna[1], g_opna[1].s.addrl, dat);
 
 	(void)port;
@@ -107,6 +109,7 @@ static void IOOUTCALL spr_o58c(UINT port, REG8 dat)
 static void IOOUTCALL spr_o58e(UINT port, REG8 dat)
 {
 //	g_opna[1].s.data = dat;
+	S98_put(EXTEND2608_2, g_opna[1].s.addrh, dat);
 	opna_writeExtendedRegister(&g_opna[1], g_opna[1].s.addrh, dat);
 
 	(void)port;

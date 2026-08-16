@@ -1242,6 +1242,7 @@ static void pccore_asynccpu()
 						pccore.realclock = pccore.baseclock * pccore.multiple;
 						pcm86_changeclock(oldmultiple);
 						nevent_changeclock(oldmultiple, pccore.multiple);
+						S98_changeclock();
 
 						sound_changeclock();
 						beep_changeclock();
@@ -1293,6 +1294,7 @@ static void pccore_asynccpu()
 							pccore.realclock = pccore.baseclock * pccore.multiple;
 							pcm86_changeclock(oldmultiple);
 							nevent_changeclock(oldmultiple, pccore.multiple);
+							S98_changeclock();
 
 							sound_changeclock();
 							beep_changeclock();

@@ -14,6 +14,7 @@
 #include "sound/fmboard.h"
 #include "sound/sound.h"
 #include "sound/soundrom.h"
+#include "sound/s98.h"
 #include "mpu98ii.h"
 
 #if 0
@@ -33,6 +34,56 @@ static void trace_fmt_ex(const char* fmt, ...)
 
 static int opna_idx = 0;
 static int a460_soundid = 0x80;
+
+/* S98 v3 device layout for PC-9801-118 combinations.
+ * 118:             OPNA(0), 118 OPL3(1)
+ * 86+118:          86 OPNA(0), 118 OPNA(1), 118 OPL3(2)
+ * 118+SB16:        118 OPNA(0), 118 OPL3(1), SB16 OPL3(2)
+ * 86+118+SB16:     86 OPNA(0), 118 OPNA(1), 118 OPL3(2), SB16 OPL3(3)
+ */
+static int board118_opna_s98module(void)
+{
+	switch (g_nSoundID)
+	{
+		case SOUNDID_PC_9801_86_118:
+		case SOUNDID_PC_9801_86_118_SB16:
+			return NORMAL2608_2;
+	}
+	return -1;
+}
+
+static int board118_opl3_s98module(void)
+{
+	switch (g_nSoundID)
+	{
+		case SOUNDID_PC_9801_118:
+		case SOUNDID_PC_9801_118_SB16:
+			return NORMAL2608_2;
+
+		case SOUNDID_PC_9801_86_118:
+		case SOUNDID_PC_9801_86_118_SB16:
+			return NORMAL2608_3;
+	}
+	return -1;
+}
+
+static void board118_opna_s98put(REG8 bank, UINT addr, REG8 dat)
+{
+	int module = board118_opna_s98module();
+	if (module >= 0)
+	{
+		S98_put((REG8)(module + bank), addr, dat);
+	}
+}
+
+static void board118_opl3_s98put(REG8 bank, UINT addr, REG8 dat)
+{
+	int module = board118_opl3_s98module();
+	if (module >= 0)
+	{
+		S98_put((REG8)(module + bank), addr, dat);
+	}
+}
 
 /*********** for OPL (MAME) ***********/
 
@@ -58,6 +109,7 @@ static void IOOUTCALL sb16_o20d2(UINT port, REG8 dat) {
 
 static void IOOUTCALL sb16_o21d2(UINT port, REG8 dat) {
 	(void)port;
+	board118_opl3_s98put(0, g_opl3[G_OPL3_INDEX].s.addrl, dat);
 	opl3_writeRegister(&g_opl3[G_OPL3_INDEX], g_opl3[G_OPL3_INDEX].s.addrl, dat); // Key Display用
 	YMF262Write(g_mame_opl3[G_OPL3_INDEX], 1, dat);
 }
@@ -69,8 +121,8 @@ static void IOOUTCALL sb16_o22d2(UINT port, REG8 dat) {
 
 static void IOOUTCALL sb16_o23d2(UINT port, REG8 dat) {
 	(void)port;
+	board118_opl3_s98put(1, g_opl3[G_OPL3_INDEX].s.addrh, dat);
 	opl3_writeExtendedRegister(&g_opl3[G_OPL3_INDEX], g_opl3[G_OPL3_INDEX].s.addrh, dat); // Key Display用
-	//S98_put(EXTEND2608, opl.addr2, dat);
 	YMF262Write(g_mame_opl3[G_OPL3_INDEX], 3, dat);
 }
 
@@ -80,10 +132,12 @@ static void IOOUTCALL sb16_o28d2(UINT port, REG8 dat) {
 	 * UltimaUnderWorldではこちらを叩く
 	 */
 	port = dat;
+	g_opl3[G_OPL3_INDEX].s.addrl = dat;
 	YMF262Write(g_mame_opl3[G_OPL3_INDEX], 0, dat);
 }
 static void IOOUTCALL sb16_o29d2(UINT port, REG8 dat) {
 	port = dat;
+	board118_opl3_s98put(0, g_opl3[G_OPL3_INDEX].s.addrl, dat);
 	YMF262Write(g_mame_opl3[G_OPL3_INDEX], 1, dat);
 }
 
@@ -135,6 +189,7 @@ static void IOOUTCALL ymf_o18a(UINT port, REG8 dat)
 		g_opna[opna_idx].opngen.opnch[2].extop = dat & 0xc0;
 	}
 
+	board118_opna_s98put(0, g_opna[opna_idx].s.addrl, dat);
 	opna_writeRegister(&g_opna[opna_idx], g_opna[opna_idx].s.addrl, dat);
 
 	(void)port;
@@ -165,6 +220,7 @@ static void IOOUTCALL ymf_o18e(UINT port, REG8 dat)
 		return;
 	}
 
+	board118_opna_s98put(1, g_opna[opna_idx].s.addrl, dat);
 	opna_writeExtendedRegister(&g_opna[opna_idx], g_opna[opna_idx].s.addrl, dat);
 
 	(void)port;
@@ -458,6 +514,7 @@ static void IOOUTCALL ym_o1488(UINT port, REG8 dat) //FM Music Register Address 
 REG8 opl_data;
 static void IOOUTCALL ym_o1489(UINT port, REG8 dat) //FM Music Data Port
 {
+	board118_opl3_s98put(0, g_opl3[G_OPL3_INDEX].s.addrl, dat);
 	opl3_writeRegister(&g_opl3[G_OPL3_INDEX], g_opl3[G_OPL3_INDEX].s.addrl, dat);
 	opl_data = dat;
 	(void)port;
@@ -471,6 +528,7 @@ static void IOOUTCALL ym_o148a(UINT port, REG8 dat) // Advanced FM Music Registe
 }
 static void IOOUTCALL ym_o148b(UINT port, REG8 dat) //Advanced FM Music Data Port
 {
+	board118_opl3_s98put(1, g_opl3[G_OPL3_INDEX].s.addrh, dat);
 	opl3_writeExtendedRegister(&g_opl3[G_OPL3_INDEX], g_opl3[G_OPL3_INDEX].s.addrh, dat);
 	(void)port;
 }
@@ -649,7 +707,17 @@ void board118_reset(const NP2CFG *pConfig)
 	}
 	
 	// OPNAリセット
-	opna_reset(&g_opna[opna_idx], OPNA_MODE_2608 | OPNA_HAS_TIMER | OPNA_S98);
+	// 86+118では118側OPNAをS98 device 1へ手動で記録するため、
+	// opna.cの固定device 0ロガーは無効化する。
+	if (g_nSoundID == SOUNDID_PC_9801_86_118 ||
+		g_nSoundID == SOUNDID_PC_9801_86_118_SB16)
+	{
+		opna_reset(&g_opna[opna_idx], OPNA_MODE_2608 | OPNA_HAS_TIMER);
+	}
+	else
+	{
+		opna_reset(&g_opna[opna_idx], OPNA_MODE_2608 | OPNA_HAS_TIMER | OPNA_S98);
+	}
 	if(g_nSoundID==SOUNDID_PC_9801_86_WSS || g_nSoundID==SOUNDID_MATE_X_PCM || g_nSoundID==SOUNDID_WSS_SB16 || g_nSoundID==SOUNDID_PC_9801_86_WSS_SB16){
 		// OPNAタイマーをセットしない
 		//opna_timer(&g_opna[opna_idx], 0x10, NEVENT_FMTIMERA, NEVENT_FMTIMERB);

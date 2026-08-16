@@ -15,6 +15,7 @@
 #include	"sound/beep.h"
 #include	"sound/fmboard.h"
 #include	"sound/soundrom.h"
+#include	"sound/s98.h"
 #include	"cbus/mpu98ii.h"
 #include	"cbus/boardws.h"
 #if defined(SUPPORT_SMPU98)
@@ -244,6 +245,7 @@ static void np2sysp_cngclkmul(const void *arg1, long arg2) {
 		pccore.realclock = pccore.baseclock * pccore.multiple;
 		pcm86_changeclock(oldclockmult);
 		nevent_changeclock(oldclockmult, pccore.multiple);
+		S98_changeclock();
 
 		sound_changeclock();
 		beep_changeclock();

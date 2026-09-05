@@ -114,7 +114,7 @@ bool npdisp_func_Output_SCANLINES(HDC tgtDC, NPDISP_WINDOWS_BMPHDC* bmphdc, NPDI
 				}
 				else {
 					MoveToEx(tgtDC, pt.x, beginY, NULL);
-					LineTo(tgtDC, pt.x, beginY);
+					LineTo(tgtDC, pt.y, beginY);
 				}
 			}
 			else {

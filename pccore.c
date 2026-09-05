@@ -65,6 +65,9 @@
 #if defined(SUPPORT_WAB)
 #include	"wab/wab.h"
 #endif
+#if defined(SUPPORT_WAB_NPDISP)
+void npdisp_dd_vsync(void);
+#endif
 #if defined(SUPPORT_CL_GD5430)
 #include	"wab/cirrus_vga_extern.h"
 #endif
@@ -1100,6 +1103,9 @@ void screenvsync(NEVENTITEM item) {
 	MEMWAIT_GRCG = np2cfg.wait[5];
 	gdc_work(GDCWORK_MASTER);
 	gdc.vsync = 0x20;
+#if defined(SUPPORT_WAB_NPDISP)
+	npdisp_dd_vsync();
+#endif
 	if (gdc.vsyncint) {
 		gdc.vsyncint = 0;
 		pic_setirq(2);

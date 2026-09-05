@@ -810,6 +810,11 @@ static REG8 MEMCALL memp_read8_slow(UINT32 address) {
 	else if (npdisp.mm_vramPhysicalAddr && npdisp.mm_screenPtr && npdisp.mm_vramPhysicalAddr <= address && address < npdisp.mm_vramPhysicalAddr + npdisp.mm_screenSize) {
 		return(npdisp.mm_screenPtr[address - npdisp.mm_vramPhysicalAddr]);
 	}
+	else if (npdisp.mm_vramPhysicalAddr && npdisp.mm_ddOffscreenPtr &&
+		npdisp.mm_vramPhysicalAddr + NPDISP_DD_OFFSCREEN_OFFSET <= address &&
+		address < npdisp.mm_vramPhysicalAddr + NPDISP_DD_APERTURE_SIZE) {
+		return(npdisp.mm_ddOffscreenPtr[address - npdisp.mm_vramPhysicalAddr - NPDISP_DD_OFFSCREEN_OFFSET]);
+	}
 #endif	// defined(SUPPORT_WAB_NPDISP)
 	else {
 		//			TRACEOUT(("out of mem (read8): %x", address));
@@ -909,6 +914,11 @@ static REG16 MEMCALL memp_read16_slow(UINT32 address) {
 #if defined(SUPPORT_WAB_NPDISP)
 		else if (npdisp.mm_vramPhysicalAddr && npdisp.mm_screenPtr && npdisp.mm_vramPhysicalAddr <= address && address < npdisp.mm_vramPhysicalAddr + npdisp.mm_screenSize) {
 			return(LOADINTELWORD(npdisp.mm_screenPtr + (address - npdisp.mm_vramPhysicalAddr)));
+		}
+		else if (npdisp.mm_vramPhysicalAddr && npdisp.mm_ddOffscreenPtr &&
+			npdisp.mm_vramPhysicalAddr + NPDISP_DD_OFFSCREEN_OFFSET <= address &&
+			address <= npdisp.mm_vramPhysicalAddr + NPDISP_DD_APERTURE_SIZE - 2) {
+			return(LOADINTELWORD(npdisp.mm_ddOffscreenPtr + (address - npdisp.mm_vramPhysicalAddr - NPDISP_DD_OFFSCREEN_OFFSET)));
 		}
 #endif	// defined(SUPPORT_WAB_NPDISP)
 		else {
@@ -1015,6 +1025,11 @@ static UINT32 MEMCALL memp_read32_slow(UINT32 address) {
 #if defined(SUPPORT_WAB_NPDISP)
 		else if (npdisp.mm_vramPhysicalAddr && npdisp.mm_screenPtr && npdisp.mm_vramPhysicalAddr <= address && address < npdisp.mm_vramPhysicalAddr + npdisp.mm_screenSize) {
 			return(LOADINTELDWORD(npdisp.mm_screenPtr + (address - npdisp.mm_vramPhysicalAddr)));
+		}
+		else if (npdisp.mm_vramPhysicalAddr && npdisp.mm_ddOffscreenPtr &&
+			npdisp.mm_vramPhysicalAddr + NPDISP_DD_OFFSCREEN_OFFSET <= address &&
+			address <= npdisp.mm_vramPhysicalAddr + NPDISP_DD_APERTURE_SIZE - 4) {
+			return(LOADINTELDWORD(npdisp.mm_ddOffscreenPtr + (address - npdisp.mm_vramPhysicalAddr - NPDISP_DD_OFFSCREEN_OFFSET)));
 		}
 #endif	// defined(SUPPORT_WAB_NPDISP)
 		else {
@@ -1263,6 +1278,11 @@ static void MEMCALL memp_write8_slow(UINT32 address, REG8 value) {
 	else if (npdisp.mm_vramPhysicalAddr && npdisp.mm_screenPtr && npdisp.mm_vramPhysicalAddr <= address && address < npdisp.mm_vramPhysicalAddr + npdisp.mm_screenSize) {
 		npdisp.mm_screenPtr[address - npdisp.mm_vramPhysicalAddr] = value;
 	}
+	else if (npdisp.mm_vramPhysicalAddr && npdisp.mm_ddOffscreenPtr &&
+		npdisp.mm_vramPhysicalAddr + NPDISP_DD_OFFSCREEN_OFFSET <= address &&
+		address < npdisp.mm_vramPhysicalAddr + NPDISP_DD_APERTURE_SIZE) {
+		npdisp.mm_ddOffscreenPtr[address - npdisp.mm_vramPhysicalAddr - NPDISP_DD_OFFSCREEN_OFFSET] = value;
+	}
 #endif	// defined(SUPPORT_WAB_NPDISP)
 	else {
 		TRACEOUT(("out of mem (write8): %x", address));
@@ -1375,6 +1395,11 @@ static void MEMCALL memp_write16_slow(UINT32 address, REG16 value) {
 #if defined(SUPPORT_WAB_NPDISP)
 		else if (npdisp.mm_vramPhysicalAddr && npdisp.mm_screenPtr && npdisp.mm_vramPhysicalAddr <= address && address < npdisp.mm_vramPhysicalAddr + npdisp.mm_screenSize) {
 			STOREINTELWORD(npdisp.mm_screenPtr + (address - npdisp.mm_vramPhysicalAddr), value);
+		}
+		else if (npdisp.mm_vramPhysicalAddr && npdisp.mm_ddOffscreenPtr &&
+			npdisp.mm_vramPhysicalAddr + NPDISP_DD_OFFSCREEN_OFFSET <= address &&
+			address <= npdisp.mm_vramPhysicalAddr + NPDISP_DD_APERTURE_SIZE - 2) {
+			STOREINTELWORD(npdisp.mm_ddOffscreenPtr + (address - npdisp.mm_vramPhysicalAddr - NPDISP_DD_OFFSCREEN_OFFSET), value);
 		}
 #endif	// defined(SUPPORT_WAB_NPDISP)
 		else {
@@ -1493,6 +1518,11 @@ static void MEMCALL memp_write32_slow(UINT32 address, UINT32 value) {
 #if defined(SUPPORT_WAB_NPDISP)
 		else if (npdisp.mm_vramPhysicalAddr && npdisp.mm_screenPtr && npdisp.mm_vramPhysicalAddr <= address && address < npdisp.mm_vramPhysicalAddr + npdisp.mm_screenSize) {
 			STOREINTELDWORD(npdisp.mm_screenPtr + (address - npdisp.mm_vramPhysicalAddr), value);
+		}
+		else if (npdisp.mm_vramPhysicalAddr && npdisp.mm_ddOffscreenPtr &&
+			npdisp.mm_vramPhysicalAddr + NPDISP_DD_OFFSCREEN_OFFSET <= address &&
+			address <= npdisp.mm_vramPhysicalAddr + NPDISP_DD_APERTURE_SIZE - 4) {
+			STOREINTELDWORD(npdisp.mm_ddOffscreenPtr + (address - npdisp.mm_vramPhysicalAddr - NPDISP_DD_OFFSCREEN_OFFSET), value);
 		}
 #endif	// defined(SUPPORT_WAB_NPDISP)
 		else {
@@ -1735,6 +1765,11 @@ REG8 MEMCALL memp_read8(UINT32 address) {
 		else if (npdisp.mm_vramPhysicalAddr && npdisp.mm_screenPtr && npdisp.mm_vramPhysicalAddr <= address && address < npdisp.mm_vramPhysicalAddr + npdisp.mm_screenSize) {
 			return(npdisp.mm_screenPtr[address - npdisp.mm_vramPhysicalAddr]);
 		}
+		else if (npdisp.mm_vramPhysicalAddr && npdisp.mm_ddOffscreenPtr &&
+			npdisp.mm_vramPhysicalAddr + NPDISP_DD_OFFSCREEN_OFFSET <= address &&
+			address < npdisp.mm_vramPhysicalAddr + NPDISP_DD_APERTURE_SIZE) {
+			return(npdisp.mm_ddOffscreenPtr[address - npdisp.mm_vramPhysicalAddr - NPDISP_DD_OFFSCREEN_OFFSET]);
+		}
 #endif	// defined(SUPPORT_WAB_NPDISP)
 		else {
 //			TRACEOUT(("out of mem (read8): %x", address));
@@ -1857,6 +1892,11 @@ REG16 MEMCALL memp_read16(UINT32 address) {
 #if defined(SUPPORT_WAB_NPDISP)
 			else if (npdisp.mm_vramPhysicalAddr && npdisp.mm_screenPtr && npdisp.mm_vramPhysicalAddr <= address && address < npdisp.mm_vramPhysicalAddr + npdisp.mm_screenSize) {
 				return(LOADINTELWORD(npdisp.mm_screenPtr + (address - npdisp.mm_vramPhysicalAddr)));
+			}
+			else if (npdisp.mm_vramPhysicalAddr && npdisp.mm_ddOffscreenPtr &&
+				npdisp.mm_vramPhysicalAddr + NPDISP_DD_OFFSCREEN_OFFSET <= address &&
+				address <= npdisp.mm_vramPhysicalAddr + NPDISP_DD_APERTURE_SIZE - 2) {
+				return(LOADINTELWORD(npdisp.mm_ddOffscreenPtr + (address - npdisp.mm_vramPhysicalAddr - NPDISP_DD_OFFSCREEN_OFFSET)));
 			}
 #endif	// defined(SUPPORT_WAB_NPDISP)
 			else {
@@ -1987,6 +2027,11 @@ UINT32 MEMCALL memp_read32(UINT32 address) {
 #if defined(SUPPORT_WAB_NPDISP)
 			else if (npdisp.mm_vramPhysicalAddr && npdisp.mm_screenPtr && npdisp.mm_vramPhysicalAddr <= address && address < npdisp.mm_vramPhysicalAddr + npdisp.mm_screenSize) {
 				return(LOADINTELDWORD(npdisp.mm_screenPtr + (address - npdisp.mm_vramPhysicalAddr)));
+			}
+			else if (npdisp.mm_vramPhysicalAddr && npdisp.mm_ddOffscreenPtr &&
+				npdisp.mm_vramPhysicalAddr + NPDISP_DD_OFFSCREEN_OFFSET <= address &&
+				address <= npdisp.mm_vramPhysicalAddr + NPDISP_DD_APERTURE_SIZE - 4) {
+				return(LOADINTELDWORD(npdisp.mm_ddOffscreenPtr + (address - npdisp.mm_vramPhysicalAddr - NPDISP_DD_OFFSCREEN_OFFSET)));
 			}
 #endif	// defined(SUPPORT_WAB_NPDISP)
 			else {
@@ -2376,6 +2421,11 @@ void MEMCALL memp_write8(UINT32 address, REG8 value) {
 		else if (npdisp.mm_vramPhysicalAddr && npdisp.mm_screenPtr && npdisp.mm_vramPhysicalAddr <= address && address < npdisp.mm_vramPhysicalAddr + npdisp.mm_screenSize) {
 			npdisp.mm_screenPtr[address - npdisp.mm_vramPhysicalAddr] = value;
 		}
+		else if (npdisp.mm_vramPhysicalAddr && npdisp.mm_ddOffscreenPtr &&
+			npdisp.mm_vramPhysicalAddr + NPDISP_DD_OFFSCREEN_OFFSET <= address &&
+			address < npdisp.mm_vramPhysicalAddr + NPDISP_DD_APERTURE_SIZE) {
+			npdisp.mm_ddOffscreenPtr[address - npdisp.mm_vramPhysicalAddr - NPDISP_DD_OFFSCREEN_OFFSET] = value;
+		}
 #endif	// defined(SUPPORT_WAB_NPDISP)
 		else {
 			TRACEOUT(("out of mem (write8): %x", address));
@@ -2509,6 +2559,11 @@ void MEMCALL memp_write16(UINT32 address, REG16 value) {
 #if defined(SUPPORT_WAB_NPDISP)
 			else if (npdisp.mm_vramPhysicalAddr && npdisp.mm_screenPtr && npdisp.mm_vramPhysicalAddr <= address && address < npdisp.mm_vramPhysicalAddr + npdisp.mm_screenSize) {
 				STOREINTELWORD(npdisp.mm_screenPtr + (address - npdisp.mm_vramPhysicalAddr), value);
+			}
+			else if (npdisp.mm_vramPhysicalAddr && npdisp.mm_ddOffscreenPtr &&
+				npdisp.mm_vramPhysicalAddr + NPDISP_DD_OFFSCREEN_OFFSET <= address &&
+				address <= npdisp.mm_vramPhysicalAddr + NPDISP_DD_APERTURE_SIZE - 2) {
+				STOREINTELWORD(npdisp.mm_ddOffscreenPtr + (address - npdisp.mm_vramPhysicalAddr - NPDISP_DD_OFFSCREEN_OFFSET), value);
 			}
 #endif	// defined(SUPPORT_WAB_NPDISP)
 			else {
@@ -2650,6 +2705,11 @@ void MEMCALL memp_write32(UINT32 address, UINT32 value) {
 #if defined(SUPPORT_WAB_NPDISP)
 			else if (npdisp.mm_vramPhysicalAddr && npdisp.mm_screenPtr && npdisp.mm_vramPhysicalAddr <= address && address < npdisp.mm_vramPhysicalAddr + npdisp.mm_screenSize) {
 				STOREINTELDWORD(npdisp.mm_screenPtr + (address - npdisp.mm_vramPhysicalAddr), value);
+			}
+			else if (npdisp.mm_vramPhysicalAddr && npdisp.mm_ddOffscreenPtr &&
+				npdisp.mm_vramPhysicalAddr + NPDISP_DD_OFFSCREEN_OFFSET <= address &&
+				address <= npdisp.mm_vramPhysicalAddr + NPDISP_DD_APERTURE_SIZE - 4) {
+				STOREINTELDWORD(npdisp.mm_ddOffscreenPtr + (address - npdisp.mm_vramPhysicalAddr - NPDISP_DD_OFFSCREEN_OFFSET), value);
 			}
 #endif	// defined(SUPPORT_WAB_NPDISP)
 			else {

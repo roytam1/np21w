@@ -464,10 +464,7 @@
     <ClCompile Include="..\generic\dipswbmp.c" />
     <ClCompile Include="..\generic\hostdrv.c" />
     <ClCompile Include="..\generic\hostdrv9x.c" />
-    <ClCompile Include="..\generic\hostdrvnt.c">
-      <InlineFunctionExpansion Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">OnlyExplicitInline</InlineFunctionExpansion>
-      <InlineFunctionExpansion Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">OnlyExplicitInline</InlineFunctionExpansion>
-    </ClCompile>
+    <ClCompile Include="..\generic\hostdrvnt.c" />
     <ClCompile Include="..\generic\hostdrvs.c" />
     <ClCompile Include="..\generic\keydisp.c" />
     <ClCompile Include="..\generic\memdbg32.c" />
@@ -985,6 +982,7 @@
     <ClCompile Include="..\wab\cirrus_vga.c" />
     <ClCompile Include="..\wab\ga1280a.cpp" />
     <ClCompile Include="..\wab\npdisp.cpp" />
+    <ClCompile Include="..\wab\npdisp_dd.cpp" />
     <ClCompile Include="..\wab\npdisp_gdibitblt.cpp" />
     <ClCompile Include="..\wab\npdisp_gdioutput.cpp" />
     <ClCompile Include="..\wab\npdisp_mem.cpp" />
@@ -1385,6 +1383,7 @@
     <ClInclude Include="..\wab\ga1280a.h" />
     <ClInclude Include="..\wab\ga1280adef.h" />
     <ClInclude Include="..\wab\npdisp.h" />
+    <ClInclude Include="..\wab\npdisp_dd.h" />
     <ClInclude Include="..\wab\npdispdef.h" />
     <ClInclude Include="..\wab\npdisp_gdibitblt.h" />
     <ClInclude Include="..\wab\npdisp_gdioutput.h" />

@@ -18,6 +18,7 @@ extern "C" {
 	int npdisp_memory_getTotalReadSize();
 	int npdisp_memory_getTotalWriteSize();
 	UINT32 npdisp_memory_getLastEIP();
+	int npdisp_memory_getLinearAddress(UINT32 lpAddr, UINT32 *linearAddr);
 
 	int npdisp_preloadAndReadMemoryWith32Offset(void* dst, UINT16 selector, UINT32 offset, int size);
 	int npdisp_preloadAndReadMemory(void* dst, UINT32 lpAddr, int size);
@@ -25,6 +26,8 @@ extern "C" {
 	int npdisp_preloadMemory(UINT32 lpAddr, int size);
 	int npdisp_readMemoryWith32Offset(void* dst, UINT16 selector, UINT32 offset, int size);
 	int npdisp_readMemory(void* dst, UINT32 lpAddr, int size);
+	int npdisp_readLinearMemory(void* dst, UINT32 linearAddr, int size);
+	int npdisp_writeLinearMemory(void* src, UINT32 linearAddr, int size);
 	int npdisp_writeMemoryWith32Offset(void* src, UINT16 selector, UINT32 offset, int size);
 	int npdisp_writeMemory(void* src, UINT32 lpAddr, int size);
 
@@ -40,6 +43,7 @@ extern "C" {
 	char* npdisp_readMemoryStringWithCount(UINT32 lpAddr, int count);
 
 	bool npdisp_isDisplayDevice(UINT32 lpAddr);
+	bool npdisp_isSpecialDDB(NPDISP_PBITMAP_EXT* bmp);
 	UINT32 npdisp_readPBitmap(NPDISP_PBITMAP_EXT* bmp, UINT32 lpAddr, bool useSelected = true);
 	UINT32 npdisp_writePBitmap(NPDISP_PBITMAP_EXT* bmp, UINT32 lpAddr);
 	void npdisp_PreloadBitmapFromPBITMAP(NPDISP_PBITMAP_EXT* srcPBmp, int dcIdx, int beginLine = 0, int numLines = -1, int beginX = 0, int copyWidth = -1);

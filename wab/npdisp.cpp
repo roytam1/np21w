@@ -27,6 +27,7 @@
 
 #include	"npdispdef.h"
 #include	"npdisp.h"
+#include	"npdisp_dd.h"
 #include	"npdisp_statsave.h"
 #include	"npdisp_rle.h"
 #include	"npdisp_mem.h"
@@ -156,13 +157,19 @@ static void trace_fmt_exF(const char* fmt, ...)
 
 static void npdisp_releaseScreen(bool resize = false);
 static void npdisp_createScreen(bool resize = false);
+static void npdisp_createStockGdiObjects(void);
 
 NPDISP npdisp = { 0 };
 NPDISP_WINDOWS npdispwin = { 0 };
 
 void npdisp_setDirty(int x1, int y1, int x2, int y2)
 {
-	if (x1 == x2 || y1 == y2) {
+	// DirtyRectは画面転送範囲なので、カーソルのhot spotなどで画面外へ出た部分を含めない。
+	if (x1 < 0) x1 = 0;
+	if (y1 < 0) y1 = 0;
+	if (x2 > npdisp.width) x2 = npdisp.width;
+	if (y2 > npdisp.height) y2 = npdisp.height;
+	if (x1 >= x2 || y1 >= y2) {
 		return;
 	}
 	if (npdispwin.dirtyRect.left == npdispwin.dirtyRect.right || npdispwin.dirtyRect.top == npdispwin.dirtyRect.bottom) {
@@ -188,6 +195,7 @@ void npdisp_setDirtyAll()
 void npdisp_resetDirty()
 {
 	npdispwin.dirtyRect.left = npdispwin.dirtyRect.top = npdispwin.dirtyRect.right = npdispwin.dirtyRect.bottom = 0;
+	npdispwin.ddrawDirtyRect.left = npdispwin.ddrawDirtyRect.top = npdispwin.ddrawDirtyRect.right = npdispwin.ddrawDirtyRect.bottom = 0;
 }
 
 static HFONT npdisp_getFont(NPDISP_FONTINFO* lpFontInfo, UINT32 fontInfoAddr)
@@ -318,9 +326,15 @@ void npdispcs_shutdown(void)
 
 // *** エクスポート関数処理 *****************
 
-static void npdisp_func_NP2Initialize(UINT16 dpiX, UINT16 dpiY, UINT16 width, UINT16 height, UINT16 bpp, UINT8 isWin9x, UINT32 bmpinfoAddr, UINT32 beginAccessAddr, UINT32 endAccessAddr, UINT32 dcibufAddr, UINT32 dciBeginAccessAddr, UINT32 dciEndAccessAddr, UINT32 dciDestroySurfaceAddr, UINT32 vramLinearAddr, UINT32 vramPhysicalAddr)
+static void npdisp_func_NP2Initialize(UINT16 dpiX, UINT16 dpiY, UINT16 width, UINT16 height, UINT16 bpp, UINT8 isWin9x, UINT16 vramSelector, UINT32 bmpinfoAddr, UINT32 beginAccessAddr, UINT32 endAccessAddr, UINT32 dcibufAddr, UINT32 dciBeginAccessAddr, UINT32 dciEndAccessAddr, UINT32 dciDestroySurfaceAddr, UINT32 vramLinearAddr, UINT32 vramPhysicalAddr, UINT32 ddCallbacksAddr, UINT32 ddSurfaceCallbacksAddr, UINT32 ddHalInfoAddr, UINT32 ddModeInfoAddr, UINT32 ddPaletteCallbacksAddr, UINT32 ddVidMemAddr)
 {
 	bool resize = npdisp.enabled && npdisp.active;
+
+	// 表示モード変更時はscanoutを固定GDI primaryへ戻す。
+	npdisp.mm_ddScanoutOffset = 0;
+	npdisp.mm_ddLastScanoutOffset = 0;
+	npdisp.mm_ddPendingFlipOffset = 0;
+	npdisp.mm_ddFlipPending = 0;
 
 	if (!resize) {
 		// 初期化
@@ -356,7 +370,6 @@ static void npdisp_func_NP2Initialize(UINT16 dpiX, UINT16 dpiY, UINT16 width, UI
 	else {
 		npdisp.isWin9x = 0;
 	}
-
 	if (npdisp.version >= 5) {
 		npdisp.mm_vramPhysicalAddr = vramPhysicalAddr;
 		npdisp.mm_bmpinfoAddr = bmpinfoAddr;
@@ -367,8 +380,50 @@ static void npdisp_func_NP2Initialize(UINT16 dpiX, UINT16 dpiY, UINT16 width, UI
 		npdisp.mm_dciEndAccessAddr = dciEndAccessAddr;
 		npdisp.mm_dciDestroySurfaceAddr = dciDestroySurfaceAddr;
 		npdisp.mm_vramLinearAddr = vramLinearAddr;
+		npdisp.mm_vramSelector = (npdisp.version >= 8 && npdisp.isWin9x) ? vramSelector : 0;
+		TRACEOUT11(("NPDISP11 INIT_VRAM linear=%08x physical=%08x selector=%04x",
+			npdisp.mm_vramLinearAddr, npdisp.mm_vramPhysicalAddr, npdisp.mm_vramSelector));
+		if (npdisp.version >= 6) {
+			npdisp.mm_ddCallbacksAddr = ddCallbacksAddr;
+			npdisp.mm_ddSurfaceCallbacksAddr = ddSurfaceCallbacksAddr;
+		}
+		else {
+			npdisp.mm_ddCallbacksAddr = 0;
+			npdisp.mm_ddSurfaceCallbacksAddr = 0;
+		}
+		if (npdisp.version >= 7) {
+			npdisp.mm_ddHalInfoAddr = ddHalInfoAddr;
+		}
+		else {
+			npdisp.mm_ddHalInfoAddr = 0;
+		}
+		if (npdisp.version >= 9) {
+			npdisp.mm_ddModeInfoAddr = ddModeInfoAddr;
+		}
+		else {
+			npdisp.mm_ddModeInfoAddr = 0;
+		}
+		if (npdisp.version >= 10) {
+			npdisp.mm_ddPaletteCallbacksAddr = ddPaletteCallbacksAddr;
+		}
+		else {
+			npdisp.mm_ddPaletteCallbacksAddr = 0;
+		}
+		if (npdisp.version >= 12 && npdisp.isWin9x) {
+			npdisp.mm_ddVidMemAddr = ddVidMemAddr;
+			if (!npdisp_dd_ensureOffscreenBacking()) {
+				npdisp.mm_ddVidMemAddr = 0;
+			}
+		}
+		else {
+			npdisp.mm_ddVidMemAddr = 0;
+			npdisp_dd_releaseOffscreenBacking();
+		}
+		TRACEOUT11(("NPDISP11 INIT_DD cb=%08x surfcb=%08x palcb=%08x hal=%08x mode=%08x vidmem=%08x offhost=%p",
+			npdisp.mm_ddCallbacksAddr, npdisp.mm_ddSurfaceCallbacksAddr, npdisp.mm_ddPaletteCallbacksAddr,
+			npdisp.mm_ddHalInfoAddr, npdisp.mm_ddModeInfoAddr, npdisp.mm_ddVidMemAddr, npdisp.mm_ddOffscreenPtr));
 		if (!resize) {
-			npdisp.mm_dciEnable = 0;
+			npdisp.mm_dciEnable = (npdisp.version >= 6) ? 1 : 0;
 		}
 	}
 	else {
@@ -380,7 +435,14 @@ static void npdisp_func_NP2Initialize(UINT16 dpiX, UINT16 dpiY, UINT16 width, UI
 		npdisp.mm_dciBeginAccessAddr = 0;
 		npdisp.mm_dciEndAccessAddr = 0;
 		npdisp.mm_dciDestroySurfaceAddr = 0;
+		npdisp.mm_ddCallbacksAddr = 0;
+		npdisp.mm_ddSurfaceCallbacksAddr = 0;
+		npdisp.mm_ddPaletteCallbacksAddr = 0;
+		npdisp.mm_ddHalInfoAddr = 0;
+		npdisp.mm_ddModeInfoAddr = 0;
+		npdisp.mm_ddVidMemAddr = 0;
 		npdisp.mm_vramLinearAddr = 0;
+		npdisp.mm_vramSelector = 0;
 		npdisp.mm_dciEnable = 0;
 	}
 	
@@ -398,7 +460,7 @@ static UINT16 npdisp_func_Enable_PDEVICE(NPDISP_PDEVICE *lpDevInfo, UINT16 wStyl
 	//lpDevInfo->bmp.bmBitsPixel = 1;
 	//lpDevInfo->bmp.bmPlanes = 4;
 
-	// DIB Engine互換  DirectDrawはDIB Engine互換を要求する。識別子は0x5250でないとNG。
+	// DirectDraw/DCI用のDIB Engine互換PDEVICE。
 	lpDevInfo->dibe.deType = NPDISP_DEVTYPE;
 	lpDevInfo->dibe.deWidth = npdisp.width;
 	lpDevInfo->dibe.deHeight = npdisp.height;
@@ -410,7 +472,8 @@ static UINT16 npdisp_func_Enable_PDEVICE(NPDISP_PDEVICE *lpDevInfo, UINT16 wStyl
 	lpDevInfo->dibe.delpPDeviceAddr = 0;
 	lpDevInfo->dibe.deBitsOffset = 0;
 	lpDevInfo->dibe.deBitsSelector = 0;
-	lpDevInfo->dibe.deFlags = 0x8000 | 0x0020 | 0x0010 | 0x0001;
+	// primary displayとして使用するためdeFlagsの0x0010は設定しない。
+	lpDevInfo->dibe.deFlags = 0x8000 | 0x0020 | 0x0001;
 	lpDevInfo->dibe.deVersion = 0x0400;
 	lpDevInfo->dibe.deBitmapInfoAddr = 0;
 	lpDevInfo->dibe.deBeginAccessFuncAddr = 0;
@@ -418,9 +481,15 @@ static UINT16 npdisp_func_Enable_PDEVICE(NPDISP_PDEVICE *lpDevInfo, UINT16 wStyl
 	lpDevInfo->dibe.deDriverReserved = 0;
 
 	if (npdisp.mm_vramLinearAddr) {
-		//lpDevInfo->dibe.delpPDeviceAddr = npdisp.mm_linearAddr;
-		lpDevInfo->dibe.deBitsSelector = 0;
-		lpDevInfo->dibe.deBitsOffset = npdisp.mm_vramLinearAddr;
+		// DCIからはselector:offset、32bit HALからはlinear addressでVRAMを参照する。
+		if (npdisp.isWin9x && npdisp.mm_vramSelector) {
+			lpDevInfo->dibe.deBitsSelector = npdisp.mm_vramSelector;
+			lpDevInfo->dibe.deBitsOffset = 0;
+		}
+		else {
+			lpDevInfo->dibe.deBitsSelector = 0;
+			lpDevInfo->dibe.deBitsOffset = npdisp.mm_vramLinearAddr;
+		}
 		lpDevInfo->dibe.deFlags &= ~0x0020;
 	}
 
@@ -447,6 +516,11 @@ static UINT16 npdisp_func_Enable_PDEVICE(NPDISP_PDEVICE *lpDevInfo, UINT16 wStyl
 	}
 
 	npdisp.devType = lpDevInfo->bmp.bmType;
+	TRACEOUT11(("NPDISP11 ENABLE_PDEV type=%04x size=%ux%u pitch=%u planes=%u bpp=%u flags=%04x ver=%04x bits=%08x bmi=%08x",
+		lpDevInfo->dibe.deType, lpDevInfo->dibe.deWidth, lpDevInfo->dibe.deHeight,
+		lpDevInfo->dibe.deWidthBytes, lpDevInfo->dibe.dePlanes, lpDevInfo->dibe.deBitsPixel,
+		lpDevInfo->dibe.deFlags, lpDevInfo->dibe.deVersion, lpDevInfo->dibe.deBitsOffset,
+		lpDevInfo->dibe.deBitmapInfoAddr));
 	return 1;
 }
 static UINT16 npdisp_func_Enable_GDIINFO(NPDISP_GDIINFO *lpDevInfo, UINT16 wStyle, const char* lpDestDevType, const char* lpOutputFile, const NPDISP_DEVMODE* lpData) 
@@ -493,6 +567,10 @@ static UINT16 npdisp_func_Enable_GDIINFO(NPDISP_GDIINFO *lpDevInfo, UINT16 wStyl
 	lpDevInfo->dpLogPixelsY = 96; // ここのDPIはアイコンの文字サイズ等が変わる　変えない方がよさそう？
 	lpDevInfo->dpDCManage = 0x0004;
 	lpDevInfo->dpCaps1 = NPDISP_C1_TRANSPARENT | NPDISP_C1_REINIT_ABLE | NPDISP_C1_COLORCURSOR;
+	//if (npdisp.isWin9x) {
+	//	// 新方式テキスト描画だが、旧方式より遅いので一旦無効化
+	//	lpDevInfo->dpCaps1 |= NPDISP_C1_GLYPH_INDEX | NPDISP_C1_BYTE_PACKED;
+	//}
 	if (npdisp.version >= 3) {
 		// DIB Engine準拠
 		lpDevInfo->dpCaps1 |= NPDISP_C1_DIBENGINE;
@@ -571,6 +649,11 @@ static UINT16 npdisp_func_Enable_GDIINFO(NPDISP_GDIINFO *lpDevInfo, UINT16 wStyl
 		lpDevInfo->dpPalResolution = 0;
 	}
 
+	TRACEOUT11(("NPDISP11 ENABLE_GDI ver=%04x tech=%u res=%ux%u bpp=%u planes=%u colors=%u devsize=%u raster=%04x caps1=%04x dcmanage=%04x npver=%u",
+		lpDevInfo->dpVersion, lpDevInfo->dpTechnology, lpDevInfo->dpHorzRes, lpDevInfo->dpVertRes,
+		lpDevInfo->dpBitsPixel, lpDevInfo->dpPlanes, lpDevInfo->dpNumColors, lpDevInfo->dpDEVICEsize,
+		lpDevInfo->dpRaster, lpDevInfo->dpCaps1, lpDevInfo->dpDCManage, npdisp.version));
+
 	return sizeof(NPDISP_GDIINFO); // ドキュメントに書かれていないがサイズを返さないと駄目
 }
 static UINT16 npdisp_func_Enable(UINT32 lpDevInfoAddr, UINT16 wStyle, UINT32 lpDestDevTypeAddr, UINT32 lpOutputFileAddr, UINT32 lpDataAddr)
@@ -593,6 +676,7 @@ static UINT16 npdisp_func_Enable(UINT32 lpDevInfoAddr, UINT16 wStyle, UINT32 lpD
 			retValue = npdisp_func_Enable_PDEVICE(&devInfo, wStyle, lpDestDevType, lpOutputFile, lpDataAddr ? &data : NULL);
 			npdisp_writeMemory(&devInfo, lpDevInfoAddr, sizeof(devInfo));
 			npdisp_createScreen();
+			npdisp_createStockGdiObjects();
 			if (npdisp.mm_bmpinfoAddr) {
 				BITMAPINFO_8BPP bi;
 				memcpy(&bi, &npdispwin.bi, sizeof(BITMAPINFO_8BPP));
@@ -642,6 +726,7 @@ static UINT16 npdisp_func_ReEnable(UINT32 lpPDeviceAddr, UINT32 lpGDIInfoAddr)
 		npdisp_func_Enable_PDEVICE(&devInfo, 0, NULL, NULL, NULL);
 		npdisp_writeMemory(&devInfo, lpPDeviceAddr, sizeof(devInfo));
 		npdisp_createScreen(npdisp.enabled && npdisp.active);
+		npdisp_createStockGdiObjects();
 		if (npdisp.mm_bmpinfoAddr) {
 			BITMAPINFO_8BPP bi;
 			memcpy(&bi, &npdispwin.bi, sizeof(BITMAPINFO_8BPP));
@@ -659,6 +744,12 @@ static UINT16 npdisp_func_ReEnable(UINT32 lpPDeviceAddr, UINT32 lpGDIInfoAddr)
 		npdisp_setDirtyAll();
 		npdisp.updated = 1;
 	}
+
+	// 動的解像度変更ではDirectDraw driver objectを維持し、モード依存のDDHALINFOだけを再構築する。
+	if (!npdisp_dd_rebuildModeDependentHalInfo(lpPDeviceAddr)) {
+		TRACEOUT11(("NPDISP11 DD_REENABLE_HAL rebuild failed pdevice=%08x", lpPDeviceAddr));
+		return 0;
+	}
 	return 1;
 }
 static UINT16 npdisp_func_ValidateMode(UINT32 lpValModeAddr)
@@ -670,6 +761,13 @@ static UINT16 npdisp_func_ValidateMode(UINT32 lpValModeAddr)
 		return NPDISP_VALMODE_YES;
 	}
 	return NPDISP_VALMODE_NO_UNKNOWN;
+}
+
+static UINT32 npdisp_getBitmapKey(UINT32 lpBitmapAddr)
+{
+	NPDISP_PBITMAP_EXT bmp = { 0 };
+	if (!npdisp_readPBitmap(&bmp, lpBitmapAddr, false) || bmp.bmType != NPDISP_DEVTYPE_DDB) return 0;
+	return bmp.ddbmpKey;
 }
 
 static UINT32 npdisp_func_SelectBitmap(UINT32 lpDeviceAddr, UINT32 lpPrevBitmapAddr, UINT32 lpBitmapAddr, UINT32 fFlags)
@@ -687,10 +785,8 @@ static UINT32 npdisp_func_BitmapBits(UINT32 lpDeviceAddr, UINT32 fFlags, UINT32 
 		if (npdisp_isDisplayDevice(lpDeviceAddr)) {
 			// Display
 			if (fFlags == NPDISP_DBB_COPY) {
-				NPDISP_PBITMAP_EXT ddbmp;
 				copyCount = 0;
-				npdisp_readPBitmap(&ddbmp, lpBitsAddr);
-				auto it = npdispwin.bitmaps.find(ddbmp.ddbmpKey);
+				auto it = npdispwin.bitmaps.find(npdisp_getBitmapKey(lpBitsAddr));
 				if (it != npdispwin.bitmaps.end()) {
 					NPDISP_HOSTBITMAP* hostbmpSrc = &(it->second);
 					if (hostbmpSrc->bmphdc.lpbi->bmiHeader.biWidth == npdisp.width &&
@@ -735,21 +831,14 @@ static UINT32 npdisp_func_BitmapBits(UINT32 lpDeviceAddr, UINT32 fFlags, UINT32 
 		}
 		else {
 			// DDB
-			NPDISP_PBITMAP_EXT ddbmpdev;
-			NPDISP_HOSTBITMAP *hostbmp = NULL;
-			npdisp_readPBitmap(&ddbmpdev, lpDeviceAddr);
-			auto it = npdispwin.bitmaps.find(ddbmpdev.ddbmpKey);
-			if (it != npdispwin.bitmaps.end()) {
-				hostbmp = &(it->second);
-			}
+			auto it = npdispwin.bitmaps.find(npdisp_getBitmapKey(lpDeviceAddr));
+			NPDISP_HOSTBITMAP *hostbmp = (it != npdispwin.bitmaps.end()) ? &(it->second) : NULL;
 			if (hostbmp) {
 				if (fFlags == NPDISP_DBB_COPY) {
-					NPDISP_PBITMAP_EXT ddbmp;
 					copyCount = 0;
-					npdisp_readPBitmap(&ddbmp, lpBitsAddr);
-					auto it = npdispwin.bitmaps.find(ddbmp.ddbmpKey);
-					if (it != npdispwin.bitmaps.end()) {
-						NPDISP_HOSTBITMAP* hostbmpSrc = &(it->second);
+					auto srcIt = npdispwin.bitmaps.find(npdisp_getBitmapKey(lpBitsAddr));
+					if (srcIt != npdispwin.bitmaps.end()) {
+						NPDISP_HOSTBITMAP* hostbmpSrc = &(srcIt->second);
 						if (hostbmpSrc->bmphdc.lpbi->bmiHeader.biWidth == hostbmp->bmphdc.lpbi->bmiHeader.biWidth &&
 							hostbmpSrc->bmphdc.lpbi->bmiHeader.biHeight == hostbmp->bmphdc.lpbi->bmiHeader.biHeight &&
 							hostbmpSrc->bmphdc.lpbi->bmiHeader.biBitCount == hostbmp->bmphdc.lpbi->bmiHeader.biBitCount) {
@@ -806,14 +895,24 @@ static UINT32 npdisp_func_BitmapBits(UINT32 lpDeviceAddr, UINT32 fFlags, UINT32 
 					UINT8* pBitsDst = (UINT8*)hostbmp->bmphdc.pBits;
 					for (int i = 0; remain > 0; i++) {
 						UINT32 remainSegment = 0xffff - (offset & 0xffff);
-						if (remainSegment < memstride) {
-							offset += remainSegment;
-						}
+						if (remainSegment < memstride) offset += remainSegment;
 						int size = (remain < stride) ? remain : stride;
 						npdisp_readMemoryWith32Offset(pBitsDst, selector, offset, stride);
 						remain -= stride;
 						pBitsDst += stride;
 						offset += memstride;
+					}
+				}
+				if (fFlags == NPDISP_DBB_COPY || fFlags == NPDISP_DBB_SET || fFlags == NPDISP_DBB_SETWITHFILLER) {
+					NPDISP_PBITMAP_EXT syncPBmp = { 0 };
+					if (npdisp_readPBitmap(&syncPBmp, lpDeviceAddr, false)) {
+						if (npdisp_isSpecialDDB(&syncPBmp)) {
+							// 特殊DDBの場合のみメモリへ書き戻す
+							const int ddbWidth = syncPBmp.bmWidth;
+							const int ddbHeight = (syncPBmp.bmHeight >= 0) ? syncPBmp.bmHeight : -syncPBmp.bmHeight;
+							const int ddbSize = ddbWidth * ddbHeight * syncPBmp.bmBitsPixel / 8;
+							npdisp_writeMemory(hostbmp->bmphdc.pBits, syncPBmp.bmBitsAddr, ddbSize);
+						}
 					}
 				}
 			}
@@ -926,6 +1025,49 @@ static UINT32 npdisp_func_ColorInfo(NPDISP_PDEVICE* lpDestDev, UINT32 dwColorin,
 	}
 }
 
+static bool npdisp_isSameLogicalPen(const NPDISP_LPEN* a, const NPDISP_LPEN* b)
+{
+	if (!a || !b || a->opnStyle != b->opnStyle) return false;
+	if (a->opnStyle == NPDISP_PEN_STYLE_NOLINE) return true;
+	if (a->lopnColor != b->lopnColor) return false;
+	if (a->opnStyle == NPDISP_PEN_STYLE_SOLID && (a->lopnWidth.x == 0 || a->lopnWidth.x == 1) && (b->lopnWidth.x == 0 || b->lopnWidth.x == 1)) return true;
+	return a->lopnWidth.x == b->lopnWidth.x;
+}
+static bool npdisp_isSameLogicalBrush(const NPDISP_LBRUSH* a, const NPDISP_LBRUSH* b)
+{
+	if (!a || !b || a->lbStyle != b->lbStyle) return false;
+	if (a->lbStyle == NPDISP_BRUSH_STYLE_HOLLOW) return true;
+	if (a->lbColor != b->lbColor) return false;
+	if (a->lbStyle == NPDISP_BRUSH_STYLE_SOLID) return true;
+	return a->lbBkColor == b->lbBkColor && a->lbHatch == b->lbHatch;
+}
+// Realize後の8x8パターン内容を比較する。
+static bool npdisp_isSamePatternBrush(const NPDISP_HOSTPATTERNBITMAP* a, const NPDISP_HOSTPATTERNBITMAP* b)
+{
+	if (!a || !b) return false;
+	if (a->biHeader.biWidth != b->biHeader.biWidth || a->biHeader.biHeight != b->biHeader.biHeight || a->biHeader.biPlanes != b->biHeader.biPlanes || a->biHeader.biBitCount != b->biHeader.biBitCount || a->biHeader.biCompression != b->biHeader.biCompression) return false;
+	const int width = a->biHeader.biWidth >= 0 ? a->biHeader.biWidth : -a->biHeader.biWidth;
+	const int height = a->biHeader.biHeight >= 0 ? a->biHeader.biHeight : -a->biHeader.biHeight;
+	if (width <= 0 || height <= 0 || width > 8 || height > 8 || a->biHeader.biBitCount == 0 || a->biHeader.biBitCount > 32) return false;
+	const UINT32 stride = (UINT32)(((UINT64)width * a->biHeader.biBitCount + 31) / 32) * 4;
+	const UINT32 bitsSize = stride * (UINT32)height;
+	if (bitsSize > sizeof(a->bmBits)) return false;
+	if (a->biHeader.biBitCount <= 8) {
+		UINT32 colorsA = a->biHeader.biClrUsed ? a->biHeader.biClrUsed : (1U << a->biHeader.biBitCount);
+		UINT32 colorsB = b->biHeader.biClrUsed ? b->biHeader.biClrUsed : (1U << b->biHeader.biBitCount);
+		if (colorsA > 256 || colorsA != colorsB) return false;
+		if (memcmp(a->pal, b->pal, sizeof(RGBQUAD) * colorsA) != 0) return false;
+	}
+	return memcmp(a->bmBits, b->bmBits, bitsSize) == 0;
+}
+static void npdisp_deselectGdiObject(HGDIOBJ object, int objectType, HGDIOBJ replacement)
+{
+	if (!object || !replacement) return;
+	if (npdispwin.hdc && GetCurrentObject(npdispwin.hdc, objectType) == object) SelectObject(npdispwin.hdc, replacement);
+	for (int i = 0; i < NELEMENTS(npdispwin.hdcCache); ++i) {
+		if (npdispwin.hdcCache[i] && GetCurrentObject(npdispwin.hdcCache[i], objectType) == object) SelectObject(npdispwin.hdcCache[i], replacement);
+	}
+}
 static UINT32 npdisp_func_RealizeObject_DeletePen(UINT32 lpInObjAddr)
 {
 	if (lpInObjAddr) {
@@ -934,15 +1076,14 @@ static UINT32 npdisp_func_RealizeObject_DeletePen(UINT32 lpInObjAddr)
 		npdisp_readMemory(&pen, lpInObjAddr, sizeof(NPDISP_PEN));
 		if (pen.key != 0) {
 			auto it = npdispwin.pens.find(pen.key);
-			if (it != npdispwin.pens.end()) {
-				NPDISP_HOSTPEN value = it->second;
-				if (value.refCount > 0) {
-					value.refCount--;
-				}
-				if (value.refCount == 0) {
+			if (it != npdispwin.pens.end() && it->second.refCount != UINT_MAX) {
+				if (it->second.refCount > 0) it->second.refCount--;
+				if (it->second.refCount == 0) {
+					HPEN handle = it->second.pen;
 					npdispwin.pens.erase(it);
-					if (value.pen) {
-						DeleteObject(value.pen);
+					if (handle) {
+						npdisp_deselectGdiObject(handle, OBJ_PEN, GetStockObject(NULL_PEN));
+						DeleteObject(handle);
 					}
 				}
 			}
@@ -963,15 +1104,14 @@ static UINT32 npdisp_func_RealizeObject_DeleteBrush(UINT32 lpInObjAddr)
 		npdisp_readMemory(&brush, lpInObjAddr, sizeof(NPDISP_BRUSH));
 		if (brush.key != 0) {
 			auto it = npdispwin.brushes.find(brush.key);
-			if (it != npdispwin.brushes.end()) {
-				NPDISP_HOSTBRUSH value = it->second;
-				if (value.refCount > 0) {
-					value.refCount--;
-				}
-				if (value.refCount == 0) {
+			if (it != npdispwin.brushes.end() && it->second.refCount != UINT_MAX) {
+				if (it->second.refCount > 0) it->second.refCount--;
+				if (it->second.refCount == 0) {
+					HBRUSH handle = it->second.brs;
 					npdispwin.brushes.erase(it);
-					if (value.brs) {
-						DeleteObject(value.brs);
+					if (handle) {
+						npdisp_deselectGdiObject(handle, OBJ_BRUSH, GetStockObject(NULL_BRUSH));
+						DeleteObject(handle);
 					}
 				}
 			}
@@ -984,48 +1124,45 @@ static UINT32 npdisp_func_RealizeObject_DeleteBrush(UINT32 lpInObjAddr)
 	// サイズを返す
 	return sizeof(NPDISP_BRUSH);
 }
+static void npdisp_freeHostBitmapStorage(NPDISP_HOSTBITMAP* hostbmp)
+{
+	if (!hostbmp || !hostbmp->bmphdc.hBmp) return;
+	hostbmp->bmphdc.hdc = NULL;
+	npdisp_FreeBitmap(&hostbmp->bmphdc, true);
+}
+
 static UINT32 npdisp_func_RealizeObject_DeleteBitmap(UINT32 lpInObjAddr)
 {
+	UINT32 objectSize = sizeof(NPDISP_PBITMAP_EXT);
 	if (lpInObjAddr) {
-		// 指定されたキーのDDBitmapを削除
 		NPDISP_PBITMAP_EXT ddbmp = { 0 };
-		npdisp_readMemory(&ddbmp, lpInObjAddr, sizeof(NPDISP_PBITMAP_EXT));
-		if (ddbmp.bmType == NPDISP_DEVTYPE_DDB) {
-			// キーが有効か確認
-			if (ddbmp.ddbmpKey) {
-				auto it = npdispwin.bitmaps.find(ddbmp.ddbmpKey);
-				if (it != npdispwin.bitmaps.end()) {
-					NPDISP_HOSTBITMAP value = it->second;
-					npdispwin.bitmaps.erase(it->first);
-					if (value.bmphdc.hBmp) {
-						//if (ddbmp.bmBitsAddr) {
-						//	npdisp_WriteBitmapToPBITMAP(&ddbmp, &value.bmphdc);
-						//}
-						value.bmphdc.hdc = NULL; // hdcは捨てない
-						npdisp_FreeBitmap(&value.bmphdc, true);
-					}
-					if (it->first + 1 == npdispwin.bitmapsIdx) {
-						npdispwin.bitmapsIdx--;
-						if (npdispwin.bitmaps.size() > 0) {
-							while (npdispwin.bitmaps.find(npdispwin.bitmapsIdx - 1) == npdispwin.bitmaps.end()) {
-								npdispwin.bitmapsIdx--;
-							}
-						}
-					}
+		npdisp_readPBitmap(&ddbmp, lpInObjAddr, false);
+		if (npdisp_isSpecialDDB(&ddbmp)) {
+			const int ddbWidth = ddbmp.bmWidth;
+			const int ddbHeight = (ddbmp.bmHeight >= 0) ? ddbmp.bmHeight : -ddbmp.bmHeight;
+			const int ddbSize = ddbWidth * ddbHeight * ddbmp.bmBitsPixel / 8;
+			objectSize += ddbSize;
+		}
+		if (ddbmp.bmType == NPDISP_DEVTYPE_DDB && ddbmp.ddbmpKey) {
+			auto it = npdispwin.bitmaps.find(ddbmp.ddbmpKey);
+			if (it != npdispwin.bitmaps.end()) {
+				NPDISP_HOSTBITMAP value = it->second;
+				npdispwin.bitmaps.erase(it);
+				npdisp_freeHostBitmapStorage(&value);
+				if (ddbmp.ddbmpKey + 1 == npdispwin.bitmapsIdx) {
+					npdispwin.bitmapsIdx--;
+					while (npdispwin.bitmapsIdx > 1 && npdispwin.bitmaps.find(npdispwin.bitmapsIdx - 1) == npdispwin.bitmaps.end()) npdispwin.bitmapsIdx--;
 				}
-				TRACEOUT10(("Release Bitmap %d %08x", npdispwin.bitmapsIdx, lpInObjAddr));
-				//ddbmp.ddbmpKey = 0;
-				//ddbmp.ddbmpKeyInv = 0;
-				ddbmp.bmType = 0;
-				npdisp_writePBitmap(&ddbmp, lpInObjAddr);
 			}
+			TRACEOUT10(("Release Bitmap %d %08x", npdispwin.bitmapsIdx, lpInObjAddr));
+			ddbmp.bmType = 0;
+			npdisp_writePBitmap(&ddbmp, lpInObjAddr);
 		}
 	}
 	TRACEOUT(("RealizeObject Release OBJ_PBITMAP"));
-
-	// サイズを返す
-	return sizeof(NPDISP_PBITMAP_EXT);
+	return objectSize;
 }
+
 static void npdisp_createPen(NPDISP_HOSTPEN *lpHostPen) 
 {
 	if (lpHostPen->pen) return; // 既にあるなら作り直さない
@@ -1054,28 +1191,24 @@ static UINT32 npdisp_func_RealizeObject_CreatePen(UINT32 lpInObjAddr, UINT32 lpO
 			// 指定した設定で作る
 			npdisp_readMemory(&(pen.lpen), lpInObjAddr, sizeof(NPDISP_LPEN));
 		}
+
 		TRACEOUT((" -> Color %08x", pen.lpen.lopnColor));
-		int key = 0;
+		UINT32 key = 0;
 		for (auto it = npdispwin.pens.begin(); it != npdispwin.pens.end(); ++it) {
-			if (it->second.lpen.lopnColor == pen.lpen.lopnColor &&
-				it->second.lpen.lopnWidth.x == pen.lpen.lopnWidth.x &&
-				it->second.lpen.opnStyle == pen.lpen.opnStyle) {
+			if (npdisp_isSameLogicalPen(&it->second.lpen, &pen.lpen)) {
 				key = it->first;
 				break;
 			}
 		}
 		if (key) {
-			pen.key = key;
-			if (npdispwin.pens[pen.key].refCount < UINT_MAX) {
-				npdispwin.pens[pen.key].refCount++;
-			}
+			pen.key = (int)key;
+			if (npdispwin.pens[key].refCount < UINT_MAX) npdispwin.pens[key].refCount++;
 		}
 		else {
 			hostpen.lpen = pen.lpen;
 			npdisp_createPen(&hostpen); // ペン生成
 			hostpen.refCount = 1;
-			pen.key = npdispwin.pensIdx;
-			npdispwin.pensIdx++;
+			pen.key = npdispwin.pensIdx++;
 			if (npdispwin.pensIdx == 0) npdispwin.pensIdx++; // 0は使わないことにする
 			npdispwin.pens[pen.key] = hostpen;
 		}
@@ -1187,27 +1320,24 @@ static UINT32 npdisp_func_RealizeObject_CreateBrush(UINT32 lpInObjAddr, UINT32 l
 		// 作成
 		NPDISP_BRUSH brush = { {NPDISP_BRUSH_STYLE_SOLID, 15, NPDISP_BRUSH_HATCH_HORIZONTAL, 15} };
 		NPDISP_HOSTBRUSH hostbrush = { 0 };
+		bool patternComparable = false;
 		if (lpInObjAddr) {
 			// 指定した設定で作る
 			npdisp_readMemory(&(brush.lbrush), lpInObjAddr, sizeof(NPDISP_LBRUSH));
 		}
-		int key = 0;
+
+		UINT32 key = 0;
 		if (brush.lbrush.lbStyle != NPDISP_BRUSH_STYLE_PATTERN) {
 			for (auto it = npdispwin.brushes.begin(); it != npdispwin.brushes.end(); ++it) {
-				if (it->second.lbrush.lbStyle == brush.lbrush.lbStyle &&
-					it->second.lbrush.lbColor == brush.lbrush.lbColor &&
-					it->second.lbrush.lbBkColor == brush.lbrush.lbBkColor &&
-					it->second.lbrush.lbHatch == brush.lbrush.lbHatch) {
+				if (npdisp_isSameLogicalBrush(&it->second.lbrush, &brush.lbrush)) {
 					key = it->first;
 					break;
 				}
 			}
 		}
 		if (key) {
-			brush.key = key;
-			if (npdispwin.brushes[brush.key].refCount < UINT_MAX) {
-				npdispwin.brushes[brush.key].refCount++;
-			}
+			brush.key = (int)key;
+			if (npdispwin.brushes[key].refCount < UINT_MAX) npdispwin.brushes[key].refCount++;
 			TRACEOUT((" -> Style:%d, Color:%08x", brush.lbrush.lbStyle, brush.lbrush.lbColor));
 		}
 		else {
@@ -1240,7 +1370,7 @@ static UINT32 npdisp_func_RealizeObject_CreateBrush(UINT32 lpInObjAddr, UINT32 l
 								hostbrush.pattern.biHeader.biPlanes = 1;
 								hostbrush.pattern.biHeader.biBitCount = 1;
 								hostbrush.pattern.biHeader.biCompression = BI_RGB;
-								GetDIBits(hdcPat, hPatBmp, 0, 8, hostbrush.pattern.bmBits, (BITMAPINFO*)(&hostbrush.pattern.biHeader), DIB_RGB_COLORS);
+								if (GetDIBits(hdcPat, hPatBmp, 0, 8, hostbrush.pattern.bmBits, (BITMAPINFO*)(&hostbrush.pattern.biHeader), DIB_RGB_COLORS) == 8 && hostbrush.brs) patternComparable = true;
 								SelectObject(hdcPat, hOldBmp);
 								DeleteObject(hPatBmp);
 							}
@@ -1255,7 +1385,7 @@ static UINT32 npdisp_func_RealizeObject_CreateBrush(UINT32 lpInObjAddr, UINT32 l
 							hostbrush.pattern.biHeader.biSizeImage = 0;
 							hostbrush.pattern.biHeader.biXPelsPerMeter = 0;
 							hostbrush.pattern.biHeader.biYPelsPerMeter = 0;
-							hostbrush.pattern.biHeader.biClrUsed = 1 << patternBmp.bmBitsPixel;
+							hostbrush.pattern.biHeader.biClrUsed = patternBmp.bmBitsPixel <= 8 ? (1U << patternBmp.bmBitsPixel) : 0;
 							hostbrush.pattern.biHeader.biClrImportant = 0;
 							if (patternBmp.bmBitsPixel <= 8) {
 								memcpy(hostbrush.pattern.pal, patternBmphdc.lpbi->bmiColors, sizeof(RGBQUAD) * hostbrush.pattern.biHeader.biClrUsed);
@@ -1278,6 +1408,7 @@ static UINT32 npdisp_func_RealizeObject_CreateBrush(UINT32 lpInObjAddr, UINT32 l
 								const int height = hostbrush.pattern.biHeader.biHeight >= 0 ? hostbrush.pattern.biHeader.biHeight : -hostbrush.pattern.biHeader.biHeight;
 								const int stride = ((hostbrush.pattern.biHeader.biWidth * hostbrush.pattern.biHeader.biBitCount + 31) / 32) * 4;
 								memcpy(hostbrush.pattern.bmBits, pBits, stride * height);
+								if (hostbrush.brs) patternComparable = true;
 								SelectObject(hdcPat, hOldBmp);
 								DeleteObject(hPatBmp);
 							}
@@ -1291,11 +1422,27 @@ static UINT32 npdisp_func_RealizeObject_CreateBrush(UINT32 lpInObjAddr, UINT32 l
 				}
 			}
 			npdisp_createBrush(&hostbrush); // ブラシ生成
-			hostbrush.refCount = 1;
-			brush.key = npdispwin.brushesIdx;
-			npdispwin.brushesIdx++;
-			if (npdispwin.brushesIdx == 0) npdispwin.brushesIdx++; // 0は使わないことにする
-			npdispwin.brushes[brush.key] = hostbrush;
+			// 既存ブラシとパターンが同じなら使い回す
+			if (brush.lbrush.lbStyle == NPDISP_BRUSH_STYLE_PATTERN && patternComparable) {
+				for (auto it = npdispwin.brushes.begin(); it != npdispwin.brushes.end(); ++it) {
+					if (it->second.lbrush.lbStyle == NPDISP_BRUSH_STYLE_PATTERN && npdisp_isSamePatternBrush(&it->second.pattern, &hostbrush.pattern)) {
+						key = it->first;
+						break;
+					}
+				}
+			}
+			if (key) {
+				if (hostbrush.brs) DeleteObject(hostbrush.brs);
+				brush.key = (int)key;
+				if (npdispwin.brushes[key].refCount < UINT_MAX) npdispwin.brushes[key].refCount++;
+			}
+			else {
+				hostbrush.refCount = 1;
+				brush.key = npdispwin.brushesIdx;
+				npdispwin.brushesIdx++;
+				if (npdispwin.brushesIdx == 0) npdispwin.brushesIdx++;
+				npdispwin.brushes[brush.key] = hostbrush;
+			}
 		}
 		// 書き込み
 		npdisp_writeMemory(&brush, lpOutObjAddr, sizeof(NPDISP_BRUSH));
@@ -1308,42 +1455,65 @@ static UINT32 npdisp_func_RealizeObject_CreateBrush(UINT32 lpInObjAddr, UINT32 l
 static UINT32 npdisp_func_RealizeObject_CreateBitmap(UINT32 lpInObjAddr, UINT32 lpOutObjAddr)
 {
 	TRACEOUT(("RealizeObject Create OBJ_PBITMAP"));
-	if (lpOutObjAddr) {
-		// 作成
-		NPDISP_PBITMAP_EXT ddbmp = { 0 };
-		NPDISP_HOSTBITMAP hostbmp = { 0 };
-		int bitmapsIdx = npdispwin.bitmapsIdx;
-		if (lpInObjAddr) {
-			// 指定した設定で作る
-			npdisp_readMemory(&ddbmp, lpInObjAddr, sizeof(NPDISP_PBITMAP));
+	NPDISP_PBITMAP_EXT ddbmp = { 0 };
+	bool isSpecialDDB = false;
+	UINT32 objectSize = sizeof(NPDISP_PBITMAP_EXT);
+	if (lpInObjAddr) {
+		// 指定した設定で作る
+		npdisp_readMemory(&ddbmp, lpInObjAddr, sizeof(NPDISP_PBITMAP));
+		isSpecialDDB = npdisp.isWin9x && (ddbmp.bmPlanes == 1 && ddbmp.bmBitsPixel == 8 && ddbmp.bmWidth == 8 && (ddbmp.bmHeight == 8 || ddbmp.bmHeight == -8) && ddbmp.bmWidthBytes == 8);
+		if (isSpecialDDB) {
+			const int ddbWidth = ddbmp.bmWidth;
+			const int ddbHeight = (ddbmp.bmHeight >= 0) ? ddbmp.bmHeight : -ddbmp.bmHeight;
+			const int ddbSize = ddbWidth * ddbHeight * ddbmp.bmBitsPixel / 8;
+			objectSize += ddbSize;
+		}
+	}
+	else {
+		ddbmp.bmPlanes = 1;
+		ddbmp.bmBitsPixel = 1;
+		ddbmp.bmWidth = 1;
+		ddbmp.bmHeight = 1;
+	}
+	if (!lpOutObjAddr) return objectSize;
+	if (isSpecialDDB && (lpOutObjAddr & 0xffff) + objectSize > 0x10000UL) return 0x80000000UL;
 
-			// WORKAROUND: Win3.1ファイル選択ダイアログ特例　bmBitsAddrが0かつ異常なbppやplanesが指定されたとき、デバイスと同じbppで作成する
-			// もしかすると、bmBitsAddrが0という条件だけでよい？
-			if (((ddbmp.bmBitsPixel != 1 &&
-				  ddbmp.bmBitsPixel != 4 &&
-				  ddbmp.bmBitsPixel != 8 &&
-				  ddbmp.bmBitsPixel != 15 &&
-				  ddbmp.bmBitsPixel != 16 &&
-				  ddbmp.bmBitsPixel != 24 &&
-				  ddbmp.bmBitsPixel != 32) || ddbmp.bmPlanes != 1) && ddbmp.bmBitsAddr == 0) {
-				ddbmp.bmBitsPixel = npdisp.bpp;
-				ddbmp.bmPlanes = 1;
+	NPDISP_HOSTBITMAP hostbmp = { 0 };
+	UINT32 reuseKey = 0;
+	NPDISP_PBITMAP_EXT oldDdbmp = { 0 };
+	if (npdisp_readPBitmap(&oldDdbmp, lpOutObjAddr, false) && oldDdbmp.bmType == NPDISP_DEVTYPE_DDB && oldDdbmp.ddbmpKey && npdispwin.bitmaps.find(oldDdbmp.ddbmpKey) != npdispwin.bitmaps.end()) reuseKey = oldDdbmp.ddbmpKey;
+
+	// WORKAROUND: Win3.1ファイル選択ダイアログ特例　bmBitsAddrが0かつ異常なbppやplanesが指定されたとき、デバイスと同じbppで作成する
+	// もしかすると、bmBitsAddrが0という条件だけでよい？
+	if (lpInObjAddr && ((ddbmp.bmBitsPixel != 1 &&
+		  ddbmp.bmBitsPixel != 4 &&
+		  ddbmp.bmBitsPixel != 8 &&
+		  ddbmp.bmBitsPixel != 15 &&
+		  ddbmp.bmBitsPixel != 16 &&
+		  ddbmp.bmBitsPixel != 24 &&
+		  ddbmp.bmBitsPixel != 32) || ddbmp.bmPlanes != 1) && ddbmp.bmBitsAddr == 0) {
+		ddbmp.bmBitsPixel = npdisp.bpp;
+		ddbmp.bmPlanes = 1;
+	}
+
+	if (ddbmp.bmType != NPDISP_DEVTYPE_DDB) {
+		if (npdisp_MakeBitmapFromPBITMAP(&ddbmp, &hostbmp.bmphdc, 2)) {
+			// HDC切り離し
+			if (hostbmp.bmphdc.hdc) {
+				SelectObject(hostbmp.bmphdc.hdc, hostbmp.bmphdc.hOldBmp);
+				hostbmp.bmphdc.hdc = NULL;
 			}
-		}
-		else {
-			ddbmp.bmPlanes = 1;
-			ddbmp.bmBitsPixel = 1;
-			ddbmp.bmWidth = 1;
-			ddbmp.bmHeight = 1;
-		}
-		if (ddbmp.bmType != NPDISP_DEVTYPE_DDB) {
-			if (npdisp_MakeBitmapFromPBITMAP(&ddbmp, &hostbmp.bmphdc, 2)) {
-				// HDC切り離し
-				if (hostbmp.bmphdc.hdc) {
-					SelectObject(hostbmp.bmphdc.hdc, hostbmp.bmphdc.hOldBmp);
-					hostbmp.bmphdc.hdc = NULL;
+			if (reuseKey) {
+				auto oldIt = npdispwin.bitmaps.find(reuseKey);
+				if (oldIt != npdispwin.bitmaps.end()) {
+					NPDISP_HOSTBITMAP oldHostbmp = oldIt->second;
+					oldIt->second = hostbmp;
+					npdisp_freeHostBitmapStorage(&oldHostbmp);
+					ddbmp.ddbmpKey = reuseKey;
 				}
-				//TRACEOUT11(("KEY %08x %08x", ddbmp.ddbmpKey, lpOutObjAddr));
+			}
+			if (!ddbmp.ddbmpKey) {
+				int bitmapsIdx = npdispwin.bitmapsIdx;
 				ddbmp.ddbmpKey = bitmapsIdx;
 				if (bitmapsIdx == npdispwin.bitmapsIdx) {
 					npdispwin.bitmapsIdx++;
@@ -1360,18 +1530,44 @@ static UINT32 npdisp_func_RealizeObject_CreateBitmap(UINT32 lpInObjAddr, UINT32 
 						it = npdispwin.bitmaps.find(bitmapsIdx);
 					}
 				}
+			}
 
-				TRACEOUT10(("Realize Bitmap %d %08x", npdispwin.bitmapsIdx, lpOutObjAddr));
+			TRACEOUT10(("Realize Bitmap %d %08x", npdispwin.bitmapsIdx, lpOutObjAddr));
+			if (npdisp.isWin9x) {
+				ddbmp.reserved1 = 0;
+				ddbmp.reserved2 = 0;
+			}
 
-				// 書き込み
-				ddbmp.bmType = NPDISP_DEVTYPE_DDB;
+			ddbmp.bmType = NPDISP_DEVTYPE_DDB;
+			if (isSpecialDDB) {
+				// 画素データ付きの特殊DDBを生成 Win9xのディザブラシで必要
+				NPDISP_PBITMAP_EXT physical = ddbmp;
+				NPDISP_DIBENGINE* dibe = (NPDISP_DIBENGINE*)&physical;
+				const UINT16 selector = (UINT16)(lpOutObjAddr >> 16);
+				const UINT32 offset = lpOutObjAddr & 0xffff;
+				dibe->deType = NPDISP_DEVTYPE_DIBENG;
+				dibe->deReserved1 = 0;
+				dibe->deDeltaScan = physical.bmWidth * physical.bmBitsPixel / 8;
+				dibe->delpPDeviceAddr = 0;
+				dibe->deBitsOffset = offset + sizeof(NPDISP_PBITMAP_EXT);
+				dibe->deBitsSelector = selector;
+				dibe->deFlags = NPDISP_WING_DDB_DEFLAGS;
+				dibe->deVersion = 0x0400;
+				physical.ddbmpKey = ddbmp.ddbmpKey;
+				if (!npdisp_writeMemory(&physical, lpOutObjAddr, sizeof(physical))) return 0x80000000UL;
+				ddbmp.bmBitsAddr = ((UINT32)selector << 16) | (dibe->deBitsOffset & 0xffff);
+				NPDISP_WINDOWS_BMPHDC syncHdc = npdispwin.bitmaps[ddbmp.ddbmpKey].bmphdc;
+				syncHdc.isDevMemBmp = 1;
+				npdisp_WriteBitmapToPBITMAP(&ddbmp, &syncHdc);
+			}
+			else {
 				npdisp_writePBitmap(&ddbmp, lpOutObjAddr);
 			}
 		}
 	}
-	// サイズを返す
-	return sizeof(NPDISP_PBITMAP_EXT);
+	return objectSize;
 }
+
 static UINT32 npdisp_func_RealizeObject(UINT32 lpDestDevAddr, UINT16 wStyle, UINT32 lpInObjAddr, UINT32 lpOutObjAddr, UINT32 lpTextXFormAddr)
 {
 	UINT32 retValue = 0;
@@ -1446,9 +1642,15 @@ static UINT32 npdisp_func_RealizeObject(UINT32 lpDestDevAddr, UINT16 wStyle, UIN
 static UINT16 npdisp_func_Control(UINT32 lpDestDevAddr, UINT16 wFunction, UINT32 lpInDataAddr, UINT32 lpOutDataAddr)
 {
 	UINT16 retValue = 0;
+	TRACEOUT11(("NPDISP11 CONTROL fn=%04x dest=%08x in=%08x out=%08x win9x=%u dciEnable=%u",
+		wFunction, lpDestDevAddr, lpInDataAddr, lpOutDataAddr, npdisp.isWin9x ? 1 : 0, npdisp.mm_dciEnable ? 1 : 0));
 	if (lpDestDevAddr) {
 		NPDISP_PDEVICE destDev;
 		npdisp_readMemory(&destDev, lpDestDevAddr, sizeof(destDev));
+		TRACEOUT11(("NPDISP11 PDEV type=%04x size=%ux%u pitch=%u planes=%u bpp=%u flags=%04x ver=%04x bits=%04x:%08x bmi=%08x",
+			destDev.dibe.deType, destDev.dibe.deWidth, destDev.dibe.deHeight, destDev.dibe.deWidthBytes,
+			destDev.dibe.dePlanes, destDev.dibe.deBitsPixel, destDev.dibe.deFlags, destDev.dibe.deVersion,
+			destDev.dibe.deBitsSelector, destDev.dibe.deBitsOffset, destDev.dibe.deBitmapInfoAddr));
 		switch (wFunction) {
 		case NPDISP_CONTROL_QUERYESCSUPPORT:
 		{
@@ -1467,9 +1669,10 @@ static UINT16 npdisp_func_Control(UINT32 lpDestDevAddr, UINT16 wFunction, UINT32
 				retValue = NPDISP_QDI_SETDIBITS | NPDISP_QDI_GETDIBITS | NPDISP_QDI_DIBTOSCREEN | NPDISP_QDI_STRETCHDIB;
 				break;
 			}
-			case NPDISP_DEVTYPE_DIBENG: // Undocumented: 
+			case NPDISP_DEVTYPE_DIBENG:
 			{
-				retValue = NPDISP_DEVTYPE_DIBENG;
+				// DIB Engine互換PDEVICEの識別値をサポートする。
+				retValue = 1;
 				break;
 			}
 			case SETCOLORTABLE:
@@ -1489,6 +1692,7 @@ static UINT16 npdisp_func_Control(UINT32 lpDestDevAddr, UINT16 wFunction, UINT32
 				break;
 			}
 			}
+			TRACEOUT11(("NPDISP11 QUERYESC esc=%04x ret=%04x", escNum, retValue));
 			break;
 		}
 		case NPDISP_CONTROL_OPENGL_CMD:
@@ -1539,7 +1743,9 @@ static UINT16 npdisp_func_Control(UINT32 lpDestDevAddr, UINT16 wFunction, UINT32
 			if (lpInDataAddr) {
 				NPDISP_DCICMD dciCmd;
 				if (npdisp_readMemory(&dciCmd, lpInDataAddr, sizeof(dciCmd))) {
-					// NOTE: DirectDraw関係のコマンドが呼ばれるためにはDIB Engine互換でないとだめ
+					TRACEOUT11(("NPDISP11 DCI cmd=%08x p1=%08x p2=%08x ver=%08x rsv=%08x out=%08x",
+						dciCmd.dwCommand, dciCmd.dwParam1, dciCmd.dwParam2, dciCmd.dwVersion, dciCmd.dwReserved, lpOutDataAddr));
+					// DirectDrawのDCIコマンドはDIB Engine互換PDEVICEで処理する。
 					switch (dciCmd.dwCommand) {
 					case NPDISP_CONTROL_DCI_DCICREATEPRIMARYSURFACE:
 					{
@@ -1553,6 +1759,9 @@ static UINT16 npdisp_func_Control(UINT32 lpDestDevAddr, UINT16 wFunction, UINT32
 
 							NPDISP_DCICREATEINPUT createInput = { 0 };
 							npdisp_readMemory(&createInput, lpInDataAddr, sizeof(createInput));
+							TRACEOUT11(("NPDISP11 DCI_CREATE_IN caps=%08x comp=%08x mask=%08x/%08x/%08x size=%ux%u bpp=%u surf=%08x",
+								createInput.dwDCICaps, createInput.dwCompression, createInput.dwMask[0], createInput.dwMask[1], createInput.dwMask[2],
+								createInput.dwWidth, createInput.dwHeight, createInput.dwBitCount, createInput.lpSurfaceAddr));
 
 							NPDISP_DCISURFACEINFO surfaceInfo = { 0 };
 							surfaceInfo.dwSize = sizeof(surfaceInfo);
@@ -1578,17 +1787,28 @@ static UINT16 npdisp_func_Control(UINT32 lpDestDevAddr, UINT16 wFunction, UINT32
 							surfaceInfo.lStride = ((npdisp.width * npdisp.bpp + 31) / 32) * 4;
 							surfaceInfo.dwBitCount = npdisp.bpp;
 
-							surfaceInfo.dwOffSurface = npdisp.mm_vramLinearAddr;
-							surfaceInfo.wSelSurface = 0;
+							if (npdisp.isWin9x && npdisp.mm_vramSelector) {
+								surfaceInfo.dwOffSurface = 0;
+								surfaceInfo.wSelSurface = npdisp.mm_vramSelector;
+							}
+							else {
+								surfaceInfo.dwOffSurface = npdisp.mm_vramLinearAddr;
+								surfaceInfo.wSelSurface = 0;
+							}
 							surfaceInfo.wReserved = 0;
 
-							surfaceInfo.dwReserved1 = 0;
+							// DCI surfaceのprivate領域には作成元PDEVICEを保持する。
+							surfaceInfo.dwReserved1 = lpDestDevAddr;
 							surfaceInfo.dwReserved2 = 0;
 							surfaceInfo.dwReserved3 = 0;
 
 							surfaceInfo.BeginAccessAddr = npdisp.mm_dciBeginAccessAddr;
 							surfaceInfo.EndAccessAddr = npdisp.mm_dciEndAccessAddr;
 							surfaceInfo.DestroySurfaceAddr = npdisp.mm_dciDestroySurfaceAddr;
+
+							TRACEOUT11(("NPDISP11 DCI_CREATE_OUT caps=%08x size=%ux%u stride=%d bpp=%u off=%08x sel=%04x",
+								surfaceInfo.dwDCICaps, surfaceInfo.dwWidth, surfaceInfo.dwHeight, surfaceInfo.lStride,
+								surfaceInfo.dwBitCount, surfaceInfo.dwOffSurface, surfaceInfo.wSelSurface));
 
 							npdisp_writeMemory(&surfaceInfo, npdisp.mm_dcibufAddr, sizeof(surfaceInfo));
 
@@ -1604,32 +1824,11 @@ static UINT16 npdisp_func_Control(UINT32 lpDestDevAddr, UINT16 wFunction, UINT32
 						break;
 					}
 					case NPDISP_CONTROL_DCI_DDCREATEDRIVEROBJECT:
-					{
-						if (lpOutDataAddr) {
-							NPDISP_DDHALINFO halInfo = { 0 };
-							npdisp_readMemory(&halInfo, lpOutDataAddr, sizeof(halInfo));
-							halInfo.dwSize = sizeof(halInfo);
-							halInfo.vmiData.fpPrimary = npdisp.mm_vramLinearAddr;
-							halInfo.vmiData.dwDisplayWidth = npdisp.width;
-							halInfo.vmiData.dwDisplayHeight = npdisp.height;
-							//halInfo.ddCaps.dwCaps | 0x02000000l;
-							halInfo.vmiData.lDisplayPitch = ((npdisp.width * npdisp.bpp + 31) / 32) * 4;
-							//halInfo.vmiData.ddpfDisplay.dwSize = sizeof(NPDISP_DDPIXELFORMAT);
-							//halInfo.dwFlags |= 0x00000001; // DDHALINFO_ISPRIMARYDISPLAY
-							//halInfo.lpPDevice = lpDestDevAddr;
-							npdisp_writeMemory(&halInfo, lpOutDataAddr, sizeof(halInfo));
-						}
-						retValue = 0;
-						break;
-					}
 					case NPDISP_CONTROL_DCI_DDGET32BITDRIVERNAME:
-					{
-						retValue = 0;
-						break;
-					}
 					case NPDISP_CONTROL_DCI_DDNEWCALLBACKFNS:
+					case NPDISP_CONTROL_DCI_DDVERSIONINFO:
 					{
-						retValue = 0;
+						retValue = npdisp_dd_controlCommand(lpDestDevAddr, &dciCmd, lpOutDataAddr);
 						break;
 					}
 					}
@@ -1640,6 +1839,7 @@ static UINT16 npdisp_func_Control(UINT32 lpDestDevAddr, UINT16 wFunction, UINT32
 		}
 		// 必要ならサポート
 	}
+	TRACEOUT11(("NPDISP11 CONTROL_RET fn=%04x ret=%04x", wFunction, retValue));
 	return retValue;
 }
 
@@ -1722,6 +1922,7 @@ static UINT16 npdisp_func_DeviceBitmapBits(UINT32 lpBitmapAddr, UINT16 fGet, UIN
 	if (lpBitmapAddr) {
 		NPDISP_PBITMAP_EXT tgtPBmp;
 		if (npdisp_readPBitmap(&tgtPBmp, lpBitmapAddr)) {
+			tgtPBmp.ddbmpKey = npdisp_getBitmapKey(lpBitmapAddr);
 			BITMAPINFOHEADER biHeader = { 0 };
 			npdisp_readMemory(&biHeader, lpBitmapInfoAddr, sizeof(BITMAPINFOHEADER));
 			if (biHeader.biPlanes == 1 && (biHeader.biBitCount == 1 || biHeader.biBitCount == 4 || biHeader.biBitCount == 8 || biHeader.biBitCount == 15 || biHeader.biBitCount == 16 || biHeader.biBitCount == 24 || biHeader.biBitCount == 32) && biHeader.biHeight > iStart) { // XXX: biHeader.biHeightがマイナスはあり得るか？？　要確認
@@ -2179,8 +2380,442 @@ static UINT16 npdisp_func_DeviceBitmapBits(UINT32 lpBitmapAddr, UINT16 fGet, UIN
 	return retValue;
 }
 
+#define NPDISP_ETO_OPAQUE      0x0002
+#define NPDISP_ETO_GLYPH_INDEX 0x0010
+#define NPDISP_ETO_BYTE_PACKED 0x0100
+#define NPDISP_ETO_BIT_PACKED  0x0200
+#define NPDISP_NF_BYTE_PACKED  0x0001
+#define NPDISP_NF_LARGE        0x0080
+
+static bool npdisp_isNewFontSeg(UINT32 lpFontInfoAddr, NPDISP_NEWFONTSEG* nf)
+{
+	if (!lpFontInfoAddr || !npdisp.isWin9x) return false;
+	if (!npdisp_readMemory(nf, lpFontInfoAddr, sizeof(*nf))) return false;
+	return nf->nfVersion >= 0x0400 && (nf->nfFormat & NPDISP_NF_BYTE_PACKED) != 0 && nf->nfNumGlyphs != 0;
+}
+
+static bool npdisp_readNewFontOffset(UINT32 lpFontInfoAddr, const NPDISP_NEWFONTSEG* nf, UINT16 glyph, UINT32* glyphOffset)
+{
+	UINT16 selector = (UINT16)(lpFontInfoAddr >> 16);
+	UINT32 elemSize = (nf->nfFormat & NPDISP_NF_LARGE) ? sizeof(UINT32) : sizeof(UINT16);
+	UINT64 tableOffset;
+	if (glyph >= nf->nfNumGlyphs) return false;
+	tableOffset = (UINT64)nf->nfGlyphOffset + (UINT64)glyph * elemSize;
+	if (tableOffset > (UINT64)0xffffffffUL) return false;
+	if (nf->nfFormat & NPDISP_NF_LARGE) {
+		return npdisp_readMemoryWith32Offset(glyphOffset, selector, (UINT32)tableOffset, sizeof(UINT32)) != 0;
+	}
+	else {
+		UINT16 ofs16;
+		if (!npdisp_readMemoryWith32Offset(&ofs16, selector, (UINT32)tableOffset, sizeof(ofs16))) return false;
+		*glyphOffset = ofs16;
+		return true;
+	}
+}
+
+static bool npdisp_readNewFontAW(UINT32 lpFontInfoAddr, const NPDISP_NEWFONTSEG* nf, UINT16 glyph, SINT16* aw)
+{
+	UINT64 tableOffset;
+	if (glyph >= nf->nfNumGlyphs) return false;
+	tableOffset = (UINT64)nf->nfAWTable + (UINT64)glyph * sizeof(SINT16);
+	if (tableOffset > (UINT64)0xffffffffUL) return false;
+	return npdisp_readMemoryWith32Offset(aw, (UINT16)(lpFontInfoAddr >> 16), (UINT32)tableOffset, sizeof(SINT16)) != 0;
+}
+
+static bool npdisp_isNullNewFontRect(const NPDISP_RECT* rect)
+{
+	return rect->left == 0 && rect->top == 0 && rect->right == 0 && rect->bottom == 0;
+}
+
+static bool npdisp_fillNewFontOpaqueRects(HDC tgtDC, const NPDISP_DRAWMODE* drawMode, UINT32 lpOpaqueRectAddr, const NPDISP_RECT* clip, bool hasClip, int targetWidth, int targetHeight, bool markDirty)
+{
+	const int maxOpaqueRects = 64;
+	UINT16 selector;
+	UINT32 offset;
+	bool isBlack = false;
+	bool isWhite = false;
+	bool preferDither = false;
+	HBRUSH hBrush = NULL;
+	int i;
+
+	if (!lpOpaqueRectAddr) return true;
+	if (targetWidth <= 0 || targetHeight <= 0) return true;
+	selector = (UINT16)(lpOpaqueRectAddr >> 16);
+	offset = lpOpaqueRectAddr & 0xffff;
+
+	if ((drawMode->bkColor & 0xffffff) == 0) {
+		isBlack = true;
+	}
+	else if ((drawMode->bkColor & 0xffffff) == 0xffffff) {
+		isWhite = true;
+	}
+	else {
+		UINT32 color = npdisp_AdjustColorRefForGDI(drawMode->bkColor, &preferDither);
+		if (preferDither) {
+			UINT32 actualColor1;
+			UINT32 actualColor2;
+			double ratio;
+			MakePaletteDitherBrushColor(color, &actualColor1, &actualColor2, &ratio);
+			hBrush = CreatePaletteDitherBrush(actualColor1, actualColor2, ratio);
+		}
+		else if ((color & 0xffffff) == 0) {
+			isBlack = true;
+		}
+		else if ((color & 0xffffff) == 0xffffff) {
+			isWhite = true;
+		}
+		else {
+			hBrush = CreateSolidBrush(color);
+		}
+		if (!isBlack && !isWhite && !hBrush) return false;
+	}
+
+	for (i = 0; i < maxOpaqueRects; i++) {
+		NPDISP_RECT rect;
+		int left;
+		int top;
+		int right;
+		int bottom;
+		if (!npdisp_readMemoryWith32Offset(&rect, selector, offset + i * sizeof(rect), sizeof(rect))) {
+			if (hBrush) DeleteObject(hBrush);
+			return false;
+		}
+		if (npdisp_isNullNewFontRect(&rect)) break;
+		left = max((int)rect.left, 0);
+		top = max((int)rect.top, 0);
+		right = min((int)rect.right, targetWidth);
+		bottom = min((int)rect.bottom, targetHeight);
+		if (hasClip) {
+			left = max(left, (int)clip->left);
+			top = max(top, (int)clip->top);
+			right = min(right, (int)clip->right);
+			bottom = min(bottom, (int)clip->bottom);
+		}
+		TRACEOUT(("NewFont opaque[%d]=(%d,%d)-(%d,%d) clipped=(%d,%d)-(%d,%d)", i, rect.left, rect.top, rect.right, rect.bottom, left, top, right, bottom));
+		if (right > left && bottom > top) {
+			if (isBlack) {
+				PatBlt(tgtDC, left, top, right - left, bottom - top, BLACKNESS);
+			}
+			else if (isWhite) {
+				PatBlt(tgtDC, left, top, right - left, bottom - top, WHITENESS);
+			}
+			else {
+				RECT gdiRect = { left, top, right, bottom };
+				FillRect(tgtDC, &gdiRect, hBrush);
+			}
+			if (markDirty) npdisp_setDirty(left, top, right, bottom);
+		}
+	}
+	if (hBrush) DeleteObject(hBrush);
+	if (i == maxOpaqueRects) {
+		TRACEOUT(("NewFont opaque rectangle list has no terminator"));
+		return false;
+	}
+	return true;
+}
+
+static UINT32 npdisp_func_ExtTextOutNewFont(UINT32 lpDestDevAddr, SINT16 wDestXOrg, SINT16 wDestYOrg, UINT32 lpClipRectAddr, UINT32 lpStringAddr, SINT16 wCount, UINT32 lpFontInfoAddr, UINT32 lpDrawModeAddr, UINT32 lpTextXFormAddr, UINT32 lpCharWidthsAddr, UINT32 lpOpaqueRectAddr, UINT16 wOptions, const NPDISP_NEWFONTSEG* nf)
+{
+	int count = wCount < 0 ? -(int)wCount : (int)wCount;
+	UINT16 selector = (UINT16)(lpFontInfoAddr >> 16);
+	UINT16* glyphs = NULL;
+	SINT16* advances = NULL;
+	int* orgX = NULL;
+	int* orgY = NULL;
+	int* glyphW = NULL;
+	int* glyphH = NULL;
+	UINT32* glyphOfs = NULL;
+	UINT8* bits = NULL;
+	UINT8* row = NULL;
+	HBITMAP hBmp = NULL;
+	UINT32 retValue = 0;
+	int i;
+	SINT64 penX = 0;
+	SINT64 minX = 0;
+	SINT64 minY = 0;
+	SINT64 maxX = 0;
+	SINT64 maxY = 0;
+	int drawLeft = 0;
+	int drawTop = 0;
+	int drawRight = 0;
+	int drawBottom = 0;
+	int width = 0;
+	int height = 0;
+	int stride = 0;
+	int maxRowBytes = 0;
+	bool hasGlyphBits = false;
+	NPDISP_DRAWMODE drawMode = { 0 };
+	NPDISP_RECT clip = { 0 };
+	NPDISP_RECT textBounds = { 0 };
+	bool hasClip = lpClipRectAddr != 0;
+	bool isDisplayDevice = npdisp_isDisplayDevice(lpDestDevAddr);
+	NPDISP_PBITMAP_EXT dstPBmp = { 0 };
+	NPDISP_WINDOWS_BMPHDC bmphdc = { 0 };
+	HDC tgtDC = npdispwin.hdc;
+	int targetWidth = npdisp.width;
+	int targetHeight = npdisp.height;
+	bool haveDstPBmp = false;
+
+	if (lpDrawModeAddr && npdisp_readMemory(&drawMode, lpDrawModeAddr, sizeof(drawMode))) {
+		npdisp_AdjustDrawModeColor(&drawMode);
+	}
+	else {
+		drawMode.bkColor = 0xffffff;
+		drawMode.TextColor = 0;
+		drawMode.LbkColor = 0xffffff;
+		drawMode.LTextColor = 0;
+		drawMode.bkMode = 1;
+	}
+	if (hasClip && !npdisp_readMemory(&clip, lpClipRectAddr, sizeof(clip))) goto exit;
+	if (lpTextXFormAddr && npdisp_readMemory(&textBounds, lpTextXFormAddr, sizeof(textBounds))) {
+		TRACEOUT(("NewFont text bounds=(%d,%d)-(%d,%d)", textBounds.left, textBounds.top, textBounds.right, textBounds.bottom));
+	}
+
+	if (!isDisplayDevice && wCount >= 0) {
+		if (!lpDestDevAddr || !npdisp_readPBitmap(&dstPBmp, lpDestDevAddr)) goto exit;
+		haveDstPBmp = true;
+		targetWidth = dstPBmp.bmWidth;
+		targetHeight = dstPBmp.bmHeight;
+		if (targetWidth < 0) targetWidth = -targetWidth;
+		if (targetHeight < 0) targetHeight = -targetHeight;
+		if (targetWidth <= 0 || targetHeight <= 0) goto exit;
+	}
+
+	if (wCount == 0) {
+		if (!isDisplayDevice) {
+			if (!haveDstPBmp || !npdisp_MakeBitmapFromPBITMAP(&dstPBmp, &bmphdc, 0)) goto exit;
+			tgtDC = bmphdc.hdc;
+		}
+		if (!npdisp_fillNewFontOpaqueRects(tgtDC, &drawMode, lpOpaqueRectAddr, &clip, hasClip, targetWidth, targetHeight, isDisplayDevice)) goto exit;
+		if (bmphdc.hdc) npdisp_WriteBitmapToPBITMAP(&dstPBmp, &bmphdc);
+		else if (lpOpaqueRectAddr) npdisp.updated = 1;
+		retValue = 1;
+		goto exit;
+	}
+	if (!nf || !lpStringAddr) goto exit;
+
+	glyphs = (UINT16*)malloc(sizeof(UINT16) * count);
+	advances = (SINT16*)malloc(sizeof(SINT16) * count);
+	orgX = (int*)malloc(sizeof(int) * count);
+	orgY = (int*)malloc(sizeof(int) * count);
+	glyphW = (int*)malloc(sizeof(int) * count);
+	glyphH = (int*)malloc(sizeof(int) * count);
+	glyphOfs = (UINT32*)malloc(sizeof(UINT32) * count);
+	if (!glyphs || !advances || !orgX || !orgY || !glyphW || !glyphH || !glyphOfs) goto exit;
+
+	if (wOptions & NPDISP_ETO_GLYPH_INDEX) {
+		if (!npdisp_readMemory(glyphs, lpStringAddr, sizeof(UINT16) * count)) goto exit;
+	}
+	else {
+		UINT8* indexes = (UINT8*)malloc(count);
+		if (!indexes) goto exit;
+		if (!npdisp_readMemory(indexes, lpStringAddr, count)) { free(indexes); goto exit; }
+		for (i = 0; i < count; i++) glyphs[i] = indexes[i];
+		free(indexes);
+	}
+	if (lpCharWidthsAddr) {
+		if (!npdisp_readMemory(advances, lpCharWidthsAddr, sizeof(SINT16) * count)) goto exit;
+	}
+
+	for (i = 0; i < count; i++) {
+		UINT16 glyph = glyphs[i];
+		UINT64 glyphDataOffset;
+		if (glyph >= nf->nfNumGlyphs) glyph = 0;
+		glyphs[i] = glyph;
+		if (!lpCharWidthsAddr && !npdisp_readNewFontAW(lpFontInfoAddr, nf, glyph, &advances[i])) goto exit;
+		if (!npdisp_readNewFontOffset(lpFontInfoAddr, nf, glyph, &glyphOfs[i])) goto exit;
+		if (nf->nfFormat & NPDISP_NF_LARGE) {
+			NPDISP_LARGEROWGLYPH gh;
+			if (!npdisp_readMemoryWith32Offset(&gh, selector, glyphOfs[i], sizeof(gh))) goto exit;
+			orgX[i] = gh.orgX;
+			orgY[i] = gh.orgY;
+			glyphW[i] = gh.width;
+			glyphH[i] = gh.height;
+			glyphDataOffset = (UINT64)glyphOfs[i] + sizeof(gh);
+		}
+		else {
+			NPDISP_SMALLROWGLYPH gh;
+			if (!npdisp_readMemoryWith32Offset(&gh, selector, glyphOfs[i], sizeof(gh))) goto exit;
+			orgX[i] = gh.orgX;
+			orgY[i] = gh.orgY;
+			glyphW[i] = gh.width;
+			glyphH[i] = gh.height;
+			glyphDataOffset = (UINT64)glyphOfs[i] + sizeof(gh);
+		}
+		if (glyphDataOffset > (UINT64)0xffffffffUL) goto exit;
+		glyphOfs[i] = (UINT32)glyphDataOffset;
+		if (glyphW[i] > 0 && glyphH[i] > 0) {
+			SINT64 left = penX + orgX[i];
+			SINT64 top = -(SINT64)orgY[i];
+			SINT64 right = left + glyphW[i];
+			SINT64 bottom = top + glyphH[i];
+			int rowBytes = (glyphW[i] + 7) / 8;
+			if (rowBytes > maxRowBytes) maxRowBytes = rowBytes;
+			if (!hasGlyphBits) {
+				minX = left;
+				minY = top;
+				maxX = right;
+				maxY = bottom;
+				hasGlyphBits = true;
+			}
+			else {
+				if (left < minX) minX = left;
+				if (top < minY) minY = top;
+				if (right > maxX) maxX = right;
+				if (bottom > maxY) maxY = bottom;
+			}
+		}
+		if (i < 4) TRACEOUT(("NewFont glyph[%d]=%u ofs=%08x org=(%d,%d) size=%dx%d aw=%d", i, glyph, glyphOfs[i], orgX[i], orgY[i], glyphW[i], glyphH[i], advances[i]));
+		penX += advances[i];
+	}
+	if (wCount < 0) {
+		retValue = ((UINT32)(UINT16)penX) | ((UINT32)nf->nfHeight << 16);
+		goto exit;
+	}
+
+	if (hasGlyphBits) {
+		SINT64 left = (SINT64)wDestXOrg + minX;
+		SINT64 top = (SINT64)wDestYOrg + minY;
+		SINT64 right = (SINT64)wDestXOrg + maxX;
+		SINT64 bottom = (SINT64)wDestYOrg + maxY;
+		if (left < 0) left = 0;
+		if (top < 0) top = 0;
+		if (right > targetWidth) right = targetWidth;
+		if (bottom > targetHeight) bottom = targetHeight;
+		if (hasClip) {
+			if (left < clip.left) left = clip.left;
+			if (top < clip.top) top = clip.top;
+			if (right > clip.right) right = clip.right;
+			if (bottom > clip.bottom) bottom = clip.bottom;
+		}
+		if (right > left && bottom > top) {
+			size_t allocSize;
+			int inkPixels = 0;
+			drawLeft = (int)left;
+			drawTop = (int)top;
+			drawRight = (int)right;
+			drawBottom = (int)bottom;
+			width = drawRight - drawLeft;
+			height = drawBottom - drawTop;
+			if (width <= 0 || height <= 0) goto exit;
+			stride = ((width + 15) / 16) * 2;
+			if (stride <= 0) goto exit;
+			allocSize = (size_t)stride * (size_t)height;
+			if (allocSize / (size_t)stride != (size_t)height) goto exit;
+			bits = (UINT8*)calloc(1, allocSize);
+			if (!bits) goto exit;
+			if (maxRowBytes > 0) {
+				row = (UINT8*)malloc(maxRowBytes);
+				if (!row) goto exit;
+			}
+			penX = 0;
+			for (i = 0; i < count; i++) {
+				int rowBytes = (glyphW[i] + 7) / 8;
+				int y;
+				int x;
+				for (y = 0; y < glyphH[i]; y++) {
+					UINT64 rowOffset = (UINT64)glyphOfs[i] + (UINT64)y * rowBytes;
+					if (rowBytes) {
+						if (rowOffset > (UINT64)0xffffffffUL || rowOffset + rowBytes - 1 > (UINT64)0xffffffffUL) goto exit;
+						if (!npdisp_readMemoryWith32Offset(row, selector, (UINT32)rowOffset, rowBytes)) goto exit;
+					}
+					for (x = 0; x < glyphW[i]; x++) {
+						if (row[x >> 3] & (0x80 >> (x & 7))) {
+							SINT64 absX = (SINT64)wDestXOrg + penX + orgX[i] + x;
+							SINT64 absY = (SINT64)wDestYOrg - orgY[i] + y;
+							if (absX >= drawLeft && absX < drawRight && absY >= drawTop && absY < drawBottom) {
+								int dx = (int)(absX - drawLeft);
+								int dy = (int)(absY - drawTop);
+								size_t dstOffset = (size_t)dy * (size_t)stride + (size_t)(dx >> 3);
+								if (dstOffset >= allocSize) goto exit;
+								bits[dstOffset] |= 0x80 >> (dx & 7);
+								inkPixels++;
+							}
+						}
+					}
+				}
+				penX += advances[i];
+			}
+			hBmp = CreateBitmap(width, height, 1, 1, bits);
+			TRACEOUT(("NewFont bitmap size=%dx%d stride=%d ink=%d hBmp=%s", width, height, stride, inkPixels, hBmp ? "OK" : "FAIL"));
+			if (!hBmp) goto exit;
+		}
+	}
+
+	if (!isDisplayDevice) {
+		if (!haveDstPBmp || !npdisp_MakeBitmapFromPBITMAP(&dstPBmp, &bmphdc, 0)) goto exit;
+		tgtDC = bmphdc.hdc;
+	}
+	if (!npdisp_fillNewFontOpaqueRects(tgtDC, &drawMode, lpOpaqueRectAddr, &clip, hasClip, targetWidth, targetHeight, isDisplayDevice)) goto exit;
+
+	if (hBmp) {
+		HDC srcDC = npdispwin.hdcCache[1];
+		HGDIOBJ oldBmp = SelectObject(srcDC, hBmp);
+		TRACEOUT(("NewFont draw org=(%d,%d) bbox=(%d,%d)-(%d,%d) clip=%s(%d,%d)-(%d,%d) draw=(%d,%d)-(%d,%d)", wDestXOrg, wDestYOrg, (int)minX, (int)minY, (int)maxX, (int)maxY, hasClip ? "" : "none ", hasClip ? clip.left : 0, hasClip ? clip.top : 0, hasClip ? clip.right : 0, hasClip ? clip.bottom : 0, drawLeft, drawTop, drawRight, drawBottom));
+		if (drawRight > drawLeft && drawBottom > drawTop) {
+			int savedDC = SaveDC(tgtDC);
+			if (savedDC) {
+				SetBkMode(tgtDC, OPAQUE);
+				SetBkColor(tgtDC, 0x000000);
+				SetTextColor(tgtDC, 0xffffff);
+				BitBlt(tgtDC, drawLeft, drawTop, width, height, srcDC, 0, 0, SRCAND);
+				SetBkColor(tgtDC, drawMode.LTextColor);
+				SetTextColor(tgtDC, 0x000000);
+				BitBlt(tgtDC, drawLeft, drawTop, width, height, srcDC, 0, 0, SRCPAINT);
+				RestoreDC(tgtDC, savedDC);
+			}
+			else {
+				int oldBkMode = GetBkMode(tgtDC);
+				COLORREF oldBkColor = GetBkColor(tgtDC);
+				COLORREF oldTextColor = GetTextColor(tgtDC);
+				SetBkMode(tgtDC, OPAQUE);
+				SetBkColor(tgtDC, 0x000000);
+				SetTextColor(tgtDC, 0xffffff);
+				BitBlt(tgtDC, drawLeft, drawTop, width, height, srcDC, 0, 0, SRCAND);
+				SetBkColor(tgtDC, drawMode.LTextColor);
+				SetTextColor(tgtDC, 0x000000);
+				BitBlt(tgtDC, drawLeft, drawTop, width, height, srcDC, 0, 0, SRCPAINT);
+				SetBkColor(tgtDC, oldBkColor);
+				SetTextColor(tgtDC, oldTextColor);
+				SetBkMode(tgtDC, oldBkMode);
+			}
+			if (isDisplayDevice) npdisp_setDirty(drawLeft, drawTop, drawRight, drawBottom);
+		}
+		SelectObject(srcDC, oldBmp);
+	}
+
+	if (bmphdc.hdc) npdisp_WriteBitmapToPBITMAP(&dstPBmp, &bmphdc);
+	else if (lpOpaqueRectAddr || hBmp) npdisp.updated = 1;
+	retValue = 1;
+
+exit:
+	if (bmphdc.hdc) npdisp_FreeBitmap(&bmphdc);
+	if (hBmp) DeleteObject(hBmp);
+	if (row) free(row);
+	if (bits) free(bits);
+	if (glyphs) free(glyphs);
+	if (advances) free(advances);
+	if (orgX) free(orgX);
+	if (orgY) free(orgY);
+	if (glyphW) free(glyphW);
+	if (glyphH) free(glyphH);
+	if (glyphOfs) free(glyphOfs);
+	return retValue;
+}
+
 static UINT32 npdisp_func_ExtTextOut(UINT32 lpDestDevAddr, SINT16 wDestXOrg, SINT16 wDestYOrg, UINT32 lpClipRectAddr, UINT32 lpStringAddr, SINT16 wCount, UINT32 lpFontInfoAddr, UINT32 lpDrawModeAddr, UINT32 lpTextXFormAddr, UINT32 lpCharWidthsAddr, UINT32 lpOpaqueRectAddr, UINT16 wOptions)
 {
+	NPDISP_NEWFONTSEG newFont;
+	if (npdisp.isWin9x && (wOptions & NPDISP_ETO_BYTE_PACKED)) {
+		if (wCount == 0) {
+			TRACEOUT(("ExtTextOut NewFontSeg fill-only options=%04x", wOptions));
+			return npdisp_func_ExtTextOutNewFont(lpDestDevAddr, wDestXOrg, wDestYOrg, lpClipRectAddr, lpStringAddr, wCount, lpFontInfoAddr, lpDrawModeAddr, lpTextXFormAddr, lpCharWidthsAddr, lpOpaqueRectAddr, wOptions, NULL);
+		}
+		if (!npdisp_isNewFontSeg(lpFontInfoAddr, &newFont)) return 0x80000000L;
+		TRACEOUT(("ExtTextOut NewFontSeg fmt=%04x glyphs=%u options=%04x", newFont.nfFormat, newFont.nfNumGlyphs, wOptions));
+		return npdisp_func_ExtTextOutNewFont(lpDestDevAddr, wDestXOrg, wDestYOrg, lpClipRectAddr, lpStringAddr, wCount, lpFontInfoAddr, lpDrawModeAddr, lpTextXFormAddr, lpCharWidthsAddr, lpOpaqueRectAddr, wOptions, &newFont);
+	}
+	if (npdisp.isWin9x && (wOptions & NPDISP_ETO_BIT_PACKED)) return 0x80000000L;
 	UINT32 retValue = 0;
 	UINT8* lpText;
 	if (wCount != 0) {
@@ -3733,6 +4368,7 @@ static UINT16 npdisp_func_Output(UINT32 lpDestDevAddr, UINT16 wStyle, UINT16 wCo
 			case 1: // OS_POLYBEZIER 
 			{
 				npdisp_func_Output_POLYBEZIER(tgtDC, &bmphdc, &dstPBmp, curPenWidth, curBrush, wCount, lpPointsAddr);
+				retValue = 1;
 				break;
 			}
 			case (0x4000 | 20): // OS_POLYPOLYGON | OS_WINDPOLYGON
@@ -4608,7 +5244,12 @@ static void npdisp_func_WEP()
 	npdisp.active = 0;
 	np2wab.relaystateext = 0;
 	np2wab_setRelayState(np2wab.relaystateint | np2wab.relaystateext);
+	npdisp.mm_ddScanoutOffset = 0;
+	npdisp.mm_ddLastScanoutOffset = 0;
+	npdisp.mm_ddPendingFlipOffset = 0;
+	npdisp.mm_ddFlipPending = 0;
 	npdisp_releaseScreen();
+	npdisp_dd_releaseOffscreenBacking();
 }
 
 
@@ -4640,7 +5281,7 @@ void npdisp_exec(void) {
 		case NPDISP_FUNCORDER_NP2INITIALIZE:
 		{
 			TRACEOUT(("Initialize"));
-			npdisp_func_NP2Initialize(req.parameters.init.dpiX, req.parameters.init.dpiY, req.parameters.init.width, req.parameters.init.height, req.parameters.init.bpp, req.parameters.init.isWin9x, req.parameters.init.bmpinfoAddr, req.parameters.init.beginAccessAddr, req.parameters.init.endAccessAddr, req.parameters.init.dcibufAddr, req.parameters.init.dciBeginAccessAddr, req.parameters.init.dciEndAccessAddr, req.parameters.init.dciDestroySurfaceAddr, req.parameters.init.vramLinearAddr, req.parameters.init.vramPhysicalAddr);
+			npdisp_func_NP2Initialize(req.parameters.init.dpiX, req.parameters.init.dpiY, req.parameters.init.width, req.parameters.init.height, req.parameters.init.bpp, req.parameters.init.isWin9x, req.reserved, req.parameters.init.bmpinfoAddr, req.parameters.init.beginAccessAddr, req.parameters.init.endAccessAddr, req.parameters.init.dcibufAddr, req.parameters.init.dciBeginAccessAddr, req.parameters.init.dciEndAccessAddr, req.parameters.init.dciDestroySurfaceAddr, req.parameters.init.vramLinearAddr, req.parameters.init.vramPhysicalAddr, req.parameters.init.ddCallbacksAddr, req.parameters.init.ddSurfaceCallbacksAddr, req.parameters.init.ddHalInfoAddr, req.parameters.init.ddModeInfoAddr, req.parameters.init.ddPaletteCallbacksAddr, req.parameters.init.ddVidMemAddr);
 			break;
 		}
 		case NPDISP_FUNCORDER_Enable:
@@ -4897,7 +5538,7 @@ void npdisp_exec(void) {
 			//npdisp_func_MEMORYMAP(req.parameters.MEMORYMAP.physicalAddr, req.parameters.MEMORYMAP.linearAddr, req.parameters.MEMORYMAP.farSelector, req.parameters.MEMORYMAP.farOffset);
 			break;
 		}
-		case NPDISP_FUNCORDER_DCI_BEGINACCESS:
+	case NPDISP_FUNCORDER_DCI_BEGINACCESS:
 		{
 			TRACEOUT9(("DCI_BeginAccess"));
 			npdisp_func_DCI_BeginAccess(req.parameters.DCI_BeginAccess.lpDeviceAddr, req.parameters.DCI_BeginAccess.lpRectAddr);
@@ -4951,8 +5592,12 @@ void npdisp_exec(void) {
 void npdisp_exec_fast(void) {
 	UINT16 lastAX = CPU_AX;
 	UINT16 lastDX = CPU_DX;
+	UINT32 lastEAX = CPU_EAX;
+	UINT32 lastEDX = CPU_EDX;
+	UINT32 lastECX = CPU_ECX;
 
 	UINT16 bx = CPU_BX;
+	const bool isDD32Call = (bx == NPDISP_FUNCORDER_DD32_DISPATCH);
 
 	// 関数番号指定
 	npdisp_memory_setFunctionId(bx);
@@ -5086,17 +5731,20 @@ void npdisp_exec_fast(void) {
 		NPDISP_REQUEST_READFROMSTACK(req, parameters.Control, lpInDataAddr);
 		NPDISP_REQUEST_READFROMSTACK(req, parameters.Control, lpOutDataAddr);
 
+
 		TRACEOUT(("Control"));
 		const UINT16 retValue = npdisp_func_Control(req.parameters.Control.lpDestDevAddr, req.parameters.Control.wFunction, req.parameters.Control.lpInDataAddr, req.parameters.Control.lpOutDataAddr);
 
 		if (!npdisp.longjmpnum) {
-			// 戻り値
 			CPU_AX = retValue;
-
-			CPU_CX = 0; // 成功の時CXを0に
+			CPU_DX = (retValue & 0x8000) ? 0xffff : 0x0000;
+			CPU_CX = 0;
+			TRACEOUT11(("NPDISP11 CONTROL_AX ret=%04x ax=%04x dx=%04x",
+				retValue, CPU_AX, CPU_DX));
 		}
 		break;
 	}
+
 	case NPDISP_FUNCORDER_BitBlt:
 	{
 		NPDISP_REQUEST req;
@@ -5583,6 +6231,15 @@ void npdisp_exec_fast(void) {
 		}
 		break;
 	}
+	case NPDISP_FUNCORDER_DD32_DISPATCH:
+	{
+		const UINT32 retValue = npdisp_dd_dispatchBridge(CPU_EDI, CPU_ESI);
+		if (!npdisp.longjmpnum) {
+			CPU_EAX = retValue;
+			CPU_ECX = 0;
+		}
+		break;
+	}
 	case NPDISP_FUNCORDER_DCI_BEGINACCESS:
 	{
 		NPDISP_REQUEST req;
@@ -5664,9 +6321,16 @@ void npdisp_exec_fast(void) {
 		TRACEOUTF(("EXCEPTION!!!!!!"));
 
 		// 戻れるようにレジスタセット
-		CPU_AX = lastAX;
-		CPU_DX = lastDX;
-		CPU_CX = (NPDISP_EXEC_MAGIC & 0xffff);
+		if (isDD32Call) {
+			CPU_EAX = lastEAX;
+			CPU_EDX = lastEDX;
+			CPU_ECX = lastECX;
+		}
+		else {
+			CPU_AX = lastAX;
+			CPU_DX = lastDX;
+			CPU_CX = (NPDISP_EXEC_MAGIC & 0xffff);
+		}
 
 		int longjmpnum = npdisp.longjmpnum;
 		siglongjmp(exec_1step_jmpbuf, longjmpnum); // 転送
@@ -5789,7 +6453,7 @@ int npdisp_drawGraphic(void)
 			bool intersects = npdisp.cursorX - npdisp.cursorHotSpotX < npdispwin.dirtyRect.right &&
 				npdispwin.dirtyRect.left < npdisp.cursorX - npdisp.cursorHotSpotX + npdisp.cursorWidth &&
 				npdisp.cursorY - npdisp.cursorHotSpotY < npdispwin.dirtyRect.bottom &&
-				npdispwin.dirtyRect.top < npdisp.cursorHotSpotY + npdisp.cursorHeight;
+				npdispwin.dirtyRect.top < npdisp.cursorY - npdisp.cursorHotSpotY + npdisp.cursorHeight;
 			if (intersects) {
 				npdisp_setDirty(
 					npdisp.cursorX - npdisp.cursorHotSpotX,
@@ -5812,7 +6476,34 @@ int npdisp_drawGraphic(void)
 			SetDIBColorTable(npdispwin.hdc, 0, 256, (RGBQUAD*)npdisp_palette_rgb256);
 			palChanged = true;
 		}
-		BitBlt(hdc, npdispwin.dirtyRect.left, npdispwin.dirtyRect.top, npdispwin.dirtyRect.right - npdispwin.dirtyRect.left, npdispwin.dirtyRect.bottom - npdispwin.dirtyRect.top, npdispwin.hdc, npdispwin.dirtyRect.left, npdispwin.dirtyRect.top, SRCCOPY);
+		UINT8* scanoutBase = npdisp_ddraw_getScanoutHostBase();
+		if (!scanoutBase || npdisp.mm_ddScanoutOffset == 0) {
+			// 普通の画面転送
+			BitBlt(hdc, npdispwin.dirtyRect.left, npdispwin.dirtyRect.top,
+				npdispwin.dirtyRect.right - npdispwin.dirtyRect.left,
+				npdispwin.dirtyRect.bottom - npdispwin.dirtyRect.top,
+				npdispwin.hdc, npdispwin.dirtyRect.left, npdispwin.dirtyRect.top, SRCCOPY);
+		}
+		else {
+			// DirectDraw フリップ画面座標ずらし転送
+			const int bytesPerPixel = (npdispwin.bi.bmiHeader.biBitCount + 7) >> 3;
+			const int copyWidth = npdispwin.dirtyRect.right - npdispwin.dirtyRect.left;
+			const int copyHeight = npdispwin.dirtyRect.bottom - npdispwin.dirtyRect.top;
+			const UINT32 byteOffset = (UINT32)npdispwin.dirtyRect.left * (UINT32)bytesPerPixel;
+			const UINT32 copyBytes = (UINT32)copyWidth * (UINT32)bytesPerPixel;
+			for (int y = npdispwin.dirtyRect.top; y < npdispwin.dirtyRect.bottom; y++) {
+				memcpy((UINT8*)npdispwin.pBitsBltBuf + (UINT32)y * npdispwin.stride + byteOffset,
+					scanoutBase + (UINT32)y * npdispwin.stride + byteOffset, copyBytes);
+			}
+			if (npdisp.usePalette) {
+				SetDIBColorTable(npdispwin.hdcBltBuf, 0, 256, (RGBQUAD*)npdisp_palette_rgb256);
+			}
+			BitBlt(hdc, npdispwin.dirtyRect.left, npdispwin.dirtyRect.top, copyWidth, copyHeight,
+				npdispwin.hdcBltBuf, npdispwin.dirtyRect.left, npdispwin.dirtyRect.top, SRCCOPY);
+			if (npdisp.usePalette) {
+				SetDIBColorTable(npdispwin.hdcBltBuf, 0, 256, (RGBQUAD*)npdisp_palette_gray256);
+			}
+		}
 		//BitBlt(hdc, npdisp.width - 256, 0, npdisp.width, npdisp.height, npdispwin.hdcBltBuf, 0, 0, SRCCOPY);
 		if (npdispwin.hBmpCursorMask && npdispwin.hBmpCursor) {
 			SetTextColor(npdispwin.hdcCursorMask, 0);
@@ -5862,18 +6553,92 @@ int npdisp_drawGraphic(void)
 	return 1;
 }
 
+static void npdisp_createStockGdiObjects(void)
+{
+	UINT32 white = RGB(255, 255, 255);
+	UINT32 black = RGB(0, 0, 0);
+	UINT32 ltgray = RGB(192, 192, 192);
+	UINT32 gray = RGB(128, 128, 128);
+	int brushCount = 6;
+
+	if (npdisp.bpp == 1) {
+		brushCount = 3;
+	}
+	else if (npdisp.bpp == 4 || npdisp.bpp == 8) {
+		brushCount = 5;
+	}
+
+	NPDISP_LPEN pens[3] = {
+		{ NPDISP_PEN_STYLE_SOLID, { 1, 0 }, (SINT32)white },
+		{ NPDISP_PEN_STYLE_SOLID, { 1, 0 }, (SINT32)black },
+		{ NPDISP_PEN_STYLE_NOLINE, { 1, 0 }, (SINT32)black }
+	};
+	NPDISP_LBRUSH brushes[6] = {
+		{ NPDISP_BRUSH_STYLE_SOLID, (SINT32)white, 0, 0 },
+		{ NPDISP_BRUSH_STYLE_SOLID, (SINT32)black, 0, 0 },
+		{ NPDISP_BRUSH_STYLE_HOLLOW, (SINT32)black, 0, 0 },
+		{ NPDISP_BRUSH_STYLE_SOLID, (SINT32)ltgray, 0, 0 },
+		{ NPDISP_BRUSH_STYLE_SOLID, (SINT32)gray, 0, 0 },
+		{ NPDISP_BRUSH_STYLE_SOLID, (SINT32)RGB(64, 64, 64), 0, 0 }
+	};
+
+	for (int i = 0; i < 3; ++i) {
+		auto it = npdispwin.pens.begin();
+		for (; it != npdispwin.pens.end(); ++it) {
+			if (npdisp_isSameLogicalPen(&it->second.lpen, &pens[i])) break;
+		}
+		if (it != npdispwin.pens.end()) {
+			it->second.refCount = UINT_MAX;
+		}
+		else {
+			NPDISP_HOSTPEN hostpen = { 0 };
+			hostpen.lpen = pens[i];
+			npdisp_createPen(&hostpen);
+			hostpen.refCount = UINT_MAX;
+			while (npdispwin.pensIdx == 0 || npdispwin.pens.find(npdispwin.pensIdx) != npdispwin.pens.end()) npdispwin.pensIdx++;
+			npdispwin.pens[npdispwin.pensIdx++] = hostpen;
+			if (npdispwin.pensIdx == 0) npdispwin.pensIdx = 1;
+		}
+	}
+
+	for (int i = 0; i < brushCount; ++i) {
+		auto it = npdispwin.brushes.begin();
+		for (; it != npdispwin.brushes.end(); ++it) {
+			if (npdisp_isSameLogicalBrush(&it->second.lbrush, &brushes[i])) break;
+		}
+		if (it != npdispwin.brushes.end()) {
+			it->second.refCount = UINT_MAX;
+		}
+		else {
+			NPDISP_HOSTBRUSH hostbrush = { 0 };
+			hostbrush.lbrush = brushes[i];
+			npdisp_createBrush(&hostbrush);
+			hostbrush.refCount = UINT_MAX;
+			while (npdispwin.brushesIdx == 0 || npdispwin.brushes.find(npdispwin.brushesIdx) != npdispwin.brushes.end()) npdispwin.brushesIdx++;
+			npdispwin.brushes[npdispwin.brushesIdx++] = hostbrush;
+			if (npdispwin.brushesIdx == 0) npdispwin.brushesIdx = 1;
+		}
+	}
+}
+
 static void npdisp_releaseScreen(bool resize) {
 	if (npdispwin.hdc) {
 		SelectObject(npdispwin.hdc, npdispwin.hOldPen);
 		SelectObject(npdispwin.hdc, npdispwin.hOldBrush);
 		if (!resize) {
 			for (auto it = npdispwin.pens.begin(); it != npdispwin.pens.end(); ++it) {
-				if (it->second.pen) DeleteObject(it->second.pen);
+				if (it->second.pen) {
+					npdisp_deselectGdiObject(it->second.pen, OBJ_PEN, GetStockObject(NULL_PEN));
+					DeleteObject(it->second.pen);
+				}
 			}
 			npdispwin.pens.clear();
 			npdispwin.pensIdx = 1;
 			for (auto it = npdispwin.brushes.begin(); it != npdispwin.brushes.end(); ++it) {
-				if (it->second.brs) DeleteObject(it->second.brs);
+				if (it->second.brs) {
+					npdisp_deselectGdiObject(it->second.brs, OBJ_BRUSH, GetStockObject(NULL_BRUSH));
+					DeleteObject(it->second.brs);
+				}
 			}
 			npdispwin.brushes.clear();
 			npdispwin.brushesIdx = 1;
@@ -6048,7 +6813,12 @@ static void npdisp_createScreen(bool resize) {
 		return;
 	}
 	npdispwin.hBmpBltBuf = CreateDIBSection(hdcScreen, (BITMAPINFO*)&npdispwin.bi, DIB_RGB_COLORS, &npdispwin.pBitsBltBuf, NULL, 0);
-	if (!npdispwin.hBmpBltBuf) {
+	if (!npdispwin.hBmpBltBuf || !npdispwin.pBitsBltBuf) {
+		if (npdispwin.hBmpBltBuf) {
+			DeleteObject(npdispwin.hBmpBltBuf);
+			npdispwin.hBmpBltBuf = NULL;
+		}
+		npdispwin.pBitsBltBuf = NULL;
 		DeleteObject(npdispwin.hBmpShadow);
 		npdispwin.hBmpShadow = NULL;
 		DeleteObject(npdispwin.hBmp);
@@ -6074,7 +6844,7 @@ static void npdisp_createScreen(bool resize) {
 	memset(npdispwin.pBits, 0x00, npdispwin.stride * height);
 
 	npdisp.mm_screenPtr = (UINT8*)npdispwin.pBits;
-	npdisp.mm_screenSize = width * npdispwin.stride;
+	npdisp.mm_screenSize = height * npdispwin.stride;
 
 	npdispwin.hOldBmp = SelectObject(npdispwin.hdc, npdispwin.hBmp);
 	npdispwin.hOldBmpShadow = SelectObject(npdispwin.hdcShadow, npdispwin.hBmpShadow);
@@ -6209,6 +6979,7 @@ void npdisp_reset(const NP2CFG* pConfig)
 	npdisp_palette_makeTable();
 
 	npdisp_releaseScreen();
+	npdisp_dd_releaseOffscreenBacking();
 
 	npdisp.ioenabled = pConfig->usenpdisp;
 	npdisp.enabled = 0;
@@ -6233,7 +7004,20 @@ void npdisp_reset(const NP2CFG* pConfig)
 	npdisp.mm_dciBeginAccessAddr = 0;
 	npdisp.mm_dciEndAccessAddr = 0;
 	npdisp.mm_dciDestroySurfaceAddr = 0;
+	npdisp.mm_ddCallbacksAddr = 0;
+	npdisp.mm_ddSurfaceCallbacksAddr = 0;
+	npdisp.mm_ddPaletteCallbacksAddr = 0;
+	npdisp.mm_ddHalInfoAddr = 0;
+	npdisp.mm_ddModeInfoAddr = 0;
+	npdisp.mm_ddVidMemAddr = 0;
+	npdisp.mm_ddOffscreenPtr = NULL;
+	npdisp.mm_ddOffscreenSize = 0;
+	npdisp.mm_ddScanoutOffset = 0;
+	npdisp.mm_ddLastScanoutOffset = 0;
+	npdisp.mm_ddPendingFlipOffset = 0;
+	npdisp.mm_ddFlipPending = 0;
 	npdisp.mm_vramLinearAddr = 0;
+	npdisp.mm_vramSelector = 0;
 	npdisp.mm_dciEnable = 0;
 
 	npdispwin.pensIdx = 1;
@@ -6288,6 +7072,7 @@ void npdisp_unbind(void)
 void npdisp_shutdown()
 {
 	npdisp_releaseScreen();
+	npdisp_dd_releaseOffscreenBacking();
 	npdispcs_shutdown();
 }
 
@@ -6295,7 +7080,7 @@ void npdisp_shutdown()
 
 int npdisp_sfsave(STFLAGH sfh, const SFENTRY* tbl)
 {
-	int	sfVersion = 2;
+	int	sfVersion = 7;
 	int	ret = STATFLAG_SUCCESS;
 
 	ret = statflag_write(sfh, &sfVersion, sizeof(int));
@@ -6306,8 +7091,13 @@ int npdisp_sfsave(STFLAGH sfh, const SFENTRY* tbl)
 	// 必要な範囲で記録
 	// 共通
 	UINT32 npdisplen = sizeof(npdisp);
+	NPDISP stateNpdisp = npdisp;
+	// Host virtual addresses are process-local and must never be restored from a
+	// state file.  Keep the legacy raw prefix intact but clear the new backing
+	// pointer; the v3 sparse payload below restores the actual offscreen bytes.
+	stateNpdisp.mm_ddOffscreenPtr = NULL;
 	buffer.insert(buffer.end(), (UINT8*)(&npdisplen), (UINT8*)(&npdisplen + 1));
-	buffer.insert(buffer.end(), (UINT8*)(&npdisp), (UINT8*)(&npdisp + 1));
+	buffer.insert(buffer.end(), (UINT8*)(&stateNpdisp), (UINT8*)(&stateNpdisp + 1));
 
 	// WAB有効なら保存
 	if (npdisp.enabled) {
@@ -6398,6 +7188,41 @@ int npdisp_sfsave(STFLAGH sfh, const SFENTRY* tbl)
 			buffer.insert(buffer.end(), (UINT8*)&pBitsSize, (UINT8*)(&pBitsSize + 1));
 			buffer.insert(buffer.end(), pBitsUINT8, pBitsUINT8 + pBitsSize);
 		}
+
+		// ステートver.3以降はDirectDrawオフスクリーンVRAMを64KiBページ単位で保存する。
+		// 全0ページは省略し、host backingの実データだけを追加保存する。
+		if (npdisp.version >= 12 && npdisp.isWin9x && npdisp.mm_ddVidMemAddr) {
+			const UINT32 ddvramMagic = 0x31564444UL; // "DDV1"
+			const UINT32 pageSize = 0x00010000UL;
+			const UINT32 pageCount = NPDISP_DD_OFFSCREEN_SIZE / pageSize;
+			const UINT32 bitmapBytes = (pageCount + 7) / 8;
+			std::vector<UINT8> pageMap(bitmapBytes, 0);
+			static const UINT8 zeroPage[0x10000] = { 0 };
+
+			if (npdisp.mm_ddOffscreenPtr && npdisp.mm_ddOffscreenSize == NPDISP_DD_OFFSCREEN_SIZE) {
+				for (UINT32 page = 0; page < pageCount; ++page) {
+					const UINT8* src = npdisp.mm_ddOffscreenPtr + page * pageSize;
+					if (memcmp(src, zeroPage, pageSize) != 0) {
+						pageMap[page >> 3] |= (UINT8)(1U << (page & 7));
+					}
+				}
+			}
+
+			buffer.insert(buffer.end(), (const UINT8*)&ddvramMagic, (const UINT8*)(&ddvramMagic + 1));
+			buffer.insert(buffer.end(), (const UINT8*)&pageSize, (const UINT8*)(&pageSize + 1));
+			buffer.insert(buffer.end(), (const UINT8*)&pageCount, (const UINT8*)(&pageCount + 1));
+			buffer.insert(buffer.end(), (const UINT8*)&bitmapBytes, (const UINT8*)(&bitmapBytes + 1));
+			buffer.insert(buffer.end(), pageMap.begin(), pageMap.end());
+
+			if (npdisp.mm_ddOffscreenPtr && npdisp.mm_ddOffscreenSize == NPDISP_DD_OFFSCREEN_SIZE) {
+				for (UINT32 page = 0; page < pageCount; ++page) {
+					if (pageMap[page >> 3] & (1U << (page & 7))) {
+						const UINT8* src = npdisp.mm_ddOffscreenPtr + page * pageSize;
+						buffer.insert(buffer.end(), src, src + pageSize);
+					}
+				}
+			}
+		}
 	}
 
 	// 書き込み
@@ -6420,6 +7245,7 @@ int npdisp_sfload(STFLAGH sfh, const SFENTRY* tbl)
 
 	// 画面など解放
 	npdisp_releaseScreen();
+	npdisp_dd_releaseOffscreenBacking();
 
 	ret = statflag_read(sfh, &sfVersion, sizeof(sfVersion));
 	if (ret != STATFLAG_SUCCESS) return ret;
@@ -6435,13 +7261,15 @@ int npdisp_sfload(STFLAGH sfh, const SFENTRY* tbl)
 	// 共通
 	if (sfVersion == 1) {
 		// ステートセーブ ver.1
-		ret = statflag_read(sfh, &npdisp, sizeof(npdisp) - 1);
+		const UINT32 legacyV1Size = (UINT32)offsetof(NPDISP, mm_ddVidMemAddr) - 1;
+		memset(&npdisp, 0, sizeof(npdisp));
+		ret = statflag_read(sfh, &npdisp, legacyV1Size);
 		if (ret != STATFLAG_SUCCESS) return ret;
-		readBufLen += sizeof(npdisp) - 1;
+		readBufLen += legacyV1Size;
 		npdisp.active = npdisp.enabled;
 	}
-	else {
-		// ステートセーブ ver.2以降
+	else if ((sfVersion >= 2 && sfVersion <= 4) || sfVersion == 7) {
+		// ステートセーブ ver.2～4または現行ver.7
 		UINT32 npdisplen = 0;
 		ret = statflag_read(sfh, &npdisplen, sizeof(npdisplen));
 		readBufLen += sizeof(npdisplen);
@@ -6451,12 +7279,24 @@ int npdisp_sfload(STFLAGH sfh, const SFENTRY* tbl)
 		ret = statflag_read(sfh, &(temp[0]), npdisplen);
 		if (ret != STATFLAG_SUCCESS) return ret;
 		readBufLen += npdisplen;
+		memset(&npdisp, 0, sizeof(npdisp));
 		memcpy(&npdisp, &(temp[0]), min(sizeof(npdisp), npdisplen));
 	}
+	else {
+		return STATFLAG_FAILURE;
+	}
+	// ステートロード後はhost pointerを再利用せず、オフスクリーン領域を再生成する。
+	npdisp.mm_ddOffscreenPtr = NULL;
+	npdisp.mm_ddOffscreenSize = 0;
+	if (npdisp.version >= 12 && npdisp.enabled && npdisp.isWin9x && !npdisp_dd_ensureOffscreenBacking()) {
+		return STATFLAG_FAILURE;
+	}
+
+	// WinG特殊DDBはphysical object内のheaderとddbKeyだけで識別する。
 
 	// WAB有効なら読み込み
 	if (npdisp.enabled) {
-		if (sfVersion == 1 || sfVersion == 2)
+		if ((sfVersion >= 1 && sfVersion <= 4) || sfVersion == 7)
 		{
 			// 画面など生成
 			npdisp_createScreen();
@@ -6627,7 +7467,7 @@ int npdisp_sfload(STFLAGH sfh, const SFENTRY* tbl)
 				if (ret != STATFLAG_SUCCESS) goto error;
 				readBufLen += sizeof(pen);
 				pen.pen = NULL; // statロードなので無効
-				npdisp_createPen(&pen); // ブラシ生成
+				npdisp_createPen(&pen); // ペン生成
 				npdispwin.pens[key] = pen;
 
 			}
@@ -6652,6 +7492,8 @@ int npdisp_sfload(STFLAGH sfh, const SFENTRY* tbl)
 				npdisp_createBrush(&brush); // ブラシ生成
 				npdispwin.brushes[key] = brush;
 			}
+
+			npdisp_createStockGdiObjects();
 
 			if (readBufLen < statLen) {
 				// ビットマップ
@@ -6693,7 +7535,79 @@ int npdisp_sfload(STFLAGH sfh, const SFENTRY* tbl)
 				}
 			}
 
+
+			if (sfVersion >= 3 && readBufLen < statLen) {
+				UINT32 ddvramMagic = 0;
+				UINT32 pageSize = 0;
+				UINT32 pageCount = 0;
+				UINT32 bitmapBytes = 0;
+				const UINT32 expectedPageSize = 0x00010000UL;
+				const UINT32 expectedPageCount = NPDISP_DD_OFFSCREEN_SIZE / expectedPageSize;
+				const UINT32 expectedBitmapBytes = (expectedPageCount + 7) / 8;
+
+				ret = statflag_read(sfh, &ddvramMagic, sizeof(ddvramMagic));
+				if (ret != STATFLAG_SUCCESS) goto error;
+				readBufLen += sizeof(ddvramMagic);
+				ret = statflag_read(sfh, &pageSize, sizeof(pageSize));
+				if (ret != STATFLAG_SUCCESS) goto error;
+				readBufLen += sizeof(pageSize);
+				ret = statflag_read(sfh, &pageCount, sizeof(pageCount));
+				if (ret != STATFLAG_SUCCESS) goto error;
+				readBufLen += sizeof(pageCount);
+				ret = statflag_read(sfh, &bitmapBytes, sizeof(bitmapBytes));
+				if (ret != STATFLAG_SUCCESS) goto error;
+				readBufLen += sizeof(bitmapBytes);
+
+				if (ddvramMagic != 0x31564444UL ||
+					pageSize != expectedPageSize ||
+					pageCount != expectedPageCount ||
+					bitmapBytes != expectedBitmapBytes ||
+					readBufLen + (int)bitmapBytes > statLen) {
+					goto error;
+				}
+
+				std::vector<UINT8> pageMap(bitmapBytes, 0);
+				ret = statflag_read(sfh, &(pageMap[0]), bitmapBytes);
+				if (ret != STATFLAG_SUCCESS) goto error;
+				readBufLen += bitmapBytes;
+
+				if (!npdisp.mm_ddOffscreenPtr && !npdisp_dd_ensureOffscreenBacking()) goto error;
+				memset(npdisp.mm_ddOffscreenPtr, 0, NPDISP_DD_OFFSCREEN_SIZE);
+				for (UINT32 page = 0; page < pageCount; ++page) {
+					if (pageMap[page >> 3] & (1U << (page & 7))) {
+						if (readBufLen + (int)pageSize > statLen) goto error;
+						ret = statflag_read(sfh, npdisp.mm_ddOffscreenPtr + page * pageSize, pageSize);
+						if (ret != STATFLAG_SUCCESS) goto error;
+						readBufLen += pageSize;
+					}
+				}
+				TRACEOUT11(("NPDISP11 DD_VRAM_STATE load pages=%u bytes=%u",
+					pageCount, NPDISP_DD_OFFSCREEN_SIZE));
+			}
+
 			if (readBufLen != statLen) goto error;
+
+			// Saved scanout positions are aperture-relative offsets.  Restore only
+			// full-screen allocations that still fit the current offscreen backing.
+			// Older states do not contain these appended fields and therefore use zero.
+			if (sfVersion < 4 || npdisp.version < 13) {
+				npdisp.mm_ddScanoutOffset = 0;
+				npdisp.mm_ddLastScanoutOffset = 0;
+				npdisp.mm_ddPendingFlipOffset = 0;
+				npdisp.mm_ddFlipPending = 0;
+			}
+			else {
+				if (npdisp.mm_ddScanoutOffset && !npdisp_ddraw_isScanoutOffsetValid(npdisp.mm_ddScanoutOffset)) {
+					npdisp.mm_ddScanoutOffset = 0;
+				}
+				if (npdisp.mm_ddLastScanoutOffset && !npdisp_ddraw_isScanoutOffsetValid(npdisp.mm_ddLastScanoutOffset)) {
+					npdisp.mm_ddLastScanoutOffset = 0;
+				}
+				if (npdisp.mm_ddFlipPending && !npdisp_ddraw_isScanoutOffsetValid(npdisp.mm_ddPendingFlipOffset)) {
+					npdisp.mm_ddPendingFlipOffset = 0;
+					npdisp.mm_ddFlipPending = 0;
+				}
+			}
 
 			// 読み込みバッファリセット
 			int longjmpnum = npdisp.longjmpnum;
@@ -6719,6 +7633,7 @@ int npdisp_sfload(STFLAGH sfh, const SFENTRY* tbl)
 error:
 
 	npdisp_releaseScreen();
+	npdisp_dd_releaseOffscreenBacking();
 	return(STATFLAG_FAILURE);
 }
 

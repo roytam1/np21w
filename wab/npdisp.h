@@ -7,6 +7,11 @@
 
 #if defined(SUPPORT_WAB_NPDISP)
 
+#define NPDISP_DD_PRIMARY_REGION_SIZE  0x04000000UL
+#define NPDISP_DD_OFFSCREEN_OFFSET     0x04000000UL
+#define NPDISP_DD_OFFSCREEN_SIZE       0x0c000000UL
+#define NPDISP_DD_APERTURE_SIZE        0x10000000UL
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -61,9 +66,29 @@ extern "C" {
 		UINT32 mm_dciDestroySurfaceAddr;
 		UINT32 mm_vramLinearAddr;
 		UINT32 mm_dciEnable;
+		UINT32 mm_ddCallbacksAddr;
+		UINT32 mm_ddSurfaceCallbacksAddr;
+		UINT32 mm_ddPaletteCallbacksAddr;
+		UINT32 mm_ddHalInfoAddr;
+		UINT32 mm_ddModeInfoAddr;
+
+		// protocol v8以降: DCIからVRAMを参照するためのWin9x selector。
+		UINT16 mm_vramSelector;
+
+		// protocol v12以降: 256MiBのDirectDraw apertureとオフスクリーン領域。
+		UINT32 mm_ddVidMemAddr;
+		UINT8* mm_ddOffscreenPtr;
+		UINT32 mm_ddOffscreenSize;
+		UINT32 mm_ddScanoutOffset;
+		UINT32 mm_ddLastScanoutOffset;
+		UINT32 mm_ddPendingFlipOffset;
+		UINT32 mm_ddFlipPending;
 	} NPDISP;
 
 	extern NPDISP		npdisp;
+
+	void npdispcs_enter_criticalsection(void);
+	void npdispcs_leave_criticalsection(void);
 
 	void npdisp_setDirty(int x1, int y1, int x2, int y2);
 	void npdisp_setDirtyAll(void);

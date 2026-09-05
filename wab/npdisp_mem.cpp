@@ -269,6 +269,20 @@ static UINT32 selector_to_linear(UINT16 selector, UINT32 offset, UINT32 *lplAddr
 	return 0;
 }
 
+// Converts a Win16 selector:offset pointer to the flat linear address
+// seen by Win32 code in the same Windows 9x address space.
+int npdisp_memory_getLinearAddress(UINT32 lpAddr, UINT32 *linearAddr)
+{
+	UINT16 selector;
+	UINT16 offset;
+
+	if (!linearAddr) return 0;
+	selector = (UINT16)(lpAddr >> 16);
+	offset = (UINT16)(lpAddr & 0xffff);
+	if (!selector) return 0;
+	return selector_to_linear(selector, offset, linearAddr) ? 1 : 0;
+}
+
 /// <summary>
 /// 指定したリニアアドレスを読み取って先読みバッファへ送る。先にページフォールトの発生を確認するために使用。
 /// </summary>
@@ -579,6 +593,21 @@ int npdisp_readMemory(void* dst, UINT32 lpAddr, int size)
 	}
 	return 0;
 }
+// Reads a flat Win32 linear address without interpreting its high word as a selector.
+// DirectDraw 32-bit HAL callback structures use this address form.
+int npdisp_readLinearMemory(void* dst, UINT32 linearAddr, int size)
+{
+	if (!linearAddr || !dst || size <= 0 || npdisp.longjmpnum) return 0;
+	return npdisp_readLMemory(linearAddr, dst, (UINT32)size);
+}
+
+// Writes a flat Win32 linear address without selector translation.
+int npdisp_writeLinearMemory(void* src, UINT32 linearAddr, int size)
+{
+	if (!linearAddr || !src || size <= 0 || npdisp.longjmpnum) return 0;
+	return npdisp_writeLMemory(linearAddr, src, (UINT32)size);
+}
+
 int npdisp_writeMemoryWith32Offset(void* src, UINT16 selector, UINT32 offset, int size)
 {
 	UINT16 seg = selector;
@@ -696,11 +725,15 @@ bool npdisp_isDisplayDevice(UINT32 lpAddr)
 {
 	UINT16 type = npdisp_readMemory16(lpAddr);
 	if (type == NPDISP_DEVTYPE_DIBENG) {
-		// DIBエンジンかもしれない
+		// DIBエンジン or 特殊DDBかもしれない
 		NPDISP_PDEVICE pdev;
 		if (npdisp_readMemory(&pdev, lpAddr, sizeof(NPDISP_PDEVICE))) {
 			if ((pdev.dibe.deFlags & 0x25) == 0x04) { // NOT_FRAMEBUFFER, MINIDRIVER, SELECTEDDIBフラグを見る
 				// SELECTEDDIBだけ立っていたらDIBセクション
+				return false;
+			}
+			if (npdisp_isSpecialDDB((NPDISP_PBITMAP_EXT*)&pdev)) {
+				// 特殊DDB
 				return false;
 			}
 		}
@@ -715,6 +748,10 @@ bool npdisp_isDisplayDevice(UINT32 lpAddr)
 	return false;
 }
 
+bool npdisp_isSpecialDDB(NPDISP_PBITMAP_EXT* bmp) {
+	return ((NPDISP_DIBENGINE*)bmp)->deFlags == NPDISP_WING_DDB_DEFLAGS;
+}
+
 UINT32 npdisp_readPBitmap(NPDISP_PBITMAP_EXT *bmp, UINT32 lpAddr, bool useSelected)
 {
 	UINT16 type = npdisp_readMemory16(lpAddr);
@@ -724,21 +761,32 @@ UINT32 npdisp_readPBitmap(NPDISP_PBITMAP_EXT *bmp, UINT32 lpAddr, bool useSelect
 	else if (type == NPDISP_DEVTYPE_DIBENG) {
 		// 必要情報はNPDISP_PBITMAP_EXTの範囲に収まるので、その範囲で読む
 		npdisp_readMemory(bmp, lpAddr, sizeof(NPDISP_PBITMAP_EXT));
+		if (npdisp_isSpecialDDB(bmp)) {
+			// 特殊DDBの場合、後ろに画素データが格納されている
+			const NPDISP_DIBENGINE* dibe = (const NPDISP_DIBENGINE*)bmp;
+			const UINT32 bitsAddr = ((UINT32)dibe->deBitsSelector << 16) | (dibe->deBitsOffset & 0xffff);
+			bmp->bmType = NPDISP_DEVTYPE_DDB; // 通常DDBとして見せる
+			bmp->bmBitsAddr = bitsAddr;
+		}
 	}
 	else {
 		npdisp_readMemory(bmp, lpAddr, sizeof(NPDISP_PBITMAP));
 		bmp->ddbmpKey = 0;
 	}
-	//if (bmp->bmWidth == 413 && (bmp->bmHeight == 146 || bmp->bmHeight == -146)) {
-	//	bmp->ddbmpKey = bmp->ddbmpKey;
-	//}
 	return npdisp.longjmpnum == 0;
 }
 
 UINT32 npdisp_writePBitmap(NPDISP_PBITMAP_EXT* bmp, UINT32 lpAddr)
 {
 	if (bmp->bmType == NPDISP_DEVTYPE_DDB) {
-		npdisp_writeMemory(bmp, lpAddr, sizeof(NPDISP_PBITMAP_EXT));
+		if (npdisp_isSpecialDDB(bmp)) {
+			bmp->bmType = NPDISP_DEVTYPE_DIBENG; // 特殊DDBとして書き込み
+			npdisp_writeMemory(bmp, lpAddr, sizeof(NPDISP_PBITMAP_EXT));
+			bmp->bmType = NPDISP_DEVTYPE_DDB; // 戻す
+		}
+		else {
+			npdisp_writeMemory(bmp, lpAddr, sizeof(NPDISP_PBITMAP_EXT));
+		}
 	}
 	else if (bmp->bmType == NPDISP_DEVTYPE_DIBENG) {
 		// 必要情報はNPDISP_PBITMAP_EXTの範囲に収まるので、その範囲で書く
@@ -758,7 +806,14 @@ void npdisp_PreloadBitmapFromPBITMAP(NPDISP_PBITMAP_EXT* srcPBmp, int dcIdx, int
 
 	// DDBitmapキーが有効か確認
 	if (srcPBmp->bmType == NPDISP_DEVTYPE_DDB && srcPBmp->ddbmpKey) {
-		// DDBitmapを返すので読み込み不要
+		// DDBitmapを返すので通常の画素読み込みは不要
+		if (npdisp_isSpecialDDB(srcPBmp)) {
+			// 特殊DDBの場合のみメモリから読み込む
+			const int ddbWidth = srcPBmp->bmWidth;
+			const int ddbHeight = (srcPBmp->bmHeight >= 0) ? srcPBmp->bmHeight : -srcPBmp->bmHeight;
+			const int ddbSize = ddbWidth * ddbHeight * srcPBmp->bmBitsPixel / 8;
+			npdisp_preloadMemory(srcPBmp->bmBitsAddr, ddbSize);
+		}
 		return;
 	}
 
@@ -833,21 +888,20 @@ void npdisp_PreloadBitmapFromPBITMAP(NPDISP_PBITMAP_EXT* srcPBmp, int dcIdx, int
 			// 64KB超え転送
 			UINT16 seg = bmBitsAddrSel;
 			UINT32 ofs = bmBitsAddrOfs;
-			int remain = srcPBmp->bmHeight;
-			int segBeginLine = beginLine / srcPBmp->bmScanSegment * srcPBmp->bmScanSegment;
-			int segEndLine = (endLine + srcPBmp->bmScanSegment - 1) / srcPBmp->bmScanSegment * srcPBmp->bmScanSegment;
-			seg += srcPBmp->bmSegmentIndex * (segBeginLine / srcPBmp->bmScanSegment);
-			remain -= segBeginLine;
-			// 1ラインずつ転送
-			for (j = segBeginLine; j < segEndLine; j += srcPBmp->bmScanSegment) {
-				UINT32 srcOfs = ofs;
-				int looplen = srcPBmp->bmScanSegment < remain ? srcPBmp->bmScanSegment : remain;
-				for (i = 0; i < looplen; i++) {
+			int segmentLine = beginLine / srcPBmp->bmScanSegment * srcPBmp->bmScanSegment;
+			seg += srcPBmp->bmSegmentIndex * (segmentLine / srcPBmp->bmScanSegment);
+			// 各セグメント内でも要求された行範囲だけを先読みする
+			for (j = segmentLine; j < endLine; j += srcPBmp->bmScanSegment) {
+				int segmentEndLine = j + srcPBmp->bmScanSegment;
+				if (segmentEndLine > srcPBmp->bmHeight) segmentEndLine = srcPBmp->bmHeight;
+				int copyBeginLine = beginLine > j ? beginLine : j;
+				int copyEndLine = endLine < segmentEndLine ? endLine : segmentEndLine;
+				UINT32 srcOfs = ofs + srcstride * (copyBeginLine - j);
+				for (i = copyBeginLine; i < copyEndLine; i++) {
 					npdisp_preloadMemoryWith32Offset(seg, srcOfs + beginXbyte, (endXbyte - beginXbyte));
 					srcOfs += srcstride;
 				}
 				seg += srcPBmp->bmSegmentIndex;
-				remain -= looplen;
 			}
 		}
 		else {
@@ -887,6 +941,14 @@ int npdisp_MakeBitmapFromPBITMAP(NPDISP_PBITMAP_EXT* srcPBmp, NPDISP_WINDOWS_BMP
 		if (it != npdispwin.bitmaps.end()) {
 			NPDISP_HOSTBITMAP value = it->second;
 			if (value.bmphdc.hBmp) {
+				// DDBitmapを返すので通常の画素読み込みは不要
+				if (npdisp_isSpecialDDB(srcPBmp)) {
+					// 特殊DDBの場合のみメモリから読み込む
+					const int ddbWidth = srcPBmp->bmWidth;
+					const int ddbHeight = (srcPBmp->bmHeight >= 0) ? srcPBmp->bmHeight : -srcPBmp->bmHeight;
+					const int ddbSize = ddbWidth * ddbHeight * srcPBmp->bmBitsPixel / 8;
+					if (!npdisp_readMemory(value.bmphdc.pBits, srcPBmp->bmBitsAddr, ddbSize)) return 0;
+				}
 				*bmpHDC = value.bmphdc;
 				bmpHDC->hdc = npdispwin.hdcCache[dcIdx];
 				bmpHDC->hOldBmp = SelectObject(bmpHDC->hdc, bmpHDC->hBmp);
@@ -1112,23 +1174,22 @@ int npdisp_MakeBitmapFromPBITMAP(NPDISP_PBITMAP_EXT* srcPBmp, NPDISP_WINDOWS_BMP
 						// 64KB超え転送
 						UINT16 seg = bmBitsAddrSel;
 						UINT32 ofs = bmBitsAddrOfs;
-						int remain = srcPBmp->bmHeight;
-						int segBeginLine = beginLine / srcPBmp->bmScanSegment * srcPBmp->bmScanSegment;
-						int segEndLine = (endLine + srcPBmp->bmScanSegment - 1) / srcPBmp->bmScanSegment * srcPBmp->bmScanSegment;
-						seg += srcPBmp->bmSegmentIndex * (segBeginLine / srcPBmp->bmScanSegment);
-						remain -= segBeginLine;
-						char* dstPtr = (char*)(bmpHDC->pBits) + bmpHDC->stride * segBeginLine;
-						// 1ラインずつ転送
-						for (j = segBeginLine; j < segEndLine; j += srcPBmp->bmScanSegment) {
-							UINT32 srcOfs = ofs;
-							int looplen = srcPBmp->bmScanSegment < remain ? srcPBmp->bmScanSegment : remain;
-							for (i = 0; i < looplen; i++) {
+						int segmentLine = beginLine / srcPBmp->bmScanSegment * srcPBmp->bmScanSegment;
+						seg += srcPBmp->bmSegmentIndex * (segmentLine / srcPBmp->bmScanSegment);
+						// 各セグメント内でも要求された行範囲だけを転送する
+						for (j = segmentLine; j < endLine; j += srcPBmp->bmScanSegment) {
+							int segmentEndLine = j + srcPBmp->bmScanSegment;
+							if (segmentEndLine > srcPBmp->bmHeight) segmentEndLine = srcPBmp->bmHeight;
+							int copyBeginLine = beginLine > j ? beginLine : j;
+							int copyEndLine = endLine < segmentEndLine ? endLine : segmentEndLine;
+							UINT32 srcOfs = ofs + srcstride * (copyBeginLine - j);
+							char* dstPtr = (char*)(bmpHDC->pBits) + bmpHDC->stride * copyBeginLine;
+							for (i = copyBeginLine; i < copyEndLine; i++) {
 								npdisp_readMemoryWith32Offset(dstPtr + beginXbyte, seg, srcOfs + beginXbyte, (endXbyte - beginXbyte));
 								srcOfs += srcstride;
 								dstPtr += bmpHDC->stride;
 							}
 							seg += srcPBmp->bmSegmentIndex;
-							remain -= looplen;
 						}
 					}
 					else {
@@ -1208,7 +1269,14 @@ void npdisp_WriteBitmapToPBITMAP(NPDISP_PBITMAP_EXT* dstPBmp, NPDISP_WINDOWS_BMP
 		TRACEOUT9(("Write DIB %d w=%d, h=%d", dstPBmp->ddbmpKey, bmpHDC->lpbi->bmiHeader.biWidth, bmpHDC->lpbi->bmiHeader.biHeight));
 		// DDBitmapキーが有効か確認
 		if (bmpHDC->isDevMemBmp) {
-			// DDBitmapなのでここで書き戻し不要
+			// 通常のDDBitmapはホストが画素をもつので書き戻し不要
+			if (npdisp_isSpecialDDB(dstPBmp)) {
+				// 特殊DDBの場合のみメモリへ書き戻す
+				const int ddbWidth = dstPBmp->bmWidth;
+				const int ddbHeight = (dstPBmp->bmHeight >= 0) ? dstPBmp->bmHeight : -dstPBmp->bmHeight;
+				const int ddbSize = ddbWidth * ddbHeight * dstPBmp->bmBitsPixel / 8;
+				npdisp_writeMemory(bmpHDC->pBits, dstPBmp->bmBitsAddr, ddbSize);
+			}
 			return;
 		}
 
@@ -1258,23 +1326,22 @@ void npdisp_WriteBitmapToPBITMAP(NPDISP_PBITMAP_EXT* dstPBmp, NPDISP_WINDOWS_BMP
 			// 64KB超え転送
 			UINT16 seg = bmBitsAddrSel;
 			UINT32 ofs = bmBitsAddrOfs;
-			int remain = dstPBmp->bmHeight;
-			int segBeginLine = beginLine / dstPBmp->bmScanSegment * dstPBmp->bmScanSegment;
-			int segEndLine = (endLine + dstPBmp->bmScanSegment - 1) / dstPBmp->bmScanSegment * dstPBmp->bmScanSegment;
-			seg += dstPBmp->bmSegmentIndex * (segBeginLine / dstPBmp->bmScanSegment);
-			remain -= segBeginLine;
-			char* srcPtr = (char*)(bmpHDC->pBits) + bmpHDC->stride * segBeginLine;
-			// 1ラインずつ転送
-			for (j = segBeginLine; j < segEndLine; j += dstPBmp->bmScanSegment) {
-				UINT32 dstOfs = ofs;
-				int looplen = dstPBmp->bmScanSegment < remain ? dstPBmp->bmScanSegment : remain;
-				for (i = 0; i < looplen; i++) {
+			int segmentLine = beginLine / dstPBmp->bmScanSegment * dstPBmp->bmScanSegment;
+			seg += dstPBmp->bmSegmentIndex * (segmentLine / dstPBmp->bmScanSegment);
+			// 各セグメント内でも要求された行範囲だけを書き戻す
+			for (j = segmentLine; j < endLine; j += dstPBmp->bmScanSegment) {
+				int segmentEndLine = j + dstPBmp->bmScanSegment;
+				if (segmentEndLine > dstPBmp->bmHeight) segmentEndLine = dstPBmp->bmHeight;
+				int copyBeginLine = beginLine > j ? beginLine : j;
+				int copyEndLine = endLine < segmentEndLine ? endLine : segmentEndLine;
+				UINT32 dstOfs = ofs + dststride * (copyBeginLine - j);
+				char* srcPtr = (char*)(bmpHDC->pBits) + bmpHDC->stride * copyBeginLine;
+				for (i = copyBeginLine; i < copyEndLine; i++) {
 					npdisp_writeMemoryWith32Offset(srcPtr + beginXbyte, seg, dstOfs + beginXbyte, (endXbyte - beginXbyte));
 					dstOfs += dststride;
 					srcPtr += bmpHDC->stride;
 				}
 				seg += dstPBmp->bmSegmentIndex;
-				remain -= looplen;
 			}
 		}
 		else {

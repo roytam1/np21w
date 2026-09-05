@@ -2415,6 +2415,9 @@
     <ClCompile Include="..\wab\npdisp.cpp">
       <Filter>ソース ファイル\wab</Filter>
     </ClCompile>
+    <ClCompile Include="..\wab\npdisp_dd.cpp">
+      <Filter>ソース ファイル\wab</Filter>
+    </ClCompile>
     <ClCompile Include="..\wab\npdisp_rle.cpp">
       <Filter>ソース ファイル\wab</Filter>
     </ClCompile>
@@ -3639,6 +3642,9 @@
       <Filter>ヘッダー ファイル\win9x\commng\print</Filter>
     </ClInclude>
     <ClInclude Include="..\wab\npdisp.h">
+      <Filter>ヘッダー ファイル\wab</Filter>
+    </ClInclude>
+    <ClInclude Include="..\wab\npdisp_dd.h">
       <Filter>ヘッダー ファイル\wab</Filter>
     </ClInclude>
     <ClInclude Include="..\wab\npdispdef.h">

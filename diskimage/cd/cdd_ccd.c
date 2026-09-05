@@ -14,6 +14,25 @@ static const OEMCHAR str_img[] = OEMTEXT(".img");
 static const OEMCHAR str__mode1[] = OEMTEXT("MODE=1");
 static const OEMCHAR str__mode0[] = OEMTEXT("MODE=0");
 
+//	CCDのIMG内セクタ配置から、CCDで使用する包含端形式のトラック情報を設定する
+static BRESULT setccdtrkinfo(SXSIDEV sxsi, const OEMCHAR *path, _CDTRK *trk, UINT trks) {
+
+	FILEH	fh;
+	long	totals;
+
+	fh = file_open_rb(path);
+	if (fh == FILEH_INVALID) {
+		return(FAILURE);
+	}
+	totals = issec(fh, trk, trks);
+	file_close(fh);
+	if (totals < 0) {
+		return(FAILURE);
+	}
+	sxsi->totals = totals;
+	return(SUCCESS);
+}
+
 #if 0
 "Entry"
 "Point"
@@ -104,7 +123,17 @@ BRESULT openccd(SXSIDEV sxsi, const OEMCHAR *fname) {
 
 	textfile_close(tfh);
 
-	return(setsxsidev(sxsi, path, trk, index));
+	if (setccdtrkinfo(sxsi, path, trk, index) != SUCCESS) {
+		goto openccd_err2;
+	}
+	if (setsxsidev(sxsi, path, trk, index) != SUCCESS) {
+		sxsi->totals = -1;
+		return(FAILURE);
+	}
+
+	//	リードアウトのADR/ControlはCCDのトラック種別とは独立した固定値として返す
+	((CDINFO)sxsi->hdl)->trk[index].adr_ctl = 0x10;
+	return(SUCCESS);
 
 openccd_err1:
 	textfile_close(tfh);

@@ -18,6 +18,8 @@ bool npdisp_dd_rebuildModeDependentHalInfo(UINT32 lpPDeviceAddr);
 bool npdisp_ddraw_isScanoutOffsetValid(UINT32 offset);
 UINT8* npdisp_ddraw_getScanoutHostBase(void);
 void npdisp_dd_vsync(void);
+bool npdisp_dd_overlayVisible(void);
+void npdisp_dd_compositeOverlay(UINT8* dest, UINT32 destStride, int left, int top, int right, int bottom);
 
 UINT16 npdisp_dd_controlCommand(UINT32 lpDestDevAddr, const NPDISP_DCICMD* cmd, UINT32 lpOutDataAddr);
 UINT32 npdisp_dd_dispatchBridge(UINT32 callbackId, UINT32 lpDataAddr);

@@ -36,6 +36,7 @@ REG8 sec2352_read_with_ecc(SXSIDEV sxsi, FILEPOS pos, UINT8 *buf, UINT size);
 REG8 sec2448_read(SXSIDEV sxsi, FILEPOS pos, UINT8 *buf, UINT size);
 REG8 sec_read(SXSIDEV sxsi, FILEPOS pos, UINT8 *buf, UINT size);
 BRESULT cddfile_mapsector(SXSIDEV sxsi, FILEPOS pos, FILEPOS *fpos, UINT16 *sector_size, UINT16 *data_offset, UINT8 *sector_mode, UINT8 *adr_ctl, BOOL *synthetic);
+BRESULT cddfile_makerawsector(FILEPOS lba, UINT8 sector_mode, UINT16 source_sector_size, UINT8 *sector);
 
 BRESULT cd_reopen(SXSIDEV sxsi);
 void cd_close(SXSIDEV sxsi);

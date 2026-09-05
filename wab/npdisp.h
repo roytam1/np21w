@@ -83,6 +83,28 @@ extern "C" {
 		UINT32 mm_ddLastScanoutOffset;
 		UINT32 mm_ddPendingFlipOffset;
 		UINT32 mm_ddFlipPending;
+
+		// DirectDraw overlay state. The surface is identified by aperture offset so state-load does not retain guest pointers.
+		UINT32 mm_ddOverlayVisible;
+		UINT32 mm_ddOverlayOffset;
+		UINT32 mm_ddOverlayWidth;
+		UINT32 mm_ddOverlayHeight;
+		SINT32 mm_ddOverlayPitch;
+		SINT32 mm_ddOverlaySrcLeft;
+		SINT32 mm_ddOverlaySrcTop;
+		SINT32 mm_ddOverlaySrcRight;
+		SINT32 mm_ddOverlaySrcBottom;
+		SINT32 mm_ddOverlayDstLeft;
+		SINT32 mm_ddOverlayDstTop;
+		SINT32 mm_ddOverlayDstRight;
+		SINT32 mm_ddOverlayDstBottom;
+		UINT32 mm_ddOverlayFlags;
+		UINT32 mm_ddOverlayDestKeyLow;
+		UINT32 mm_ddOverlayDestKeyHigh;
+		UINT32 mm_ddOverlaySrcKeyLow;
+		UINT32 mm_ddOverlaySrcKeyHigh;
+		UINT32 mm_ddOverlayFourCC;
+		UINT32 mm_ddOverlayDDFX;
 	} NPDISP;
 
 	extern NPDISP		npdisp;

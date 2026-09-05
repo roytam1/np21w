@@ -4418,22 +4418,22 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInst,
 
 	rand_setseed((unsigned)time(NULL));
 
-//#ifndef ALLOW_MULTIRUN
-//	if ((hWnd = FindWindow(szClassName, NULL)) != NULL) {
-//		ShowWindow(hWnd, SW_RESTORE);
-//		SetForegroundWindow(hWnd);
-//		dosio_term();
-//		return(FALSE);
-//	}
-//#else
-//	if ((hWnd = FindWindow(szClassName, NULL)) != NULL && np2oscfg.resume) {
-//		// レジュームの時は複数起動するとやばいので･･･
-//		ShowWindow(hWnd, SW_RESTORE);
-//		SetForegroundWindow(hWnd);
-//		dosio_term();
-//		return(FALSE);
-//	}
-//#endif
+#ifndef ALLOW_MULTIRUN
+	if ((hWnd = FindWindow(szClassName, NULL)) != NULL) {
+		ShowWindow(hWnd, SW_RESTORE);
+		SetForegroundWindow(hWnd);
+		dosio_term();
+		return(FALSE);
+	}
+#else
+	if ((hWnd = FindWindow(szClassName, NULL)) != NULL && np2oscfg.resume) {
+		// レジュームの時は複数起動するとやばいので･･･
+		ShowWindow(hWnd, SW_RESTORE);
+		SetForegroundWindow(hWnd);
+		dosio_term();
+		return(FALSE);
+	}
+#endif
 
 	g_hInstance = hInstance = LoadExternalResource(hInstance);
 	CWndProc::SetResourceHandle(hInstance);

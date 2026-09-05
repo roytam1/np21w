@@ -308,12 +308,12 @@ void scrnmng_fullscrnmenu(int y) {
 	if(scrnmng_current_drawtype==DRAWTYPE_INVALID) {return;}
 	if(scrnmng_current_drawtype==DRAWTYPE_DIRECT3D){
 		scrnmngD3D_fullscrnmenu(y);
-		np2wab_forceupdate();
+		//np2wab_forceupdate();
 	}else
 #endif
 	{
 		scrnmngDD_fullscrnmenu(y);
-		np2wab_forceupdate();
+		//np2wab_forceupdate();
 	}
 }
 

@@ -109,12 +109,11 @@ BRESULT sxsicd_readraw(SXSIDEV sxsi, FILEPOS pos, void *buf) {
 			return(FAILURE);
 		}
 	}
+	if (synthetic) {
+		return(cddfile_makerawsector(pos, sector_mode, secsize, (UINT8 *)buf));
+	}
 	if ((secsize < 2352) && !isPhysicalCD) {
 		return(FAILURE);
-	}
-	if (synthetic) {
-		memset(buf, 0, 2352);
-		return(SUCCESS);
 	}
 
 	fh = ((CDINFO)sxsi->hdl)->fh;

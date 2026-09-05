@@ -6058,15 +6058,9 @@ int npdisp_drawGraphic(void)
 			palChanged = true;
 		}
 		UINT8* scanoutBase = npdisp_ddraw_getScanoutHostBase();
-		if (!scanoutBase || npdisp.mm_ddScanoutOffset == 0) {
-			// •’Ê‚Ì‰æ–Ê“]‘—
-			BitBlt(hdc, npdispwin.dirtyRect.left, npdispwin.dirtyRect.top,
-				npdispwin.dirtyRect.right - npdispwin.dirtyRect.left,
-				npdispwin.dirtyRect.bottom - npdispwin.dirtyRect.top,
-				npdispwin.hdc, npdispwin.dirtyRect.left, npdispwin.dirtyRect.top, SRCCOPY);
-		}
-		else {
-			// DirectDraw ƒtƒŠƒbƒv‰æ–ÊÀ•W‚¸‚ç‚µ“]‘—
+		const bool overlayVisible = npdisp_dd_overlayVisible();
+		if (scanoutBase && (npdisp.mm_ddScanoutOffset != 0 || overlayVisible)) {
+			// DirectDraw scanout/overlay uses the auxiliary DIB so presentation never modifies the fixed GDI primary.
 			const int bytesPerPixel = (npdispwin.bi.bmiHeader.biBitCount + 7) >> 3;
 			const int copyWidth = npdispwin.dirtyRect.right - npdispwin.dirtyRect.left;
 			const int copyHeight = npdispwin.dirtyRect.bottom - npdispwin.dirtyRect.top;
@@ -6076,14 +6070,20 @@ int npdisp_drawGraphic(void)
 				memcpy((UINT8*)npdispwin.pBitsBltBuf + (UINT32)y * npdispwin.stride + byteOffset,
 					scanoutBase + (UINT32)y * npdispwin.stride + byteOffset, copyBytes);
 			}
-			if (npdisp.usePalette) {
-				SetDIBColorTable(npdispwin.hdcBltBuf, 0, 256, (RGBQUAD*)npdisp_palette_rgb256);
+			if (overlayVisible) {
+				npdisp_dd_compositeOverlay((UINT8*)npdispwin.pBitsBltBuf, npdispwin.stride,
+					npdispwin.dirtyRect.left, npdispwin.dirtyRect.top, npdispwin.dirtyRect.right, npdispwin.dirtyRect.bottom);
 			}
+			if (npdisp.usePalette) SetDIBColorTable(npdispwin.hdcBltBuf, 0, 256, (RGBQUAD*)npdisp_palette_rgb256);
 			BitBlt(hdc, npdispwin.dirtyRect.left, npdispwin.dirtyRect.top, copyWidth, copyHeight,
 				npdispwin.hdcBltBuf, npdispwin.dirtyRect.left, npdispwin.dirtyRect.top, SRCCOPY);
-			if (npdisp.usePalette) {
-				SetDIBColorTable(npdispwin.hdcBltBuf, 0, 256, (RGBQUAD*)npdisp_palette_gray256);
-			}
+			if (npdisp.usePalette) SetDIBColorTable(npdispwin.hdcBltBuf, 0, 256, (RGBQUAD*)npdisp_palette_gray256);
+		}
+		else {
+			BitBlt(hdc, npdispwin.dirtyRect.left, npdispwin.dirtyRect.top,
+				npdispwin.dirtyRect.right - npdispwin.dirtyRect.left,
+				npdispwin.dirtyRect.bottom - npdispwin.dirtyRect.top,
+				npdispwin.hdc, npdispwin.dirtyRect.left, npdispwin.dirtyRect.top, SRCCOPY);
 		}
 		//BitBlt(hdc, npdisp.width - 256, 0, npdisp.width, npdisp.height, npdispwin.hdcBltBuf, 0, 0, SRCCOPY);
 		if (npdispwin.hBmpCursorMask && npdispwin.hBmpCursor) {

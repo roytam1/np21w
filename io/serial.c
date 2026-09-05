@@ -632,6 +632,7 @@ static REG8 IOINPCALL rs232c_i30(UINT port) {
 			if ((cm_rs232c) && (cm_rs232c->read(cm_rs232c, &rs232c_buf[rs232c_buf_wpos]))) {
 				rs232c_buf_wpos = (rs232c_buf_wpos+1) & RS232C_BUFFER_MASK;
 				rs232c.data = rs232c_buf[rs232c_buf_rpos]; // データを1つ取り出し
+				ret = rs232c.data;	// 内容が変わっているので更新
 			}
 		}
 	}
@@ -897,6 +898,11 @@ void rs232c_reset(const NP2CFG *pConfig) {
 	rs232c.dummyinst = 0;
 	rs232c.mul = 10 * 16;
 	rs232c.rawmode = 0;
+	rs232c_buf_rpos = 0;
+	rs232c_buf_wpos = 0;
+	rs232c_removecounter = 0;
+	rs232c_fifo_writebuf_rpos = 0;
+	rs232c_fifo_writebuf_wpos = 0;
 	
 #if defined(SUPPORT_RS232C_FIFO)
 	ZeroMemory(&rs232cfifo, sizeof(rs232cfifo));

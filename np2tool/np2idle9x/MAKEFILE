@@ -1,23 +1,27 @@
 # NP2IDLE - Windows 98 DDK / MASM and Visual C++ 6.0 build
 #
 # Targets:
-#   vxd   - NP2IDLE.VXD       (Win98 DDK/MASM environment)
-#   ctl   - NP2IDLECTL.EXE    (VC6 command prompt)
-#   tray  - NP2IDLETRAY.EXE   (VC6 command prompt)
-#   apps  - both Win32 applications
+#   vxd    - NP2IDLE.VXD       (Win98 DDK/MASM environment)
+#   ctl    - NP2ICTRL.EXE       (VC6 command prompt)
+#   tray   - NP2ITRAY.EXE      (VC6 command prompt)
+#   setup  - SETUP.EXE  (VC6 command prompt)
+#   apps   - all Win32 applications
 #
-# The default target remains the VxD so BUILD.BAT works in the DDK shell.
 
 NAME=NP2IDLE
-CTL=NP2IDLECTL
-TRAY=NP2IDLETRAY
+CTLSRC=NP2IDLECTL
+TRAYSRC=NP2IDLETRAY
+SETUPSRC=NP2IDLESETUP
+CTL=NP2ICTRL
+TRAY=NP2ITRAY
+SETUP=SETUP
 
 AFLAGS=-coff -c -Cx -DMASM6 -DBLD_COFF -DIS_32
 LFLAGS=-vxd -def:$(NAME).DEF -map:$(NAME).MAP -out:$(NAME).VXD
 
 CFLAGS=/nologo /W3 /O1 /MT /DWINVER=0x0400 /D_WIN32_WINNT=0x0400
 
-all: vxd
+all: vxd apps
 
 vxd: $(NAME).VXD
 
@@ -27,26 +31,37 @@ $(NAME).OBJ: $(NAME).ASM
 $(NAME).VXD: $(NAME).OBJ $(NAME).DEF
 	link $(LFLAGS) $(NAME).OBJ
 
-ctl: NP2ICTRL.EXE
+ctl: $(CTL).EXE
 
-$(CTL).OBJ: $(CTL).C $(NAME).H
-	cl $(CFLAGS) /c /Fo$(CTL).OBJ $(CTL).C
+$(CTL).OBJ: $(CTLSRC).C $(NAME).H
+	cl $(CFLAGS) /c /Fo$(CTL).OBJ $(CTLSRC).C
 
-NP2ICTRL.EXE: $(CTL).OBJ
-	link /nologo /subsystem:console,4.0 /machine:I386 /out:NP2ICTRL.EXE $(CTL).OBJ kernel32.lib
+$(CTL).EXE: $(CTL).OBJ
+	link /nologo /subsystem:console,4.0 /machine:I386 /out:$(CTL).EXE $(CTL).OBJ kernel32.lib
 
-tray: NP2ITRAY.EXE
+tray: $(TRAY).EXE
 
-$(TRAY).OBJ: $(TRAY).C $(NAME).H RESOURCE.H VERSION.H
-	cl $(CFLAGS) /c /Fo$(TRAY).OBJ $(TRAY).C
+$(TRAY).OBJ: $(TRAYSRC).C $(NAME).H RESOURCE.H VERSION.H
+	cl $(CFLAGS) /c /Fo$(TRAY).OBJ $(TRAYSRC).C
 
-$(TRAY).RES: $(TRAY).RC RESOURCE.H VERSION.H np2idle.ico
-	rc /fo$(TRAY).RES $(TRAY).RC
+$(TRAY).RES: $(TRAYSRC).RC RESOURCE.H VERSION.H np2idle.ico
+	rc /fo$(TRAY).RES $(TRAYSRC).RC
 
-NP2ITRAY.EXE: $(TRAY).OBJ $(TRAY).RES
-	link /nologo /subsystem:windows,4.0 /machine:I386 /out:NP2ITRAY.EXE $(TRAY).OBJ $(TRAY).RES kernel32.lib user32.lib shell32.lib
+$(TRAY).EXE: $(TRAY).OBJ $(TRAY).RES
+	link /nologo /subsystem:windows,4.0 /machine:I386 /out:$(TRAY).EXE $(TRAY).OBJ $(TRAY).RES kernel32.lib user32.lib shell32.lib winmm.lib advapi32.lib
 
-apps: ctl tray
+setup: $(SETUP).EXE
+
+$(SETUP).OBJ: $(SETUPSRC).C $(NAME).H RESOURCE.H VERSION.H
+	cl $(CFLAGS) /c /Fo$(SETUP).OBJ $(SETUPSRC).C
+
+$(SETUP).RES: $(SETUPSRC).RC RESOURCE.H VERSION.H np2idle.ico
+	rc /fo$(SETUP).RES $(SETUPSRC).RC
+
+$(SETUP).EXE: $(SETUP).OBJ $(SETUP).RES
+	link /nologo /subsystem:windows,4.0 /machine:I386 /out:$(SETUP).EXE $(SETUP).OBJ $(SETUP).RES kernel32.lib user32.lib advapi32.lib
+
+apps: ctl tray setup
 
 clean:
 	-del $(NAME).OBJ
@@ -57,3 +72,6 @@ clean:
 	-del $(TRAY).OBJ
 	-del $(TRAY).RES
 	-del $(TRAY).EXE
+	-del $(SETUP).OBJ
+	-del $(SETUP).RES
+	-del $(SETUP).EXE

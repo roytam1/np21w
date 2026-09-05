@@ -88,7 +88,7 @@ CComSerial::~CComSerial()
 		if(m_writeovl[i].hEvent){
 			CloseHandle(m_writeovl[i].hEvent);
 		}
-		memset(&m_writeovl, 0, sizeof(OVERLAPPED));
+		memset(&m_writeovl[i], 0, sizeof(OVERLAPPED));
 	}
 	
 	// Read OVERLAPPED破棄
@@ -283,7 +283,8 @@ UINT CComSerial::Write(UINT8 cData)
 				m_lastdatatime = GetTickCount();
 				return 0;
 			}
-			if(::WriteFile(m_hSerial, m_blockbuffer, m_blockbuffer_size, &dwWrittenSize, &m_writeovl[idx])){
+			memcpy(m_writeovl_buf[idx], m_blockbuffer, m_blockbuffer_size);
+			if(::WriteFile(m_hSerial, m_writeovl_buf[idx], m_blockbuffer_size, &dwWrittenSize, &m_writeovl[idx])){
 				// 書き込めた場合
 				m_lastdatafail = 0;
 				m_lastdata = 0;
@@ -316,7 +317,8 @@ UINT CComSerial::Write(UINT8 cData)
 			m_lastdatatime = GetTickCount();
 			return 0;
 		}
-		if(::WriteFile(m_hSerial, &cData, 1, &dwWrittenSize, &m_writeovl[idx])){
+		m_writeovl_buf[idx][0] = cData;
+		if(::WriteFile(m_hSerial, m_writeovl_buf[idx], 1, &dwWrittenSize, &m_writeovl[idx])){
 			// 書き込めた場合
 			m_lastdatafail = 0;
 			m_lastdata = 0;
@@ -379,7 +381,8 @@ UINT CComSerial::WriteRetry()
 	if(m_blocktransfer){
 		// ブロック単位書き込み
 		if(m_blockbuffer_pos == m_blockbuffer_size){
-			if(::WriteFile(m_hSerial, m_blockbuffer, m_blockbuffer_size, &dwWrittenSize, &m_writeovl[idx])){
+			memcpy(m_writeovl_buf[idx], m_blockbuffer, m_blockbuffer_size);
+			if(::WriteFile(m_hSerial, m_writeovl_buf[idx], m_blockbuffer_size, &dwWrittenSize, &m_writeovl[idx])){
 				// 書き込めた場合
 				m_lastdatafail = 0;
 				m_lastdata = 0;
@@ -409,7 +412,8 @@ UINT CComSerial::WriteRetry()
 		return 1;
 	}else{
 		// 1byte書き込み
-		if(::WriteFile(m_hSerial, &m_lastdata, 1, &dwWrittenSize, &m_writeovl[idx])){
+		m_writeovl_buf[idx][0] = m_lastdata;
+		if(::WriteFile(m_hSerial, m_writeovl_buf[idx], 1, &dwWrittenSize, &m_writeovl[idx])){
 			// 書き込めた場合
 			m_lastdatafail = 0;
 			m_lastdata = 0;
@@ -495,7 +499,8 @@ void CComSerial::EndBlockTransfer()
 				GetOverlappedResult(m_hSerial, &m_writeovl[0], &cbNumberOfBytesTransferred, TRUE);
 				idx = 0;
 			}
-			if(::WriteFile(m_hSerial, m_blockbuffer, m_blockbuffer_pos, &dwWrittenSize, &m_writeovl[idx])){
+			memcpy(m_writeovl_buf[idx], m_blockbuffer, m_blockbuffer_pos);
+			if(::WriteFile(m_hSerial, m_writeovl_buf[idx], m_blockbuffer_pos, &dwWrittenSize, &m_writeovl[idx])){
 				// 書き込めた場合
 				m_lastdatafail = 0;
 				m_lastdata = 0;
@@ -642,6 +647,12 @@ INTPTR CComSerial::Message(UINT nMessage, INTPTR nParam)
 				}
 				if(changed){
 					::PurgeComm(m_hSerial, PURGE_TXABORT | PURGE_RXABORT | PURGE_TXCLEAR | PURGE_RXCLEAR);
+					for(int i=0;i<SERIAL_OVERLAP_COUNT;i++){
+						m_writeovl_pending[i] = false;
+						ResetEvent(m_writeovl[i].hEvent);
+					}
+					m_readovl_pending = false;
+					ResetEvent(m_readovl.hEvent);
 					::SetCommState(m_hSerial, &dcb);
 				}
 			}
@@ -650,7 +661,6 @@ INTPTR CComSerial::Message(UINT nMessage, INTPTR nParam)
 		case COMMSG_SETCOMMAND: // RTSとDTRフラグのセット
 			{
 				UINT8 cmd = *(reinterpret_cast<UINT8*>(nParam)); // I/O 32h コマンドセットのデータ
-				::PurgeComm(m_hSerial, PURGE_TXABORT | PURGE_RXABORT | PURGE_TXCLEAR | PURGE_RXCLEAR);
 				if(cmd & 0x20){ // RTS
 					::EscapeCommFunction(m_hSerial, SETRTS);
 				}else{
@@ -666,7 +676,9 @@ INTPTR CComSerial::Message(UINT nMessage, INTPTR nParam)
 
 		case COMMSG_PURGE: // バッファデータ破棄
 			{
-				::PurgeComm(m_hSerial, PURGE_TXABORT | PURGE_RXABORT | PURGE_TXCLEAR | PURGE_RXCLEAR);
+				::PurgeComm(m_hSerial, PURGE_RXABORT | PURGE_RXCLEAR);
+				m_readovl_pending = false;
+				ResetEvent(m_readovl.hEvent);
 			}
 			break;
 			

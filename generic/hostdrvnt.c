@@ -1264,6 +1264,62 @@ static void hostdrvNT_notifyChange(WCHAR* changedHostFileName, UINT32 action, UI
 	}
 }
 
+static int hostdrvNT_findBySyntheticShortName(NP2HOSTDRVNT_FILEINFO* fi, const WCHAR* pattern, WIN32_FIND_DATA* findFileData)
+{
+	WCHAR longName[MAX_PATH];
+	WCHAR findPath[MAX_PATH * 2];
+
+	if (fi == NULL || findFileData == NULL || pattern == NULL || pattern[0] == HD_WC('\0'))
+	{
+		return 0;
+	}
+	// ワイルドカードありの場合一意に決められないので拒否
+	if (wcschr(pattern, HD_WC('*')) != NULL || wcschr(pattern, HD_WC('?')) != NULL)
+	{
+		return 0;
+	}
+	if (!hostdrvNT_ensureShortNameMap(fi))
+	{
+		return 0;
+	}
+
+#if defined(WIN32) || defined(_WIN32)
+	if (!hostdrvs_lookuplongname((const HDRVSFNENTRY *)fi->sfnMap,
+		(UINT)fi->sfnCount, pattern, longName, NELEMENTS(longName), NULL))
+	{
+		return 0;
+	}
+#else
+	{
+		OEMCHAR oemPattern[64];
+		OEMCHAR oemLongName[MAX_PATH * 4];
+		if (!hostdrvNT_sfn_wtooem(pattern, oemPattern, NELEMENTS(oemPattern)) ||
+			!hostdrvs_lookuplongname((const HDRVSFNENTRY *)fi->sfnMap,
+				(UINT)fi->sfnCount, oemPattern, oemLongName, NELEMENTS(oemLongName), NULL) ||
+			!hostdrvNT_sfn_oemtow(oemLongName, longName, NELEMENTS(longName)))
+		{
+			return 0;
+		}
+	}
+#endif
+
+	if (!PathCombineW(findPath, fi->hostFileName, longName))
+	{
+		return 0;
+	}
+	fi->hFindFile = FindFirstFile(findPath, findFileData);
+	if (fi->hFindFile == INVALID_HANDLE_VALUE)
+	{
+		fi->hFindFile = NULL;
+		hostdrvNT_clearShortNameMap(fi);
+		hostdrvs_invalidateshortnamecache();
+		return 0;
+	}
+
+	TRACEOUTW((HD_W("FIND SFN: %s -> %s"), pattern, longName));
+	return 1;
+}
+
 static int hostdrvNT_getOneEntry(NP2HOSTDRVNT_FILEINFO* fi, NP2_FILE_BOTH_DIR_INFORMATION* dirInfo, WCHAR* pattern)
 {
 	WIN32_FIND_DATA findFileData;
@@ -1296,7 +1352,11 @@ static int hostdrvNT_getOneEntry(NP2HOSTDRVNT_FILEINFO* fi, NP2_FILE_BOTH_DIR_IN
 		if (fi->hFindFile == INVALID_HANDLE_VALUE)
 		{
 			fi->hFindFile = NULL;
-			return 0;
+			// SFNも完全一致検索対象にする
+			if (!hostdrvNT_findBySyntheticShortName(fi, pattern, &findFileData))
+			{
+				return 0;
+			}
 		}
 	}
 	else

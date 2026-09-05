@@ -42,6 +42,7 @@ private:
 	OVERLAPPED m_writeovl[SERIAL_OVERLAP_COUNT];	/*!< 書き込みOVERLAPPED */
 	OVERLAPPED m_readovl;	/*!< 読み込みOVERLAPPED */
 	bool m_writeovl_pending[SERIAL_OVERLAP_COUNT];	/*!< 書き込みOVERLAPPED待機中 */
+	UINT8 m_writeovl_buf[SERIAL_OVERLAP_COUNT][SERIAL_BLOCKBUFFER_SIZE_MAX];	/*!< Buffer owned by each pending overlapped write */
 	bool m_readovl_pending;	/*!< 読み込みOVERLAPPED待機中 */
 	UINT8 m_readovl_buf;	/*!< 読み込みOVERLAPPEDバッファ */
 	

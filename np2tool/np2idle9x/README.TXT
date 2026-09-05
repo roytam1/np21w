@@ -17,19 +17,12 @@ Neko Project 21/W
 
 ●インストール
 ドライバをゲストOSに登録して使用します。
-
-① Win9xのSYSTEMディレクトリにnp2idle.vxdをコピーします。
-② SYSEDIT等でSYSTEM.INIを編集します。
-[386Enh]セクションの最後あたりに
-device=np2idle.vxd
-を追記して保存します。
-③ Windowsを再起動してください。
+SETUP.EXEを実行して画面の指示に従えばインストールできます。
 
 
 ●アンインストール
-上記の逆の手順で行えます。
-SYSTEM.INIからdevice=np2idle.vxdを削除し再起動した後、
-Win9xのSYSTEMディレクトリにのnp2idle.vxdを削除します。
+SETUP.EXEを再実行してアンインストールするか、コントロールパネルの
+「アプリケーションの追加と削除」からアンインストールしてください。
 
 
 ●使い方
@@ -44,14 +37,20 @@ Win9xのSYSTEMディレクトリにのnp2idle.vxdを削除します。
 
 ○NP2ITRAY.EXE
 タスクトレイ常駐して右クリックでHLT IDLEの有効無効を切り替えます。
-常駐が嫌いであれば起動して設定を変えてから終了しても害はありません。
-それをするのであればコンソール版が良いと思いますが…。
+さらに、Wave再生中のHLTを禁止する付加機能もあります。
+常駐が嫌いならHKLM\Software\\Microsoft\\Windows\\CurrentVersion\\Run
+からNP2ITRAY.EXEを消してください。
 
 
 ●ソースコード
 Neko Project 21/Wのソースに含まれます。
 ライセンスはNeko Project II本体と同じ修正BSDライセンスに従います。
 
+
+●更新履歴
+2026/07/30 初版
+2026/08/24 HLT IDLE有効時MP3再生などが不安定化するのをマシにした
+2026/08/26 HLT Wave再生中のHLT禁止を追加、インストーラ作成
 
 ------------------------
 Neko Project 21/W 開発者

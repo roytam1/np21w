@@ -8,5 +8,6 @@
 #define IDM_DISABLE       40003
 #define IDM_ABOUT         40004
 #define IDM_EXIT          40005
+#define IDM_AUDIO_GUARD   40006
 
 #endif /* NP2IDLE_RESOURCE_H */

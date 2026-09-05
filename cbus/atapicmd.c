@@ -1281,6 +1281,7 @@ static void atapi_cmd_readsubch(IDEDRV drv) {
 	UINT	tracks;
 	UINT	r;
 	UINT32	pos;
+	UINT8	msf;
 
 	sxsi = sxsi_getptr(drv->sxsidrv);
 	if ((sxsi == NULL) || (sxsi->devtype != SXSIDEV_CDROM) ||
@@ -1290,6 +1291,7 @@ static void atapi_cmd_readsubch(IDEDRV drv) {
 	}
 	trk = sxsicd_gettrk(sxsi, &tracks);
 	leng = (drv->buf[7] << 8) + drv->buf[8];
+	msf = drv->buf[1] & 0x02;
 	subq = drv->buf[2] & 0x40;
 	cmd = drv->buf[3];
 
@@ -1312,9 +1314,13 @@ static void atapi_cmd_readsubch(IDEDRV drv) {
 					pos += (rand() & 7);
 				}
 				r = tracks;
-				while(r) {
+				while (r) {
 					r--;
+#ifdef SUPPORT_KAI_IMAGES
+					if (trk[r].str_sec <= pos) {
+#else
 					if (trk[r].pos <= pos) {
+#endif
 						break;
 					}
 				}
@@ -1325,10 +1331,17 @@ static void atapi_cmd_readsubch(IDEDRV drv) {
 				drv->buf[5] = trk[r].type;
 				drv->buf[6] = trk[r].track;
 #endif
-				drv->buf[7] = 1;
+				drv->buf[7] = (pos < trk[r].pos) ? 0 : 1;
 
-				storemsf(drv->buf + 8, pos + 150, drv->damsfbcd);
-				storemsf(drv->buf + 12, (UINT32)(pos - trk[r].pos), drv->damsfbcd);
+				if (msf) {
+					storemsf(drv->buf + 8, pos + 150, drv->damsfbcd);
+					/* Q-channel relative MSF decreases toward INDEX 01 while in INDEX 00. */
+					storemsf(drv->buf + 12, (pos < trk[r].pos) ? (trk[r].pos - pos) : (pos - trk[r].pos), drv->damsfbcd);
+				}
+				else {
+					storelba(drv->buf + 8, pos);
+					storelba(drv->buf + 12, (UINT32)((SINT32)pos - (SINT32)trk[r].pos));
+				}
 			}
 			senddata(drv, 16, leng);
 			break;
@@ -1402,28 +1415,39 @@ static void atapi_cmd_readtoc(IDEDRV drv) {
 
 	switch (format) {
 	case 0: // track info
-		//datasize = (tracks * 8) + 10;
 		if (strack == 0) {
-			strack = 1;
+			i = 0;
 		}
 		else if (strack == 0xaa) {
-			strack = (UINT8)(tracks + 1);
+			i = tracks;
 		}
-		else if ((strack < 1) || (strack > tracks + 1)) {
-			senderror(drv);
-			return;
+		else {
+			for (i = 0; i < tracks; i++) {
+#ifdef SUPPORT_KAI_IMAGES
+				if (trk[i].point == strack) {
+#else
+				if (trk[i].track == strack) {
+#endif
+					break;
+				}
+			}
+			if (i >= tracks) {
+				senderror(drv);
+				return;
+			}
 		}
-		datasize = ((tracks - strack + 1U) * 8U) + 10;
+		datasize = ((tracks - i + 1U) * 8U) + 2;
 		drv->buf[0] = (UINT8)(datasize >> 8);
 		drv->buf[1] = (UINT8)(datasize >> 0);
-		drv->buf[2] = 1;
-		drv->buf[3] = (UINT8)tracks;
+#ifdef SUPPORT_KAI_IMAGES
+		drv->buf[2] = trk[0].point;
+		drv->buf[3] = trk[tracks - 1].point;
+#else
+		drv->buf[2] = trk[0].track;
+		drv->buf[3] = trk[tracks - 1].track;
+#endif
 		ptr = drv->buf + 4;
-		////for (i=0; i<=tracks; i++) {
-		//i = drv->buf[6];
-		//if (i > 0) --i;
-		//for (/* i=0 */; i<=tracks; i++) {
-		for (i=strack-1; i<=tracks; i++) {
+		for (; i <= tracks; i++) {
 			ptr[0] = 0;
 #ifdef SUPPORT_KAI_IMAGES
 			ptr[1] = trk[i].adr_ctl;
@@ -1551,16 +1575,13 @@ static void atapi_cmd_pauseresume(IDEDRV drv) {
 // 0x2B: SEEK
 static void atapi_cmd_seek(IDEDRV drv, UINT32 lba)
 {
-	CDTRK	trk;
-	UINT	tracks;
 	SXSIDEV sxsi;
 
 	stop_daplay(drv);
 
 	sxsi = sxsi_getptr(drv->sxsidrv);
-	trk = sxsicd_gettrk(sxsi, &tracks);
-	TRACEOUT(("atapicmd: seek LBA=%d NSEC=%d", lba, trk[tracks-1].pos + trk[tracks-1].sectors));
-	if (lba < trk[tracks-1].pos + trk[tracks-1].sectors) {
+	TRACEOUT(("atapicmd: seek LBA=%d NSEC=%d", lba, sxsi->totals));
+	if (lba < (UINT32)sxsi->totals) {
 		drv->dacurpos = lba;
 	}
 	cmddone(drv);

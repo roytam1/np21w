@@ -7,193 +7,383 @@
 
 #include	"diskimage/cddfile.h"
 
-//const OEMCHAR str_cue[] = OEMTEXT("cue");	//	CUEシート
-
-//	CDD_CCD.Cで共有するための暫定処置
 const OEMCHAR str_track[] = OEMTEXT("TRACK");
 const OEMCHAR str_index[] = OEMTEXT("INDEX");
-//
 
 static const OEMCHAR str_file[] = OEMTEXT("FILE");
 static const OEMCHAR str_binary[] = OEMTEXT("BINARY");
-static const OEMCHAR str_wave[] = OEMTEXT("WAVE");
-//static const OEMCHAR str_track[] = OEMTEXT("TRACK");
-static const OEMCHAR str_pregap[] = OEMTEXT("PREGAP");
-//static const OEMCHAR str_index[] = OEMTEXT("INDEX");
-static const OEMCHAR str_mode1[] = OEMTEXT("MODE1");
-static const OEMCHAR str_mode2[] = OEMTEXT("MODE2");	//	暫定対応
 static const OEMCHAR str_audio[] = OEMTEXT("AUDIO");
+static const OEMCHAR str_pregap[] = OEMTEXT("PREGAP");
+static const OEMCHAR str_postgap[] = OEMTEXT("POSTGAP");
 
-//static BRESULT getint2(const OEMCHAR *str, UINT *val) {
-//
-//	if ((str[0] < '0') || (str[0] > '9') ||
-//		(str[1] < '0') || (str[1] > '9')) {
-//		return(FAILURE);
-//	}
-//	if (val) {
-//		*val = ((str[0] - '0') * 10) + (str[1] - '0');
-//	}
-//	return(SUCCESS);
-//}
+typedef struct {
+	UINT8	adr_ctl;
+	UINT8	point;
+	UINT16	sector_size;
+	UINT16	data_offset;
+	UINT8	sector_mode;
+	UINT32	index0;
+	UINT32	index1;
+	UINT32	pregap;
+	UINT32	postgap;
+	BOOL	has_index0;
+	BOOL	has_index1;
+} _CUETRK;
 
-static UINT32 getpos(const OEMCHAR *str) {
+/* Parses an MM:SS:FF CUE position into a sector count. */
+static BRESULT cue_getpos(const OEMCHAR *str, UINT32 *pos) {
+	UINT32	value[3];
+	UINT64	sectors;
+	UINT	part;
+	UINT	digits;
+	UINT	i;
 
-	UINT	m = 0;
-	UINT	s = 0;
-	UINT	f = 0;
-	
-	int idx = 0; // 文字位置
-	UINT sdata[3] = {0}; // 数値バッファ
-	UINT sdatapos = 0; // 数値バッファの格納位置
-	int numdig = 0; // 通知の桁数
+	ZeroMemory(value, sizeof(value));
+	part = 0;
+	digits = 0;
+	for (i = 0; str[i] != '\0'; i++) {
+		if ((str[i] >= '0') && (str[i] <= '9')) {
+			UINT32 digit;
 
-	while(str[idx]){ // NULL文字まで続ける
-		if('0' <= str[idx] && str[idx] <= '9'){ // 0から9の数字ならバッファに入れる
-			sdata[sdatapos] *= 10; // 桁上げ
-			sdata[sdatapos] += (str[idx] - '0');
-			numdig++; // 桁数カウント
-		}else if(str[idx] == ':' && numdig >= 1){ // 「:」なら区切り文字（ただし、数字が一桁も無い場合は不正扱い）
-			if(sdatapos == 2){
-				break; // 3個目のデータならループを抜ける（配列を3つ分しか確保していない＆そもそも4つ以上があり得ないので）
+			digit = (UINT32)(str[i] - '0');
+			if (value[part] > (0xffffffffUL - digit) / 10) {
+				return(FAILURE);
 			}
-			sdatapos++; // 格納位置変更
-			numdig = 0; // 桁数カウントリセット
-		}else{
-			return(0); // 不正な文字
+			value[part] = value[part] * 10 + digit;
+			digits++;
 		}
-		idx++;
+		else if ((str[i] == ':') && (digits != 0) && (part < 2)) {
+			part++;
+			digits = 0;
+		}
+		else {
+			return(FAILURE);
+		}
 	}
-	sdatapos++; // データ数にするために1を足す
-	if(sdatapos!=3){
-		return(0); // データ数が変（3個ではない）
+	if ((part != 2) || (digits == 0) || (value[1] >= 60) || (value[2] >= 75)) {
+		return(FAILURE);
 	}
-	m = sdata[0];
-	s = sdata[1];
-	f = sdata[2];
-	return((((m * 60) + s) * 75) + f);
+	sectors = ((UINT64)value[0] * 60 + value[1]) * 75 + value[2];
+	if (sectors > 0xffffffffUL) {
+		return(FAILURE);
+	}
+	*pos = (UINT32)sectors;
+	return(SUCCESS);
 }
 
-//	CUEシート読み込み
+
+/* Decodes the CUE track mode and the user-data position within each image sector. */
+static BRESULT cue_setmode(_CUETRK *trk, const OEMCHAR *mode) {
+	if (!milstr_cmp(mode, str_audio)) {
+		trk->adr_ctl = TRACKTYPE_AUDIO;
+		trk->sector_size = 2352;
+		trk->data_offset = 0;
+		trk->sector_mode = CDSECTORMODE_AUDIO;
+	}
+	else if (!milstr_cmp(mode, OEMTEXT("MODE1/2048"))) {
+		trk->adr_ctl = TRACKTYPE_DATA;
+		trk->sector_size = 2048;
+		trk->data_offset = 0;
+		trk->sector_mode = CDSECTORMODE_MODE1;
+	}
+	else if (!milstr_cmp(mode, OEMTEXT("MODE1/2352"))) {
+		trk->adr_ctl = TRACKTYPE_DATA;
+		trk->sector_size = 2352;
+		trk->data_offset = 16;
+		trk->sector_mode = CDSECTORMODE_MODE1;
+	}
+	else if (!milstr_cmp(mode, OEMTEXT("MODE2/2048"))) {
+		trk->adr_ctl = TRACKTYPE_DATA;
+		trk->sector_size = 2048;
+		trk->data_offset = 0;
+		trk->sector_mode = CDSECTORMODE_MODE2;
+	}
+	else if (!milstr_cmp(mode, OEMTEXT("MODE2/2324"))) {
+		trk->adr_ctl = TRACKTYPE_DATA;
+		trk->sector_size = 2324;
+		trk->data_offset = 0;
+		trk->sector_mode = CDSECTORMODE_MODE2;
+	}
+	else if (!milstr_cmp(mode, OEMTEXT("MODE2/2336"))) {
+		trk->adr_ctl = TRACKTYPE_DATA;
+		trk->sector_size = 2336;
+		trk->data_offset = 8;
+		trk->sector_mode = CDSECTORMODE_MODE2;
+	}
+	else if (!milstr_cmp(mode, OEMTEXT("MODE2/2352"))) {
+		trk->adr_ctl = TRACKTYPE_DATA;
+		trk->sector_size = 2352;
+		trk->data_offset = 24;
+		trk->sector_mode = CDSECTORMODE_MODE2;
+	}
+	else {
+		return(FAILURE);
+	}
+	return(SUCCESS);
+}
+
+/* Returns the first file-backed sector position for a CUE track. */
+static UINT32 cue_filebegin(const _CUETRK *trk) {
+	return(trk->has_index0 ? trk->index0 : trk->index1);
+}
+
+/* Builds independent logical-LBA and image-byte layouts for a single-BIN CUE sheet. */
+static BRESULT cue_finalize(const OEMCHAR *path, const _CUETRK *cue, UINT trks, _CDTRK *trk, UINT32 *totals) {
+	FILEH	fh;
+	FILELEN	fsize;
+	UINT64	offset;
+	UINT64	end_offset;
+	UINT64	remain;
+	UINT32	logical;
+	UINT32	file_begin;
+	UINT32	next_file_begin;
+	UINT32	file_sectors;
+	UINT32	file_pregap;
+	UINT32	track_sectors;
+	UINT32	visible_pregap;
+	UINT	i;
+
+	fh = file_open_rb(path);
+	if (fh == FILEH_INVALID) {
+		return(FAILURE);
+	}
+	fsize = file_getsize(fh);
+	file_close(fh);
+	if (fsize < 0) {
+		return(FAILURE);
+	}
+
+	logical = 0;
+	file_begin = cue_filebegin(&cue[0]);
+	offset = (UINT64)file_begin * cue[0].sector_size;
+	if (offset > (UINT64)fsize) {
+		return(FAILURE);
+	}
+
+	for (i = 0; i < trks; i++) {
+		if (!cue[i].has_index1 || (cue[i].sector_size == 0)) {
+			return(FAILURE);
+		}
+		file_begin = cue_filebegin(&cue[i]);
+		if (cue[i].index1 < file_begin) {
+			return(FAILURE);
+		}
+		file_pregap = cue[i].index1 - file_begin;
+
+		if (i + 1 < trks) {
+			next_file_begin = cue_filebegin(&cue[i + 1]);
+			if ((next_file_begin <= file_begin) || (next_file_begin < cue[i].index1)) {
+				return(FAILURE);
+			}
+			file_sectors = next_file_begin - file_begin;
+			end_offset = offset + (UINT64)file_sectors * cue[i].sector_size;
+			if (end_offset > (UINT64)fsize) {
+				return(FAILURE);
+			}
+		}
+		else {
+			if (offset > (UINT64)fsize) {
+				return(FAILURE);
+			}
+			remain = (UINT64)fsize - offset;
+			if ((remain % cue[i].sector_size) != 0) {
+				return(FAILURE);
+			}
+			if ((remain / cue[i].sector_size) > 0xffffffffUL) {
+				return(FAILURE);
+			}
+			file_sectors = (UINT32)(remain / cue[i].sector_size);
+			end_offset = (UINT64)fsize;
+		}
+		if (file_sectors <= file_pregap) {
+			return(FAILURE);
+		}
+		track_sectors = file_sectors - file_pregap;
+
+		trk[i].adr_ctl = cue[i].adr_ctl;
+		trk[i].point = cue[i].point;
+		trk[i].sector_size = cue[i].sector_size;
+		trk[i].data_offset = cue[i].data_offset;
+		trk[i].sector_mode = cue[i].sector_mode;
+		trk[i].pregap_offset_ex = 0;
+
+		if (cue[i].pregap > (UINT32)(0xffffffffUL - file_pregap)) {
+			return(FAILURE);
+		}
+		if (i == 0) {
+			/* Track 1 INDEX 01 defines LBA 0. INDEX 00/PREGAP belongs before LBA 0. */
+			visible_pregap = 0;
+		}
+		else {
+			visible_pregap = cue[i].pregap + file_pregap;
+		}
+		if ((UINT32)(0xffffffffUL - logical) < visible_pregap) {
+			return(FAILURE);
+		}
+		trk[i].pregap_sector = logical;
+		trk[i].start_sector = logical + visible_pregap;
+		trk[i].pregap_sectors = visible_pregap;
+		trk[i].pregap_offset = offset;
+		trk[i].start_offset = offset + (UINT64)file_pregap * cue[i].sector_size;
+		trk[i].img_pregap_sec = file_begin;
+		trk[i].img_start_sec = cue[i].index1;
+		trk[i].pos0 = ((i != 0) && cue[i].has_index0) ? (logical + cue[i].pregap) : 0;
+
+		if ((UINT32)(0xffffffffUL - trk[i].start_sector) < (track_sectors - 1)) {
+			return(FAILURE);
+		}
+		trk[i].end_sector = trk[i].start_sector + track_sectors - 1;
+		if ((UINT32)(0xffffffffUL - trk[i].end_sector) < cue[i].postgap) {
+			return(FAILURE);
+		}
+		trk[i].end_sector += cue[i].postgap;
+		if ((trk[i].end_sector == 0xffffffffUL) || (file_begin > (UINT32)(0xffffffffUL - (file_sectors - 1)))) {
+			return(FAILURE);
+		}
+		trk[i].track_sectors = track_sectors;
+		trk[i].end_offset = end_offset;
+		trk[i].img_end_sec = file_begin + file_sectors - 1;
+
+		trk[i].pos = trk[i].start_sector;
+		trk[i].str_sec = trk[i].pregap_sector;
+		trk[i].end_sec = trk[i].end_sector;
+		trk[i].sectors = trk[i].end_sec - trk[i].str_sec + 1;
+
+		logical = trk[i].end_sector + 1;
+		offset = end_offset;
+	}
+
+	*totals = logical;
+	return(SUCCESS);
+}
+
+/* Loads a CUE sheet whose referenced image data is stored in one BINARY file. */
 BRESULT opencue(SXSIDEV sxsi, const OEMCHAR *fname) {
-
-	_CDTRK		trk[99];
-	OEMCHAR		path[MAX_PATH];
-	UINT		index;
-	UINT8		curtrk;
-	UINT		curtype;
+	_CUETRK	cue[99];
+	_CDTRK	trk[99];
+	OEMCHAR	path[MAX_PATH];
+	OEMCHAR	file_path[MAX_PATH];
+	OEMCHAR	buf[512];
+	OEMCHAR	*argv[8];
 	TEXTFILEH	tfh;
-	OEMCHAR		buf_mode[10];
-	OEMCHAR		buf[512];
-	OEMCHAR		*argv[8];
-	int			argc;
-//	--------
-	UINT16		curssize = 0;
-	UINT32		curpos0;
-	UINT32		curpregap;
-	UINT32		pregapoffset = 0;
+	UINT32	value;
+	UINT32	totals;
+	UINT	tracks;
+	SINT	current;
+	int	argc;
+	BOOL	multiple_files;
+	BOOL	parse_error;
+	BOOL	use_mapped_reader;
+	UINT	i;
 
+	ZeroMemory(cue, sizeof(cue));
 	ZeroMemory(trk, sizeof(trk));
 	path[0] = '\0';
-	index = 0;
-	curtrk = 1;
-	curtype = 0x14;
-//	--------
-	curpos0 = 0;
-	curpregap = 0;
-//	--------
+	tracks = 0;
+	current = -1;
+	multiple_files = FALSE;
+	parse_error = FALSE;
+	use_mapped_reader = FALSE;
 
 	tfh = textfile_open(fname, 0x800);
 	if (tfh == NULL) {
-		goto opencue_err2;
+		return(FAILURE);
 	}
 	while (textfile_read(tfh, buf, NELEMENTS(buf)) == SUCCESS) {
 		argc = milstr_getarg(buf, argv, NELEMENTS(argv));
-		if ((argc >= 3) && (!milstr_cmp(argv[0], str_file))) {				//	FILE
-			if (!milstr_cmp(argv[argc-1], str_binary) && path[0] == '\0') {	//		BINARY
-				file_cpyname(path, fname, NELEMENTS(path));
-				file_cutname(path);
-				file_catname(path, argv[1], NELEMENTS(path));
+		if ((argc >= 3) && (!milstr_cmp(argv[0], str_file))) {
+			if (milstr_cmp(argv[argc - 1], str_binary)) {
+				parse_error = TRUE;
+				break;
+			}
+			file_cpyname(file_path, fname, NELEMENTS(file_path));
+			file_cutname(file_path);
+			file_catname(file_path, argv[1], NELEMENTS(file_path));
+			if (path[0] == '\0') {
+				file_cpyname(path, file_path, NELEMENTS(path));
+			}
+			else if (file_cmpname(path, file_path)) {
+				multiple_files = TRUE;
+				break;
 			}
 		}
-		else if ((argc >= 3) && (!milstr_cmp(argv[0], str_track))) {		//	TRACK
-			curtrk = (UINT8)milstr_solveINT(argv[1]);
-			milstr_ncpy(buf_mode, argv[2], NELEMENTS(str_mode1));
-			if (!milstr_cmp(buf_mode, str_mode1)) {							//		MODE1/????
-				curtype = 0x14;
-				curssize = (UINT16)milstr_solveINT(argv[2] + 6);
+		else if ((argc >= 3) && (!milstr_cmp(argv[0], str_track))) {
+			if ((path[0] == '\0') || (tracks >= NELEMENTS(cue))) {
+				parse_error = TRUE;
+				break;
 			}
-			else if (!milstr_cmp(buf_mode, str_mode2)) {					//		MODE2/????
-				curtype = 0x14;
-				curssize = (UINT16)milstr_solveINT(argv[2] + 6);
+			value = (UINT32)milstr_solveINT(argv[1]);
+			if ((value == 0) || (value > 99) ||
+				((tracks != 0) && (value != (UINT32)cue[tracks - 1].point + 1))) {
+				parse_error = TRUE;
+				break;
 			}
-			else if (!milstr_cmp(argv[2], str_audio)) {						//		AUDIO
-				curtype = 0x10;
-				curssize = 2352;
+			current = (SINT)tracks++;
+			cue[current].point = (UINT8)value;
+			if (cue_setmode(&cue[current], argv[2]) != SUCCESS) {
+				parse_error = TRUE;
+				break;
 			}
 		}
-		else if ((argc >= 2) && (!milstr_cmp(argv[0], str_pregap))) {		//	PREGAP
-			curpregap = getpos(argv[1]);
+		else if ((argc >= 2) && (!milstr_cmp(argv[0], str_pregap))) {
+			if ((current < 0) || (cue_getpos(argv[1], &value) != SUCCESS)) {
+				parse_error = TRUE;
+				break;
+			}
+			cue[current].pregap = value;
 		}
-		else if ((argc >= 3) && (!milstr_cmp(argv[0], str_index))) {		//	INDEX ??
-			if (index < NELEMENTS(trk)) {
-				if ((UINT8)milstr_solveINT(argv[1]) == 0) {					//	INDEX 00
-					curpos0 = getpos(argv[2]);
-					continue;
-				}
-				if ((UINT8)milstr_solveINT(argv[1]) != 1) {					//	INDEX 01以外
-					continue;
-				}
-
-				{
-					UINT32 index1pos;
-					UINT32 index0pos;
-
-					if (index != 0) {
-						pregapoffset += curpregap;
-					}
-					index1pos = getpos(argv[2]);
-					index0pos = (curpos0 == 0) ? index1pos : curpos0;
-
-					trk[index].adr_ctl			= curtype;
-					trk[index].point			= curtrk;
-					trk[index].pos				= pregapoffset + index1pos;
-					trk[index].pos0				= pregapoffset + index0pos;
-
-					trk[index].sector_size		= curssize;
-
-					trk[index].pregap_sectors	= curpregap + (index1pos - index0pos);
-
-					trk[index].img_pregap_sec	= index0pos;
-					trk[index].img_start_sec	= index1pos;
-
-					trk[index].pregap_offset_ex = pregapoffset;
-				}
-
-//				trk[index].pregap_sector	= trk[index].start_sector - trk[index].pregap_sectors;
-
-				index++;
-				curpregap = 0;
-				curpos0 = 0;
+		else if ((argc >= 2) && (!milstr_cmp(argv[0], str_postgap))) {
+			if ((current < 0) || (cue_getpos(argv[1], &value) != SUCCESS)) {
+				parse_error = TRUE;
+				break;
+			}
+			cue[current].postgap = value;
+		}
+		else if ((argc >= 3) && (!milstr_cmp(argv[0], str_index))) {
+			if ((current < 0) || (cue_getpos(argv[2], &value) != SUCCESS)) {
+				parse_error = TRUE;
+				break;
+			}
+			if ((UINT8)milstr_solveINT(argv[1]) == 0) {
+				cue[current].index0 = value;
+				cue[current].has_index0 = TRUE;
+			}
+			else if ((UINT8)milstr_solveINT(argv[1]) == 1) {
+				cue[current].index1 = value;
+				cue[current].has_index1 = TRUE;
 			}
 		}
 	}
+	textfile_close(tfh);
 
-	if (index == 0) {
-		goto opencue_err1;
+	if (parse_error || multiple_files || (path[0] == '\0') || (tracks == 0)) {
+		return(FAILURE);
+	}
+	if (cue_finalize(path, cue, tracks, trk, &totals) != SUCCESS) {
+		return(FAILURE);
 	}
 
-	set_secread(sxsi, trk, index);
-	sxsi->totals = -1;
-
-	textfile_close(tfh);
-
-	return(setsxsidev(sxsi, path, trk, index));
-
-opencue_err1:
-	textfile_close(tfh);
-
-opencue_err2:
-	return(FAILURE);
+	for (i = 0; i < tracks; i++) {
+		if ((cue[i].pregap != 0) || (cue[i].postgap != 0) ||
+			((i == 0) && (cue_filebegin(&cue[i]) != cue[i].index1)) ||
+			((cue[i].sector_size == 2352) && (cue[i].data_offset != 16)) ||
+			((cue[i].sector_size != 2048) && (cue[i].sector_size != 2352))) {
+			use_mapped_reader = TRUE;
+			break;
+		}
+	}
+	if (use_mapped_reader) {
+		sxsi->read = sec_read;
+	}
+	else {
+		set_secread(sxsi, trk, tracks);
+	}
+	sxsi->totals = totals;
+	if (setsxsidev_cue(sxsi, path, trk, tracks) != SUCCESS) {
+		sxsi->totals = -1;
+		return(FAILURE);
+	}
+	return(SUCCESS);
 }
 
 #endif

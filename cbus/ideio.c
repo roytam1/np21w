@@ -1773,7 +1773,7 @@ static SINT32	sampcount2_n = 0;
 		r = tracks;
 		while (r) {
 			r--;
-			if (trk[r].pos <= drv->dacurpos) {
+			if (trk[r].str_sec <= drv->dacurpos) {
 				break;
 			}
 		}
@@ -1793,19 +1793,7 @@ static SINT32	sampcount2_n = 0;
 		if(mute){
 			memset(drv->dabuf, 0, sizeof(drv->dabuf));
 		}else{
-			FILEPOS rawpos;
-
-			rawpos = drv->dacurpos;
-			if (rawpos >= (FILEPOS)trk[r].pregap_offset_ex) {
-				rawpos -= (FILEPOS)trk[r].pregap_offset_ex;
-			}
-			else {
-				mute = 1;
-			}
-			if (mute) {
-				memset(drv->dabuf, 0, sizeof(drv->dabuf));
-			}
-			else if (sxsicd_readraw(sxsi, rawpos, drv->dabuf) != SUCCESS) {
+			if (sxsicd_readraw(sxsi, drv->dacurpos, drv->dabuf) != SUCCESS) {
 				drv->daflag = 0x14;
 				return(FAILURE);
 			}

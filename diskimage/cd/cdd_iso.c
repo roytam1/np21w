@@ -37,7 +37,7 @@ BRESULT openiso(SXSIDEV sxsi, const OEMCHAR *path) {
 		sector_size = 2448;
 		totals = issec2448(fh);
 	}
-	if (totals < 0) {
+	if (totals <= 0) {
 		goto openiso_err2;
 	}
 
@@ -45,16 +45,21 @@ BRESULT openiso(SXSIDEV sxsi, const OEMCHAR *path) {
 	trk[0].point			= 1;
 	trk[0].pos				= 0;
 	trk[0].pos0				= 0;
+	trk[0].str_sec			= 0;
+	trk[0].end_sec			= totals - 1;
+	trk[0].sectors			= totals;
 
 	trk[0].sector_size		= sector_size;
+	trk[0].data_offset		= (sector_size == 2048) ? 0 : 16;
+	trk[0].sector_mode		= CDSECTORMODE_MODE1;
 
 	trk[0].pregap_sector	= 0;
 	trk[0].start_sector		= 0;
-	trk[0].end_sector		= totals;
+	trk[0].end_sector		= totals - 1;
 
 	trk[0].img_pregap_sec	= 0;
 	trk[0].img_start_sec	= 0;
-	trk[0].img_end_sec		= totals;
+	trk[0].img_end_sec		= totals - 1;
 
 	trk[0].pregap_offset	= 0;
 	trk[0].pregap_offset_ex = 0;

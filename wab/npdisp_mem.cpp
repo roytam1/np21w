@@ -732,10 +732,6 @@ bool npdisp_isDisplayDevice(UINT32 lpAddr)
 				// SELECTEDDIBだけ立っていたらDIBセクション
 				return false;
 			}
-			if (npdisp_isSpecialDDB((NPDISP_PBITMAP_EXT*)&pdev)) {
-				// 特殊DDB
-				return false;
-			}
 		}
 		// デバイスっぽい
 		return true;
@@ -743,6 +739,15 @@ bool npdisp_isDisplayDevice(UINT32 lpAddr)
 	else if (type == NPDISP_DEVTYPE) {
 		// デバイスで確定
 		return true;
+	}
+	else if (type == 0) {
+		NPDISP_PDEVICE pdev;
+		if (npdisp_readMemory(&pdev, lpAddr, sizeof(NPDISP_PDEVICE))) {
+			if (npdisp_isSpecialDDB((NPDISP_PBITMAP_EXT*)&pdev)) {
+				// 特殊DDB
+				return false;
+			}
+		}
 	}
 	// それ以外
 	return false;
@@ -761,12 +766,20 @@ UINT32 npdisp_readPBitmap(NPDISP_PBITMAP_EXT *bmp, UINT32 lpAddr, bool useSelect
 	else if (type == NPDISP_DEVTYPE_DIBENG) {
 		// 必要情報はNPDISP_PBITMAP_EXTの範囲に収まるので、その範囲で読む
 		npdisp_readMemory(bmp, lpAddr, sizeof(NPDISP_PBITMAP_EXT));
+	}
+	else if (type == 0) {
+		// メモリビットマップ or 特殊DDB
+		npdisp_readMemory(bmp, lpAddr, sizeof(NPDISP_PBITMAP));
 		if (npdisp_isSpecialDDB(bmp)) {
 			// 特殊DDBの場合、後ろに画素データが格納されている
+			npdisp_readMemory((UINT8*)bmp + sizeof(NPDISP_PBITMAP), lpAddr + sizeof(NPDISP_PBITMAP), sizeof(NPDISP_PBITMAP_EXT) - sizeof(NPDISP_PBITMAP));
 			const NPDISP_DIBENGINE* dibe = (const NPDISP_DIBENGINE*)bmp;
 			const UINT32 bitsAddr = ((UINT32)dibe->deBitsSelector << 16) | (dibe->deBitsOffset & 0xffff);
 			bmp->bmType = NPDISP_DEVTYPE_DDB; // 通常DDBとして見せる
 			bmp->bmBitsAddr = bitsAddr;
+		}
+		else {
+			bmp->ddbmpKey = 0;
 		}
 	}
 	else {
@@ -779,18 +792,15 @@ UINT32 npdisp_readPBitmap(NPDISP_PBITMAP_EXT *bmp, UINT32 lpAddr, bool useSelect
 UINT32 npdisp_writePBitmap(NPDISP_PBITMAP_EXT* bmp, UINT32 lpAddr)
 {
 	if (bmp->bmType == NPDISP_DEVTYPE_DDB) {
-		if (npdisp_isSpecialDDB(bmp)) {
-			bmp->bmType = NPDISP_DEVTYPE_DIBENG; // 特殊DDBとして書き込み
-			npdisp_writeMemory(bmp, lpAddr, sizeof(NPDISP_PBITMAP_EXT));
-			bmp->bmType = NPDISP_DEVTYPE_DDB; // 戻す
-		}
-		else {
-			npdisp_writeMemory(bmp, lpAddr, sizeof(NPDISP_PBITMAP_EXT));
-		}
+		npdisp_writeMemory(bmp, lpAddr, sizeof(NPDISP_PBITMAP_EXT));
 	}
 	else if (bmp->bmType == NPDISP_DEVTYPE_DIBENG) {
 		// 必要情報はNPDISP_PBITMAP_EXTの範囲に収まるので、その範囲で書く
 		npdisp_writeMemory(bmp, lpAddr, sizeof(NPDISP_PBITMAP_EXT));
+	}
+	else if (bmp->bmType == 0 && npdisp_isSpecialDDB(bmp)) {
+		// 特殊DDBとして書き込み Type部は上書きしない
+		npdisp_writeMemory((UINT8*)bmp + 2, lpAddr + 2, sizeof(NPDISP_PBITMAP_EXT) - 2);
 	}
 	else {
 		npdisp_writeMemory(bmp, lpAddr, sizeof(NPDISP_PBITMAP));

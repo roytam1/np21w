@@ -5,6 +5,9 @@
 
 #pragma once
 
+// NewFontSeg‘Î‰ž
+#define SUPPORT_NPDISP_NEWFONTSEG
+
 #if defined(SUPPORT_WAB_NPDISP)
 
 #define NPDISP_DEVTYPE_DIBENG	0x5250
@@ -1473,28 +1476,6 @@ extern "C" {
 		UINT16 width;
 		UINT32 offset;
 	} NPDISP_FONTCHARINFO3;
-	typedef struct {
-		UINT16 nfVersion;
-		UINT16 nfFormat;
-		UINT16 nfNumGlyphs;
-		UINT32 nfGlyphOffset;
-		UINT32 nfAWTable;
-		UINT16 nfHeight;
-		UINT16 nfAscent;
-		UINT32 nfUniqueID;
-	} NPDISP_NEWFONTSEG;
-	typedef struct {
-		SINT8 orgX;
-		SINT8 orgY;
-		UINT8 width;
-		UINT8 height;
-	} NPDISP_SMALLROWGLYPH;
-	typedef struct {
-		SINT16 orgX;
-		SINT16 orgY;
-		UINT16 width;
-		UINT16 height;
-	} NPDISP_LARGEROWGLYPH;
 	typedef struct {
 		SINT16 dfType;
 		SINT16 dfPoints;

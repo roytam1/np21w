@@ -14,6 +14,13 @@ enum {
 #define	TRACKTYPE_DATA	0x14
 #define	TRACKTYPE_AUDIO	0x10
 
+enum {
+	CDSECTORMODE_UNKNOWN = 0,
+	CDSECTORMODE_AUDIO,
+	CDSECTORMODE_MODE1,
+	CDSECTORMODE_MODE2
+};
+
 typedef struct {
 	UINT8	adr_ctl;		//	Adr/Ctl
 							//		ISO:0x14
@@ -60,6 +67,8 @@ typedef struct {
 							//		MDS:
 //	--------
 	UINT16	sector_size;	//	トラックのセクタサイズ
+	UINT16	data_offset;	//	2048-byte user data offset within an image sector (CUE layout)
+	UINT8	sector_mode;	//	CDSECTORMODE_* for formats that explicitly describe the sector mode
 							//		ISO:2048 or 2352 or 2448(ファイルサイズを割って余りの出ない数値)
 							//		CUE:MODE1/????=????、MODE2/????=????、AUDIO=2352
 							//		CCD:2352(固定で正しい？)

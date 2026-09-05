@@ -34,6 +34,9 @@
 #include	"npdisp_palette.h"
 #include	"npdisp_gdioutput.h"
 #include	"npdisp_gdibitblt.h"
+#if defined(SUPPORT_NPDISP_NEWFONTSEG)
+#include	"npdisp_newfont.h"
+#endif
 
 #if 0
 #undef	TRACEOUT
@@ -195,7 +198,6 @@ void npdisp_setDirtyAll()
 void npdisp_resetDirty()
 {
 	npdispwin.dirtyRect.left = npdispwin.dirtyRect.top = npdispwin.dirtyRect.right = npdispwin.dirtyRect.bottom = 0;
-	npdispwin.ddrawDirtyRect.left = npdispwin.ddrawDirtyRect.top = npdispwin.ddrawDirtyRect.right = npdispwin.ddrawDirtyRect.bottom = 0;
 }
 
 static HFONT npdisp_getFont(NPDISP_FONTINFO* lpFontInfo, UINT32 fontInfoAddr)
@@ -204,12 +206,6 @@ static HFONT npdisp_getFont(NPDISP_FONTINFO* lpFontInfo, UINT32 fontInfoAddr)
 
 	// 暫定: 本来はWIFEMANからフォントデータをとるが、仕様がよく分からないのでホストが持つ近いフォントで置き換え
 	char* faceName = npdisp_readMemoryString((fontInfoAddr & 0xffff0000) | lpFontInfo->dfFace);
-	//if (stricmp(faceName, "System") == 0) {
-	//	// 日本語が使えるフォントへ置き換え
-	//	free(faceName);
-	//	faceName = (char*)malloc(32);
-	//	strcpy(faceName, "MS Gothic");
-	//}
 	if (stricmp(faceName, "ゴシック") == 0 || stricmp(faceName, "ｺﾞｼｯｸ") == 0) {
 		// 日本語が使えるフォントへ置き換え
 		free(faceName);
@@ -248,7 +244,7 @@ static HFONT npdisp_getFont(NPDISP_FONTINFO* lpFontInfo, UINT32 fontInfoAddr)
 		}
 	}
 	if (invalidIndex == -1) {
-		// 適当に捨てる
+		// キャッシュが満杯なら1件を置き換える
 		invalidIndex = rand() % NPDISP_FONT_CACHE_MAX;
 	}
 	if (npdispwin.hFontCache[invalidIndex]) {
@@ -523,7 +519,7 @@ static UINT16 npdisp_func_Enable_PDEVICE(NPDISP_PDEVICE *lpDevInfo, UINT16 wStyl
 		lpDevInfo->dibe.deBitmapInfoAddr));
 	return 1;
 }
-static UINT16 npdisp_func_Enable_GDIINFO(NPDISP_GDIINFO *lpDevInfo, UINT16 wStyle, const char* lpDestDevType, const char* lpOutputFile, const NPDISP_DEVMODE* lpData) 
+static UINT16 npdisp_func_Enable_GDIINFO(NPDISP_GDIINFO* lpDevInfo, UINT16 wStyle, const char* lpDestDevType, const char* lpOutputFile, const NPDISP_DEVMODE* lpData)
 {
 	//lpDevInfo->dpVersion = 0x030A;
 	lpDevInfo->dpVersion = 0x0400;
@@ -567,10 +563,11 @@ static UINT16 npdisp_func_Enable_GDIINFO(NPDISP_GDIINFO *lpDevInfo, UINT16 wStyl
 	lpDevInfo->dpLogPixelsY = 96; // ここのDPIはアイコンの文字サイズ等が変わる　変えない方がよさそう？
 	lpDevInfo->dpDCManage = 0x0004;
 	lpDevInfo->dpCaps1 = NPDISP_C1_TRANSPARENT | NPDISP_C1_REINIT_ABLE | NPDISP_C1_COLORCURSOR;
-	//if (npdisp.isWin9x) {
-	//	// 新方式テキスト描画だが、旧方式より遅いので一旦無効化
-	//	lpDevInfo->dpCaps1 |= NPDISP_C1_GLYPH_INDEX | NPDISP_C1_BYTE_PACKED;
-	//}
+#if defined(SUPPORT_NPDISP_NEWFONTSEG)
+	if (npdisp.isWin9x) {
+		lpDevInfo->dpCaps1 |= NPDISP_C1_GLYPH_INDEX | NPDISP_C1_BYTE_PACKED | NPDISP_C1_BIT_PACKED;
+	}
+#endif
 	if (npdisp.version >= 3) {
 		// DIB Engine準拠
 		lpDevInfo->dpCaps1 |= NPDISP_C1_DIBENGINE;
@@ -1545,7 +1542,7 @@ static UINT32 npdisp_func_RealizeObject_CreateBitmap(UINT32 lpInObjAddr, UINT32 
 				NPDISP_DIBENGINE* dibe = (NPDISP_DIBENGINE*)&physical;
 				const UINT16 selector = (UINT16)(lpOutObjAddr >> 16);
 				const UINT32 offset = lpOutObjAddr & 0xffff;
-				dibe->deType = NPDISP_DEVTYPE_DIBENG;
+				dibe->deType = 0;
 				dibe->deReserved1 = 0;
 				dibe->deDeltaScan = physical.bmWidth * physical.bmBitsPixel / 8;
 				dibe->delpPDeviceAddr = 0;
@@ -2380,454 +2377,34 @@ static UINT16 npdisp_func_DeviceBitmapBits(UINT32 lpBitmapAddr, UINT16 fGet, UIN
 	return retValue;
 }
 
-#define NPDISP_ETO_OPAQUE      0x0002
-#define NPDISP_ETO_GLYPH_INDEX 0x0010
-#define NPDISP_ETO_BYTE_PACKED 0x0100
-#define NPDISP_ETO_BIT_PACKED  0x0200
-#define NPDISP_NF_BYTE_PACKED  0x0001
-#define NPDISP_NF_LARGE        0x0080
-
-static bool npdisp_isNewFontSeg(UINT32 lpFontInfoAddr, NPDISP_NEWFONTSEG* nf)
-{
-	if (!lpFontInfoAddr || !npdisp.isWin9x) return false;
-	if (!npdisp_readMemory(nf, lpFontInfoAddr, sizeof(*nf))) return false;
-	return nf->nfVersion >= 0x0400 && (nf->nfFormat & NPDISP_NF_BYTE_PACKED) != 0 && nf->nfNumGlyphs != 0;
-}
-
-static bool npdisp_readNewFontOffset(UINT32 lpFontInfoAddr, const NPDISP_NEWFONTSEG* nf, UINT16 glyph, UINT32* glyphOffset)
-{
-	UINT16 selector = (UINT16)(lpFontInfoAddr >> 16);
-	UINT32 elemSize = (nf->nfFormat & NPDISP_NF_LARGE) ? sizeof(UINT32) : sizeof(UINT16);
-	UINT64 tableOffset;
-	if (glyph >= nf->nfNumGlyphs) return false;
-	tableOffset = (UINT64)nf->nfGlyphOffset + (UINT64)glyph * elemSize;
-	if (tableOffset > (UINT64)0xffffffffUL) return false;
-	if (nf->nfFormat & NPDISP_NF_LARGE) {
-		return npdisp_readMemoryWith32Offset(glyphOffset, selector, (UINT32)tableOffset, sizeof(UINT32)) != 0;
-	}
-	else {
-		UINT16 ofs16;
-		if (!npdisp_readMemoryWith32Offset(&ofs16, selector, (UINT32)tableOffset, sizeof(ofs16))) return false;
-		*glyphOffset = ofs16;
-		return true;
-	}
-}
-
-static bool npdisp_readNewFontAW(UINT32 lpFontInfoAddr, const NPDISP_NEWFONTSEG* nf, UINT16 glyph, SINT16* aw)
-{
-	UINT64 tableOffset;
-	if (glyph >= nf->nfNumGlyphs) return false;
-	tableOffset = (UINT64)nf->nfAWTable + (UINT64)glyph * sizeof(SINT16);
-	if (tableOffset > (UINT64)0xffffffffUL) return false;
-	return npdisp_readMemoryWith32Offset(aw, (UINT16)(lpFontInfoAddr >> 16), (UINT32)tableOffset, sizeof(SINT16)) != 0;
-}
-
-static bool npdisp_isNullNewFontRect(const NPDISP_RECT* rect)
-{
-	return rect->left == 0 && rect->top == 0 && rect->right == 0 && rect->bottom == 0;
-}
-
-static bool npdisp_fillNewFontOpaqueRects(HDC tgtDC, const NPDISP_DRAWMODE* drawMode, UINT32 lpOpaqueRectAddr, const NPDISP_RECT* clip, bool hasClip, int targetWidth, int targetHeight, bool markDirty)
-{
-	const int maxOpaqueRects = 64;
-	UINT16 selector;
-	UINT32 offset;
-	bool isBlack = false;
-	bool isWhite = false;
-	bool preferDither = false;
-	HBRUSH hBrush = NULL;
-	int i;
-
-	if (!lpOpaqueRectAddr) return true;
-	if (targetWidth <= 0 || targetHeight <= 0) return true;
-	selector = (UINT16)(lpOpaqueRectAddr >> 16);
-	offset = lpOpaqueRectAddr & 0xffff;
-
-	if ((drawMode->bkColor & 0xffffff) == 0) {
-		isBlack = true;
-	}
-	else if ((drawMode->bkColor & 0xffffff) == 0xffffff) {
-		isWhite = true;
-	}
-	else {
-		UINT32 color = npdisp_AdjustColorRefForGDI(drawMode->bkColor, &preferDither);
-		if (preferDither) {
-			UINT32 actualColor1;
-			UINT32 actualColor2;
-			double ratio;
-			MakePaletteDitherBrushColor(color, &actualColor1, &actualColor2, &ratio);
-			hBrush = CreatePaletteDitherBrush(actualColor1, actualColor2, ratio);
-		}
-		else if ((color & 0xffffff) == 0) {
-			isBlack = true;
-		}
-		else if ((color & 0xffffff) == 0xffffff) {
-			isWhite = true;
-		}
-		else {
-			hBrush = CreateSolidBrush(color);
-		}
-		if (!isBlack && !isWhite && !hBrush) return false;
-	}
-
-	for (i = 0; i < maxOpaqueRects; i++) {
-		NPDISP_RECT rect;
-		int left;
-		int top;
-		int right;
-		int bottom;
-		if (!npdisp_readMemoryWith32Offset(&rect, selector, offset + i * sizeof(rect), sizeof(rect))) {
-			if (hBrush) DeleteObject(hBrush);
-			return false;
-		}
-		if (npdisp_isNullNewFontRect(&rect)) break;
-		left = max((int)rect.left, 0);
-		top = max((int)rect.top, 0);
-		right = min((int)rect.right, targetWidth);
-		bottom = min((int)rect.bottom, targetHeight);
-		if (hasClip) {
-			left = max(left, (int)clip->left);
-			top = max(top, (int)clip->top);
-			right = min(right, (int)clip->right);
-			bottom = min(bottom, (int)clip->bottom);
-		}
-		TRACEOUT(("NewFont opaque[%d]=(%d,%d)-(%d,%d) clipped=(%d,%d)-(%d,%d)", i, rect.left, rect.top, rect.right, rect.bottom, left, top, right, bottom));
-		if (right > left && bottom > top) {
-			if (isBlack) {
-				PatBlt(tgtDC, left, top, right - left, bottom - top, BLACKNESS);
-			}
-			else if (isWhite) {
-				PatBlt(tgtDC, left, top, right - left, bottom - top, WHITENESS);
-			}
-			else {
-				RECT gdiRect = { left, top, right, bottom };
-				FillRect(tgtDC, &gdiRect, hBrush);
-			}
-			if (markDirty) npdisp_setDirty(left, top, right, bottom);
-		}
-	}
-	if (hBrush) DeleteObject(hBrush);
-	if (i == maxOpaqueRects) {
-		TRACEOUT(("NewFont opaque rectangle list has no terminator"));
-		return false;
-	}
-	return true;
-}
-
-static UINT32 npdisp_func_ExtTextOutNewFont(UINT32 lpDestDevAddr, SINT16 wDestXOrg, SINT16 wDestYOrg, UINT32 lpClipRectAddr, UINT32 lpStringAddr, SINT16 wCount, UINT32 lpFontInfoAddr, UINT32 lpDrawModeAddr, UINT32 lpTextXFormAddr, UINT32 lpCharWidthsAddr, UINT32 lpOpaqueRectAddr, UINT16 wOptions, const NPDISP_NEWFONTSEG* nf)
-{
-	int count = wCount < 0 ? -(int)wCount : (int)wCount;
-	UINT16 selector = (UINT16)(lpFontInfoAddr >> 16);
-	UINT16* glyphs = NULL;
-	SINT16* advances = NULL;
-	int* orgX = NULL;
-	int* orgY = NULL;
-	int* glyphW = NULL;
-	int* glyphH = NULL;
-	UINT32* glyphOfs = NULL;
-	UINT8* bits = NULL;
-	UINT8* row = NULL;
-	HBITMAP hBmp = NULL;
-	UINT32 retValue = 0;
-	int i;
-	SINT64 penX = 0;
-	SINT64 minX = 0;
-	SINT64 minY = 0;
-	SINT64 maxX = 0;
-	SINT64 maxY = 0;
-	int drawLeft = 0;
-	int drawTop = 0;
-	int drawRight = 0;
-	int drawBottom = 0;
-	int width = 0;
-	int height = 0;
-	int stride = 0;
-	int maxRowBytes = 0;
-	bool hasGlyphBits = false;
-	NPDISP_DRAWMODE drawMode = { 0 };
-	NPDISP_RECT clip = { 0 };
-	NPDISP_RECT textBounds = { 0 };
-	bool hasClip = lpClipRectAddr != 0;
-	bool isDisplayDevice = npdisp_isDisplayDevice(lpDestDevAddr);
-	NPDISP_PBITMAP_EXT dstPBmp = { 0 };
-	NPDISP_WINDOWS_BMPHDC bmphdc = { 0 };
-	HDC tgtDC = npdispwin.hdc;
-	int targetWidth = npdisp.width;
-	int targetHeight = npdisp.height;
-	bool haveDstPBmp = false;
-
-	if (lpDrawModeAddr && npdisp_readMemory(&drawMode, lpDrawModeAddr, sizeof(drawMode))) {
-		npdisp_AdjustDrawModeColor(&drawMode);
-	}
-	else {
-		drawMode.bkColor = 0xffffff;
-		drawMode.TextColor = 0;
-		drawMode.LbkColor = 0xffffff;
-		drawMode.LTextColor = 0;
-		drawMode.bkMode = 1;
-	}
-	if (hasClip && !npdisp_readMemory(&clip, lpClipRectAddr, sizeof(clip))) goto exit;
-	if (lpTextXFormAddr && npdisp_readMemory(&textBounds, lpTextXFormAddr, sizeof(textBounds))) {
-		TRACEOUT(("NewFont text bounds=(%d,%d)-(%d,%d)", textBounds.left, textBounds.top, textBounds.right, textBounds.bottom));
-	}
-
-	if (!isDisplayDevice && wCount >= 0) {
-		if (!lpDestDevAddr || !npdisp_readPBitmap(&dstPBmp, lpDestDevAddr)) goto exit;
-		haveDstPBmp = true;
-		targetWidth = dstPBmp.bmWidth;
-		targetHeight = dstPBmp.bmHeight;
-		if (targetWidth < 0) targetWidth = -targetWidth;
-		if (targetHeight < 0) targetHeight = -targetHeight;
-		if (targetWidth <= 0 || targetHeight <= 0) goto exit;
-	}
-
-	if (wCount == 0) {
-		if (!isDisplayDevice) {
-			if (!haveDstPBmp || !npdisp_MakeBitmapFromPBITMAP(&dstPBmp, &bmphdc, 0)) goto exit;
-			tgtDC = bmphdc.hdc;
-		}
-		if (!npdisp_fillNewFontOpaqueRects(tgtDC, &drawMode, lpOpaqueRectAddr, &clip, hasClip, targetWidth, targetHeight, isDisplayDevice)) goto exit;
-		if (bmphdc.hdc) npdisp_WriteBitmapToPBITMAP(&dstPBmp, &bmphdc);
-		else if (lpOpaqueRectAddr) npdisp.updated = 1;
-		retValue = 1;
-		goto exit;
-	}
-	if (!nf || !lpStringAddr) goto exit;
-
-	glyphs = (UINT16*)malloc(sizeof(UINT16) * count);
-	advances = (SINT16*)malloc(sizeof(SINT16) * count);
-	orgX = (int*)malloc(sizeof(int) * count);
-	orgY = (int*)malloc(sizeof(int) * count);
-	glyphW = (int*)malloc(sizeof(int) * count);
-	glyphH = (int*)malloc(sizeof(int) * count);
-	glyphOfs = (UINT32*)malloc(sizeof(UINT32) * count);
-	if (!glyphs || !advances || !orgX || !orgY || !glyphW || !glyphH || !glyphOfs) goto exit;
-
-	if (wOptions & NPDISP_ETO_GLYPH_INDEX) {
-		if (!npdisp_readMemory(glyphs, lpStringAddr, sizeof(UINT16) * count)) goto exit;
-	}
-	else {
-		UINT8* indexes = (UINT8*)malloc(count);
-		if (!indexes) goto exit;
-		if (!npdisp_readMemory(indexes, lpStringAddr, count)) { free(indexes); goto exit; }
-		for (i = 0; i < count; i++) glyphs[i] = indexes[i];
-		free(indexes);
-	}
-	if (lpCharWidthsAddr) {
-		if (!npdisp_readMemory(advances, lpCharWidthsAddr, sizeof(SINT16) * count)) goto exit;
-	}
-
-	for (i = 0; i < count; i++) {
-		UINT16 glyph = glyphs[i];
-		UINT64 glyphDataOffset;
-		if (glyph >= nf->nfNumGlyphs) glyph = 0;
-		glyphs[i] = glyph;
-		if (!lpCharWidthsAddr && !npdisp_readNewFontAW(lpFontInfoAddr, nf, glyph, &advances[i])) goto exit;
-		if (!npdisp_readNewFontOffset(lpFontInfoAddr, nf, glyph, &glyphOfs[i])) goto exit;
-		if (nf->nfFormat & NPDISP_NF_LARGE) {
-			NPDISP_LARGEROWGLYPH gh;
-			if (!npdisp_readMemoryWith32Offset(&gh, selector, glyphOfs[i], sizeof(gh))) goto exit;
-			orgX[i] = gh.orgX;
-			orgY[i] = gh.orgY;
-			glyphW[i] = gh.width;
-			glyphH[i] = gh.height;
-			glyphDataOffset = (UINT64)glyphOfs[i] + sizeof(gh);
-		}
-		else {
-			NPDISP_SMALLROWGLYPH gh;
-			if (!npdisp_readMemoryWith32Offset(&gh, selector, glyphOfs[i], sizeof(gh))) goto exit;
-			orgX[i] = gh.orgX;
-			orgY[i] = gh.orgY;
-			glyphW[i] = gh.width;
-			glyphH[i] = gh.height;
-			glyphDataOffset = (UINT64)glyphOfs[i] + sizeof(gh);
-		}
-		if (glyphDataOffset > (UINT64)0xffffffffUL) goto exit;
-		glyphOfs[i] = (UINT32)glyphDataOffset;
-		if (glyphW[i] > 0 && glyphH[i] > 0) {
-			SINT64 left = penX + orgX[i];
-			SINT64 top = -(SINT64)orgY[i];
-			SINT64 right = left + glyphW[i];
-			SINT64 bottom = top + glyphH[i];
-			int rowBytes = (glyphW[i] + 7) / 8;
-			if (rowBytes > maxRowBytes) maxRowBytes = rowBytes;
-			if (!hasGlyphBits) {
-				minX = left;
-				minY = top;
-				maxX = right;
-				maxY = bottom;
-				hasGlyphBits = true;
-			}
-			else {
-				if (left < minX) minX = left;
-				if (top < minY) minY = top;
-				if (right > maxX) maxX = right;
-				if (bottom > maxY) maxY = bottom;
-			}
-		}
-		if (i < 4) TRACEOUT(("NewFont glyph[%d]=%u ofs=%08x org=(%d,%d) size=%dx%d aw=%d", i, glyph, glyphOfs[i], orgX[i], orgY[i], glyphW[i], glyphH[i], advances[i]));
-		penX += advances[i];
-	}
-	if (wCount < 0) {
-		retValue = ((UINT32)(UINT16)penX) | ((UINT32)nf->nfHeight << 16);
-		goto exit;
-	}
-
-	if (hasGlyphBits) {
-		SINT64 left = (SINT64)wDestXOrg + minX;
-		SINT64 top = (SINT64)wDestYOrg + minY;
-		SINT64 right = (SINT64)wDestXOrg + maxX;
-		SINT64 bottom = (SINT64)wDestYOrg + maxY;
-		if (left < 0) left = 0;
-		if (top < 0) top = 0;
-		if (right > targetWidth) right = targetWidth;
-		if (bottom > targetHeight) bottom = targetHeight;
-		if (hasClip) {
-			if (left < clip.left) left = clip.left;
-			if (top < clip.top) top = clip.top;
-			if (right > clip.right) right = clip.right;
-			if (bottom > clip.bottom) bottom = clip.bottom;
-		}
-		if (right > left && bottom > top) {
-			size_t allocSize;
-			int inkPixels = 0;
-			drawLeft = (int)left;
-			drawTop = (int)top;
-			drawRight = (int)right;
-			drawBottom = (int)bottom;
-			width = drawRight - drawLeft;
-			height = drawBottom - drawTop;
-			if (width <= 0 || height <= 0) goto exit;
-			stride = ((width + 15) / 16) * 2;
-			if (stride <= 0) goto exit;
-			allocSize = (size_t)stride * (size_t)height;
-			if (allocSize / (size_t)stride != (size_t)height) goto exit;
-			bits = (UINT8*)calloc(1, allocSize);
-			if (!bits) goto exit;
-			if (maxRowBytes > 0) {
-				row = (UINT8*)malloc(maxRowBytes);
-				if (!row) goto exit;
-			}
-			penX = 0;
-			for (i = 0; i < count; i++) {
-				int rowBytes = (glyphW[i] + 7) / 8;
-				int y;
-				int x;
-				for (y = 0; y < glyphH[i]; y++) {
-					UINT64 rowOffset = (UINT64)glyphOfs[i] + (UINT64)y * rowBytes;
-					if (rowBytes) {
-						if (rowOffset > (UINT64)0xffffffffUL || rowOffset + rowBytes - 1 > (UINT64)0xffffffffUL) goto exit;
-						if (!npdisp_readMemoryWith32Offset(row, selector, (UINT32)rowOffset, rowBytes)) goto exit;
-					}
-					for (x = 0; x < glyphW[i]; x++) {
-						if (row[x >> 3] & (0x80 >> (x & 7))) {
-							SINT64 absX = (SINT64)wDestXOrg + penX + orgX[i] + x;
-							SINT64 absY = (SINT64)wDestYOrg - orgY[i] + y;
-							if (absX >= drawLeft && absX < drawRight && absY >= drawTop && absY < drawBottom) {
-								int dx = (int)(absX - drawLeft);
-								int dy = (int)(absY - drawTop);
-								size_t dstOffset = (size_t)dy * (size_t)stride + (size_t)(dx >> 3);
-								if (dstOffset >= allocSize) goto exit;
-								bits[dstOffset] |= 0x80 >> (dx & 7);
-								inkPixels++;
-							}
-						}
-					}
-				}
-				penX += advances[i];
-			}
-			hBmp = CreateBitmap(width, height, 1, 1, bits);
-			TRACEOUT(("NewFont bitmap size=%dx%d stride=%d ink=%d hBmp=%s", width, height, stride, inkPixels, hBmp ? "OK" : "FAIL"));
-			if (!hBmp) goto exit;
-		}
-	}
-
-	if (!isDisplayDevice) {
-		if (!haveDstPBmp || !npdisp_MakeBitmapFromPBITMAP(&dstPBmp, &bmphdc, 0)) goto exit;
-		tgtDC = bmphdc.hdc;
-	}
-	if (!npdisp_fillNewFontOpaqueRects(tgtDC, &drawMode, lpOpaqueRectAddr, &clip, hasClip, targetWidth, targetHeight, isDisplayDevice)) goto exit;
-
-	if (hBmp) {
-		HDC srcDC = npdispwin.hdcCache[1];
-		HGDIOBJ oldBmp = SelectObject(srcDC, hBmp);
-		TRACEOUT(("NewFont draw org=(%d,%d) bbox=(%d,%d)-(%d,%d) clip=%s(%d,%d)-(%d,%d) draw=(%d,%d)-(%d,%d)", wDestXOrg, wDestYOrg, (int)minX, (int)minY, (int)maxX, (int)maxY, hasClip ? "" : "none ", hasClip ? clip.left : 0, hasClip ? clip.top : 0, hasClip ? clip.right : 0, hasClip ? clip.bottom : 0, drawLeft, drawTop, drawRight, drawBottom));
-		if (drawRight > drawLeft && drawBottom > drawTop) {
-			int savedDC = SaveDC(tgtDC);
-			if (savedDC) {
-				SetBkMode(tgtDC, OPAQUE);
-				SetBkColor(tgtDC, 0x000000);
-				SetTextColor(tgtDC, 0xffffff);
-				BitBlt(tgtDC, drawLeft, drawTop, width, height, srcDC, 0, 0, SRCAND);
-				SetBkColor(tgtDC, drawMode.LTextColor);
-				SetTextColor(tgtDC, 0x000000);
-				BitBlt(tgtDC, drawLeft, drawTop, width, height, srcDC, 0, 0, SRCPAINT);
-				RestoreDC(tgtDC, savedDC);
-			}
-			else {
-				int oldBkMode = GetBkMode(tgtDC);
-				COLORREF oldBkColor = GetBkColor(tgtDC);
-				COLORREF oldTextColor = GetTextColor(tgtDC);
-				SetBkMode(tgtDC, OPAQUE);
-				SetBkColor(tgtDC, 0x000000);
-				SetTextColor(tgtDC, 0xffffff);
-				BitBlt(tgtDC, drawLeft, drawTop, width, height, srcDC, 0, 0, SRCAND);
-				SetBkColor(tgtDC, drawMode.LTextColor);
-				SetTextColor(tgtDC, 0x000000);
-				BitBlt(tgtDC, drawLeft, drawTop, width, height, srcDC, 0, 0, SRCPAINT);
-				SetBkColor(tgtDC, oldBkColor);
-				SetTextColor(tgtDC, oldTextColor);
-				SetBkMode(tgtDC, oldBkMode);
-			}
-			if (isDisplayDevice) npdisp_setDirty(drawLeft, drawTop, drawRight, drawBottom);
-		}
-		SelectObject(srcDC, oldBmp);
-	}
-
-	if (bmphdc.hdc) npdisp_WriteBitmapToPBITMAP(&dstPBmp, &bmphdc);
-	else if (lpOpaqueRectAddr || hBmp) npdisp.updated = 1;
-	retValue = 1;
-
-exit:
-	if (bmphdc.hdc) npdisp_FreeBitmap(&bmphdc);
-	if (hBmp) DeleteObject(hBmp);
-	if (row) free(row);
-	if (bits) free(bits);
-	if (glyphs) free(glyphs);
-	if (advances) free(advances);
-	if (orgX) free(orgX);
-	if (orgY) free(orgY);
-	if (glyphW) free(glyphW);
-	if (glyphH) free(glyphH);
-	if (glyphOfs) free(glyphOfs);
-	return retValue;
-}
-
 static UINT32 npdisp_func_ExtTextOut(UINT32 lpDestDevAddr, SINT16 wDestXOrg, SINT16 wDestYOrg, UINT32 lpClipRectAddr, UINT32 lpStringAddr, SINT16 wCount, UINT32 lpFontInfoAddr, UINT32 lpDrawModeAddr, UINT32 lpTextXFormAddr, UINT32 lpCharWidthsAddr, UINT32 lpOpaqueRectAddr, UINT16 wOptions)
 {
-	NPDISP_NEWFONTSEG newFont;
-	if (npdisp.isWin9x && (wOptions & NPDISP_ETO_BYTE_PACKED)) {
-		if (wCount == 0) {
-			TRACEOUT(("ExtTextOut NewFontSeg fill-only options=%04x", wOptions));
-			return npdisp_func_ExtTextOutNewFont(lpDestDevAddr, wDestXOrg, wDestYOrg, lpClipRectAddr, lpStringAddr, wCount, lpFontInfoAddr, lpDrawModeAddr, lpTextXFormAddr, lpCharWidthsAddr, lpOpaqueRectAddr, wOptions, NULL);
-		}
-		if (!npdisp_isNewFontSeg(lpFontInfoAddr, &newFont)) return 0x80000000L;
-		TRACEOUT(("ExtTextOut NewFontSeg fmt=%04x glyphs=%u options=%04x", newFont.nfFormat, newFont.nfNumGlyphs, wOptions));
-		return npdisp_func_ExtTextOutNewFont(lpDestDevAddr, wDestXOrg, wDestYOrg, lpClipRectAddr, lpStringAddr, wCount, lpFontInfoAddr, lpDrawModeAddr, lpTextXFormAddr, lpCharWidthsAddr, lpOpaqueRectAddr, wOptions, &newFont);
-	}
-	if (npdisp.isWin9x && (wOptions & NPDISP_ETO_BIT_PACKED)) return 0x80000000L;
+#if defined(SUPPORT_NPDISP_NEWFONTSEG)
+	UINT32 newFontRetValue;
+	if (npdisp_newfont_tryExtTextOut(lpDestDevAddr, wDestXOrg, wDestYOrg, lpClipRectAddr, lpStringAddr, wCount, lpFontInfoAddr, lpDrawModeAddr, lpTextXFormAddr, lpCharWidthsAddr, lpOpaqueRectAddr, wOptions, &newFontRetValue)) return newFontRetValue;
+#endif
 	UINT32 retValue = 0;
-	UINT8* lpText;
-	if (wCount != 0) {
+	NPDISP_FONTINFO fontInfo;
+	if (!npdisp_readMemory(&fontInfo, lpFontInfoAddr, sizeof(NPDISP_FONTINFO))) return 0;
+	// PF_GLYPH_INDEX(0x20)ではExtTextOutのglyph indexを16bit値として扱う
+	const bool wordGlyphIndex = (fontInfo.dfType & 0x0020) != 0;
+	const int loopLen = wCount >= 0 ? wCount : -wCount;
+	UINT8* lpText = NULL;
+	UINT16* lpWordText = NULL;
+	if (loopLen != 0) {
 		if (!lpStringAddr) return 0;
-		lpText = (UINT8*)npdisp_readMemoryStringWithCount(lpStringAddr, wCount < 0 ? -wCount : wCount);
+		if (wordGlyphIndex) {
+			lpWordText = (UINT16*)malloc(sizeof(UINT16) * loopLen);
+			if (lpWordText && !npdisp_readMemory(lpWordText, lpStringAddr, sizeof(UINT16) * loopLen)) {
+				free(lpWordText);
+				lpWordText = NULL;
+			}
+		}
+		else {
+			lpText = (UINT8*)npdisp_readMemoryStringWithCount(lpStringAddr, loopLen);
+		}
 	}
-	else {
-		// ダミーをいれておく
-		lpText = (UINT8*)malloc(1);
-		lpText[0] = '\0';
-	}
-	if (lpText) {
+	if (loopLen == 0 || (wordGlyphIndex ? lpWordText != NULL : lpText != NULL)) {
 		if (npdisp.longjmpnum == 0) {
 			int i;
 			RECT cliprect = { 0 };
@@ -2850,12 +2427,11 @@ static UINT32 npdisp_func_ExtTextOut(UINT32 lpDestDevAddr, SINT16 wDestXOrg, SIN
 				drawMode.LTextColor = 0x000000;
 			}
 			//HGDIOBJ oldFont = SelectObject(tgtDC, npdispwin.hFont);
-			NPDISP_FONTINFO fontInfo;
-			if (npdisp_readMemory(&fontInfo, lpFontInfoAddr, sizeof(NPDISP_FONTINFO))) {
-				bool hasDBCS = (UINT8)fontInfo.dfCharSet == 0x80;
+			{
+				// Win3.xの旧FONTINFO描画でのみShift-JISのDBCS補完を行い、Win9xのglyph index描画では使用しない
+				bool hasDBCS = !npdisp.isWin9x && !wordGlyphIndex && (UINT8)fontInfo.dfCharSet == 0x80;
 				SIZE sz = { 0, fontInfo.dfPixHeight };
 				int maxCharWidth = 0;
-				int loopLen = wCount >= 0 ? wCount : -wCount;
 				SINT16* charWidths = NULL;
 				SINT16* charRealWidths = NULL;
 				UINT32* charOffsets = NULL;
@@ -2872,9 +2448,13 @@ static UINT32 npdisp_func_ExtTextOut(UINT32 lpDestDevAddr, SINT16 wDestXOrg, SIN
 						bool is2Byte = false;
 						for (i = 0; i < loopLen; i++) {
 							NPDISP_FONTCHARINFO3 charInfo;
-							int charIdx = (int)lpText[i] - fontInfo.dfFirstChar;
-							if (charIdx < 0 || fontInfo.dfLastChar < charIdx) {
-								charIdx = fontInfo.dfDefaultChar;
+							int charIdx;
+							if (wordGlyphIndex) {
+								charIdx = lpWordText[i];
+							}
+							else {
+								charIdx = (int)lpText[i] - fontInfo.dfFirstChar;
+								if (charIdx < 0 || fontInfo.dfLastChar < charIdx) charIdx = fontInfo.dfDefaultChar;
 							}
 							int charWidth = 0;
 							if (lpCharWidthsAddr) {
@@ -3062,10 +2642,6 @@ static UINT32 npdisp_func_ExtTextOut(UINT32 lpDestDevAddr, SINT16 wDestXOrg, SIN
 									bool is2Byte = false;
 									for (i = 0; i < loopLen; i++) {
 										bool skipRender = false;
-										int charIdx = (int)lpText[i] - fontInfo.dfFirstChar;
-										if (charIdx < 0 || fontInfo.dfLastChar < charIdx) {
-											charIdx = fontInfo.dfDefaultChar;
-										}
 										if (hasDBCS) {
 											if (is2Byte) {
 												is2Byte = false;
@@ -3248,7 +2824,7 @@ static UINT32 npdisp_func_ExtTextOut(UINT32 lpDestDevAddr, SINT16 wDestXOrg, SIN
 														isTransparentBk = true;
 													}
 												}
-												HFONT hFont = npdisp_getFont(&fontInfo, lpFontInfoAddr);
+												HFONT hFont = hasDBCS ? npdisp_getFont(&fontInfo, lpFontInfoAddr) : NULL;
 												if (isTransparentBk || hFont) {
 													// 背景透過 or FONT指示あり ROPが要るor描画が必要なのでDDB経由
 													TRACEOUT(("FG:%08x BG:TRANS", drawMode.LTextColor));
@@ -3370,7 +2946,8 @@ static UINT32 npdisp_func_ExtTextOut(UINT32 lpDestDevAddr, SINT16 wDestXOrg, SIN
 			}
 		}
 		//SelectObject(npdispwin.hdc, oldFont);
-		free(lpText);
+		if (lpText) free(lpText);
+		if (lpWordText) free(lpWordText);
 	}
 	return retValue;
 }
@@ -5867,7 +5444,7 @@ void npdisp_exec_fast(void) {
 			NPDISP_REQUEST_READFROMSTACK(req, parameters.extTextOut, wOptions);
 		}
 		const UINT32 retValue = npdisp_func_ExtTextOut(req.parameters.extTextOut.lpDestDevAddr, req.parameters.extTextOut.wDestXOrg, req.parameters.extTextOut.wDestYOrg, req.parameters.extTextOut.lpClipRectAddr, req.parameters.extTextOut.lpStringAddr, req.parameters.extTextOut.wCount, req.parameters.extTextOut.lpFontInfoAddr, req.parameters.extTextOut.lpDrawModeAddr, req.parameters.extTextOut.lpTextXFormAddr, req.parameters.extTextOut.lpCharWidthsAddr, req.parameters.extTextOut.lpOpaqueRectAddr, req.parameters.extTextOut.wOptions);
-		
+	
 		if (!npdisp.longjmpnum) {
 			// 戻り値
 			CPU_AX = retValue & 0xffff;
@@ -5876,8 +5453,12 @@ void npdisp_exec_fast(void) {
 			CPU_CX = 0; // 成功の時CXを0に
 
 			// 処理負荷バランス調整
-			if (req.parameters.extTextOut.wCount > 0) {
-				CPU_REMCLOCK -= (int)req.parameters.extTextOut.wCount * pccore.multiple * 10;
+			if (req.parameters.extTextOut.wCount > 0 && !(req.parameters.extTextOut.wOptions & 0x1000)) {
+				int clocksPerGlyph = 10;
+#if defined(SUPPORT_NPDISP_NEWFONTSEG)
+				if (npdisp_newfont_isPackedExtTextOut(req.parameters.extTextOut.wOptions)) clocksPerGlyph /= 2;
+#endif
+				CPU_REMCLOCK -= (int)req.parameters.extTextOut.wCount * pccore.multiple * clocksPerGlyph;
 			}
 		}
 		break;
@@ -6557,32 +6138,19 @@ static void npdisp_createStockGdiObjects(void)
 {
 	UINT32 white = RGB(255, 255, 255);
 	UINT32 black = RGB(0, 0, 0);
-	UINT32 ltgray = RGB(192, 192, 192);
-	UINT32 gray = RGB(128, 128, 128);
-	int brushCount = 6;
 
-	if (npdisp.bpp == 1) {
-		brushCount = 3;
-	}
-	else if (npdisp.bpp == 4 || npdisp.bpp == 8) {
-		brushCount = 5;
-	}
-
-	NPDISP_LPEN pens[3] = {
+	NPDISP_LPEN pens[] = {
 		{ NPDISP_PEN_STYLE_SOLID, { 1, 0 }, (SINT32)white },
 		{ NPDISP_PEN_STYLE_SOLID, { 1, 0 }, (SINT32)black },
 		{ NPDISP_PEN_STYLE_NOLINE, { 1, 0 }, (SINT32)black }
 	};
-	NPDISP_LBRUSH brushes[6] = {
+	NPDISP_LBRUSH brushes[] = {
 		{ NPDISP_BRUSH_STYLE_SOLID, (SINT32)white, 0, 0 },
 		{ NPDISP_BRUSH_STYLE_SOLID, (SINT32)black, 0, 0 },
 		{ NPDISP_BRUSH_STYLE_HOLLOW, (SINT32)black, 0, 0 },
-		{ NPDISP_BRUSH_STYLE_SOLID, (SINT32)ltgray, 0, 0 },
-		{ NPDISP_BRUSH_STYLE_SOLID, (SINT32)gray, 0, 0 },
-		{ NPDISP_BRUSH_STYLE_SOLID, (SINT32)RGB(64, 64, 64), 0, 0 }
 	};
 
-	for (int i = 0; i < 3; ++i) {
+	for (int i = 0; i < NELEMENTS(pens); ++i) {
 		auto it = npdispwin.pens.begin();
 		for (; it != npdispwin.pens.end(); ++it) {
 			if (npdisp_isSameLogicalPen(&it->second.lpen, &pens[i])) break;
@@ -6601,7 +6169,7 @@ static void npdisp_createStockGdiObjects(void)
 		}
 	}
 
-	for (int i = 0; i < brushCount; ++i) {
+	for (int i = 0; i < NELEMENTS(brushes); ++i) {
 		auto it = npdispwin.brushes.begin();
 		for (; it != npdispwin.brushes.end(); ++it) {
 			if (npdisp_isSameLogicalBrush(&it->second.lbrush, &brushes[i])) break;
@@ -6622,6 +6190,10 @@ static void npdisp_createStockGdiObjects(void)
 }
 
 static void npdisp_releaseScreen(bool resize) {
+#if defined(SUPPORT_NPDISP_NEWFONTSEG)
+	/* Guest GDI may rebuild physical font segments whenever the display device is recreated. */
+	npdisp_newfont_reset();
+#endif
 	if (npdispwin.hdc) {
 		SelectObject(npdispwin.hdc, npdispwin.hOldPen);
 		SelectObject(npdispwin.hdc, npdispwin.hOldBrush);

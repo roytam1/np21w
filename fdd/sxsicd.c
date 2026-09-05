@@ -65,88 +65,81 @@ CDTRK sxsicd_gettrk(SXSIDEV sxsi, UINT *tracks) {
 }
 
 BRESULT sxsicd_readraw(SXSIDEV sxsi, FILEPOS pos, void *buf) {
-
 	CDINFO	cdinfo;
 	FILEH	fh;
 	FILEPOS	fpos;
-	UINT16	secsize = 0;
-	SINT32	i;
-	UINT32	secs;
-//	UINT64	trk_offset;
-	
-	int isPhysicalCD = 0;
+	UINT16	secsize;
+	UINT16	data_offset;
+	UINT8	sector_mode;
+	UINT8	adr_ctl;
+	BOOL	synthetic;
+	int	isPhysicalCD;
 
-	//	範囲外は失敗
-	if ((pos < 0) || (sxsi->totals < pos)) {
+	if ((pos < 0) || (pos >= sxsi->totals)) {
 		return(FAILURE);
 	}
 
 	cdinfo = (CDINFO)sxsi->hdl;
-	
-#ifdef SUPPORT_PHYSICAL_CDDRV
-
-	// XXX: 事前に判定して記録しておくべき･･･
-	isPhysicalCD = (cdinfo->path[0] == '\\' && cdinfo->path[1] == '\\' && cdinfo->path[2] == '.' && cdinfo->path[3] == '\\'); 
-
-#endif
-
 	if (cdinfo->trks == 0) {
 		return(FAILURE);
 	}
 
-	//	pos位置のセクタサイズを取得
-	for (i = cdinfo->trks - 1; i >= 0; i--) {
-		if (cdinfo->trk[i].pos <= (UINT32)pos) {
-			secsize = cdinfo->trk[i].sector_size;
-			break;
-		}
-	}
-	if (secsize == 0) {
-		return(FAILURE);
-	}
-	if (secsize == 2048 && !isPhysicalCD) {
-		return(FAILURE);
-	}
+	isPhysicalCD = 0;
+#ifdef SUPPORT_PHYSICAL_CDDRV
+	isPhysicalCD = (cdinfo->path[0] == '\\' && cdinfo->path[1] == '\\' && cdinfo->path[2] == '.' && cdinfo->path[3] == '\\');
+#endif
 
 	if (sxsi_prepare(sxsi) != SUCCESS) {
 		return(FAILURE);
 	}
+	if (cddfile_mapsector(sxsi, pos, &fpos, &secsize, &data_offset, &sector_mode, &adr_ctl, &synthetic) != SUCCESS) {
+		return(FAILURE);
+	}
+	if (cdinfo->layout != CDINFO_LAYOUT_CUE) {
+		SINT32 i;
+
+		secsize = 0;
+		for (i = (SINT32)cdinfo->trks - 1; i >= 0; i--) {
+			if (cdinfo->trk[i].pos <= (UINT32)pos) {
+				secsize = cdinfo->trk[i].sector_size;
+				break;
+			}
+		}
+		if (secsize == 0) {
+			return(FAILURE);
+		}
+	}
+	if ((secsize < 2352) && !isPhysicalCD) {
+		return(FAILURE);
+	}
+	if (synthetic) {
+		memset(buf, 0, 2352);
+		return(SUCCESS);
+	}
 
 	fh = ((CDINFO)sxsi->hdl)->fh;
-	fpos = 0;
-	secs = 0;
-	for (i = 0; i < cdinfo->trks; i++) {
-		if (cdinfo->trk[i].str_sec <= (UINT32)pos && (UINT32)pos <= cdinfo->trk[i].end_sec) {
-			fpos += (pos - secs) * cdinfo->trk[i].sector_size;
-			break;
-		}
-		fpos += (FILEPOS)cdinfo->trk[i].sectors * cdinfo->trk[i].sector_size;
-		secs += cdinfo->trk[i].sectors;
-	}
-	fpos += (FILEPOS)(cdinfo->trk[0].start_offset);
 #ifdef SUPPORT_PHYSICAL_CDDRV
-	if(isPhysicalCD){
+	if (isPhysicalCD) {
 		DWORD BytesReturned;
 		RAW_READ_INFO rawReadInfo;
 		rawReadInfo.TrackMode = CDDA;
 		rawReadInfo.SectorCount = 1;
 		rawReadInfo.DiskOffset.QuadPart = fpos;
-		if (!DeviceIoControl(fh,IOCTL_CDROM_RAW_READ,&rawReadInfo,sizeof(RAW_READ_INFO), buf, 2352, &BytesReturned,0)) {
+		if (!DeviceIoControl(fh, IOCTL_CDROM_RAW_READ, &rawReadInfo, sizeof(RAW_READ_INFO), buf, 2352, &BytesReturned, 0)) {
 			return(FAILURE);
 		}
 		if (BytesReturned != 2352) {
 			return(FAILURE);
 		}
-	}else{
+	}
+	else {
 #endif
-		if ((file_seek(fh, fpos, FSEEK_SET) != fpos) ||
-			(file_read(fh, buf, 2352) != 2352)) {
+		if ((file_seek(fh, fpos, FSEEK_SET) != fpos) || (file_read(fh, buf, 2352) != 2352)) {
 			return(FAILURE);
 		}
 #ifdef SUPPORT_PHYSICAL_CDDRV
 	}
 #endif
-
 	return(SUCCESS);
 }
 

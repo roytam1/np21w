@@ -36,6 +36,7 @@
 
 #ifdef SUPPORT_IA32_HAXM
 #include "bios/bios.h"
+#include "sound/soundrom.h"
 #endif
 
 static void
@@ -1491,7 +1492,11 @@ INT3(void)
 		if (!CPU_STAT_PM || CPU_STAT_VM86) {
 			UINT32 adrs;
 			adrs = CPU_PREV_EIP + (CPU_CS << 4);
-			if ((adrs >= 0xf8000) && (adrs < 0x100000)) {
+			if (
+#if defined(SUPPORT_EMU_SOUNDBIOS)
+				soundrom_isbiosaddr(adrs) ||
+#endif
+				((adrs >= 0xf8000) && (adrs < 0x100000))) {
 				ia32_bioscall();
 				return;
 			}

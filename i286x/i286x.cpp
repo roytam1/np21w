@@ -11,6 +11,7 @@
 #include	"i286xea.mcr"
 #include	"v30patch.h"
 #include	"bios/bios.h"
+#include	"sound/soundrom.h"
 #include	"dmax86.h"
 #if defined(ENABLE_TRAP)
 #include "trap/inttrap.h"
@@ -2583,6 +2584,28 @@ I286 _nop(void) {								// 90: nop / bios func
 #if 1
 				lea		ecx, [esi - 1]
 				add		ecx, CS_BASE
+#if defined(SUPPORT_EMU_SOUNDBIOS)
+				cmp		ecx, 0c8000h
+				jc		biosmaincheck
+				cmp		ecx, 0d8000h
+				jnc		biosmaincheck
+				push	ecx
+				push	ecx
+				call	soundrom_isbiosaddr
+				add		esp, 4
+				pop		ecx
+				test	eax, eax
+				jz		biosmaincheck
+				; soundrom_biosfunc may need the post-hook IP for a FAR callback.
+				mov		I286_IP, si
+				push	ecx
+				push	ecx
+				call	soundrom_biosfunc
+				add		esp, 4
+				pop		ecx
+				jmp		bioshandled
+#endif
+			biosmaincheck:
 				cmp		ecx, 0f8000h
 				jc		biosend
 				cmp		ecx, 100000h
@@ -2591,6 +2614,7 @@ I286 _nop(void) {								// 90: nop / bios func
 				call	biosfunc
 				cmp		al, ah
 				je		biosend
+			bioshandled:
 				movzx	esi, I286_IP
 				movzx	eax, I286_ES
 				shl		eax, 4

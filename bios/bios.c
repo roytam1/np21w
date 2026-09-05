@@ -35,6 +35,7 @@
 #include	"calendar.h"
 #endif
 #include	"fmboard.h"
+#include	"sound/soundrom.h"
 
 #if defined(SUPPORT_VGA_MODEX)
 #if defined(SUPPORT_WAB)
@@ -680,6 +681,10 @@ void bios_initialize(void) {
 	
 #ifdef USE_CUSTOM_HOOKINST
 	bios_updatehookinst(mem + 0xf8000, 0x100000 - 0xf8000);
+#endif
+	// サウンドBIOSのフック命令書き換え
+#if defined(SUPPORT_EMU_SOUNDBIOS)
+	soundrom_patchhookinst();
 #endif
 }
 

@@ -642,6 +642,7 @@ static const PFTBL s_IniItems[] =
 #endif
 #if defined(SUPPORT_WAB_NPDISP)
 	PFVAL("USENPDSP", PFTYPE_BOOL,		&np2cfg.usenpdisp),
+	PFVAL("NPDSPACC", PFTYPE_UINT8,	&np2cfg.npdispaccel),
 #endif
 #if defined(SUPPORT_WAB_GA1280A)
 	PFVAL("USEGADSP", PFTYPE_BOOL,		&np2cfg.usega1280a),

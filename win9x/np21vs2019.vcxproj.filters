@@ -2421,6 +2421,15 @@
     <ClCompile Include="..\wab\npdisp_dd.cpp">
       <Filter>ソース ファイル\wab</Filter>
     </ClCompile>
+    <ClCompile Include="..\wab\npdisp_ddbridge.cpp">
+      <Filter>ソース ファイル\wab</Filter>
+    </ClCompile>
+    <ClCompile Include="..\wab\npdisp_d3d.cpp">
+      <Filter>ソース ファイル\wab</Filter>
+    </ClCompile>
+    <ClCompile Include="..\wab\npdisp_d3d_sw.cpp">
+      <Filter>ソース ファイル\wab</Filter>
+    </ClCompile>
     <ClCompile Include="..\wab\npdisp_rle.cpp">
       <Filter>ソース ファイル\wab</Filter>
     </ClCompile>
@@ -3648,6 +3657,15 @@
       <Filter>ヘッダー ファイル\wab</Filter>
     </ClInclude>
     <ClInclude Include="..\wab\npdisp_dd.h">
+      <Filter>ヘッダー ファイル\wab</Filter>
+    </ClInclude>
+    <ClInclude Include="..\wab\npdisp_ddbridge.h">
+      <Filter>ヘッダー ファイル\wab</Filter>
+    </ClInclude>
+    <ClInclude Include="..\wab\npdisp_d3d.h">
+      <Filter>ヘッダー ファイル\wab</Filter>
+    </ClInclude>
+    <ClInclude Include="..\wab\npdisp_d3d_sw.h">
       <Filter>ヘッダー ファイル\wab</Filter>
     </ClInclude>
     <ClInclude Include="..\wab\npdispdef.h">

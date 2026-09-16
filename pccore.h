@@ -82,6 +82,14 @@ enum {
 	FPU_TYPE_DOSBOX2	= 2  /* DOSBox FPU+INT64 */
 };
 
+#if defined(SUPPORT_WAB_NPDISP)
+enum {
+	NPDISP_ACCEL_LEGACY		= 0,
+	NPDISP_ACCEL_DIRECTDRAW	= 1,
+	NPDISP_ACCEL_DIRECT3D		= 2
+};
+#endif
+
 /**
  * @brief config
  */
@@ -270,6 +278,7 @@ struct tagNP2Config
 #endif
 #if defined(SUPPORT_WAB_NPDISP)
 	UINT8	usenpdisp;
+	UINT8	npdispaccel;
 #endif
 #if defined(SUPPORT_WAB_GA1280A)
 	UINT8	usega1280a;

@@ -105,6 +105,15 @@ extern "C" {
 		UINT32 mm_ddOverlaySrcKeyHigh;
 		UINT32 mm_ddOverlayFourCC;
 		UINT32 mm_ddOverlayDDFX;
+
+		// protocol v15以降: 専用DD32 bridge descriptorのguest far address。
+		// ステート互換のため既存フィールドの後ろへ追加する。
+		UINT32 mm_ddBridgeInfoAddr;
+		UINT32 mm_d3dGlobalDriverDataAddr;
+		UINT32 mm_d3dHalCallbacksAddr;
+
+		// 現在動作中のアクセラレーションモード。ステートセーブ対象。
+		UINT8 acceleration;
 	} NPDISP;
 
 	extern NPDISP		npdisp;

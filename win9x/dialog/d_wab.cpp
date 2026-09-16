@@ -377,7 +377,11 @@ protected:
 
 private:
 	UINT8 m_enabled;			//!< —LŒøƒtƒ‰ƒO
+	UINT8 m_acceleration;
 	CWndProc m_chkenabled;		//!< ENABLED
+	CWndProc m_radlegacy;
+	CWndProc m_raddirectdraw;
+	CWndProc m_raddirect3d;
 };
 
 /**
@@ -402,12 +406,29 @@ CNPDISPPage::~CNPDISPPage()
 BOOL CNPDISPPage::OnInitDialog()
 {
 	m_enabled = np2cfg.usenpdisp;
+	m_acceleration = np2cfg.npdispaccel;
+	if (m_acceleration > NPDISP_ACCEL_DIRECT3D)
+		m_acceleration = NPDISP_ACCEL_DIRECT3D;
+#if !defined(SUPPORT_NPDISP_D3D)
+	if (m_acceleration > NPDISP_ACCEL_DIRECTDRAW)
+		m_acceleration = NPDISP_ACCEL_DIRECTDRAW;
+#endif
 
 	m_chkenabled.SubclassDlgItem(IDC_NPDISPENABLED, this);
 	if (m_enabled)
 		m_chkenabled.SendMessage(BM_SETCHECK, BST_CHECKED, 0);
 	else
 		m_chkenabled.SendMessage(BM_SETCHECK, BST_UNCHECKED, 0);
+
+	m_radlegacy.SubclassDlgItem(IDC_NPDISPLEGACY, this);
+	m_raddirectdraw.SubclassDlgItem(IDC_NPDISPDIRECTDRAW, this);
+	m_raddirect3d.SubclassDlgItem(IDC_NPDISPDIRECT3D, this);
+#if !defined(SUPPORT_NPDISP_D3D)
+	m_raddirect3d.EnableWindow(FALSE);
+#endif
+	m_radlegacy.SendMessage(BM_SETCHECK, (m_acceleration == NPDISP_ACCEL_LEGACY) ? BST_CHECKED : BST_UNCHECKED, 0);
+	m_raddirectdraw.SendMessage(BM_SETCHECK, (m_acceleration == NPDISP_ACCEL_DIRECTDRAW) ? BST_CHECKED : BST_UNCHECKED, 0);
+	m_raddirect3d.SendMessage(BM_SETCHECK, (m_acceleration == NPDISP_ACCEL_DIRECT3D) ? BST_CHECKED : BST_UNCHECKED, 0);
 
 	m_chkenabled.SetFocus();
 
@@ -421,9 +442,10 @@ void CNPDISPPage::OnOK()
 {
 	UINT update = 0;
 
-	if (np2cfg.usenpdisp != m_enabled)
+	if (np2cfg.usenpdisp != m_enabled || np2cfg.npdispaccel != m_acceleration)
 	{
 		np2cfg.usenpdisp = m_enabled;
+		np2cfg.npdispaccel = m_acceleration;
 		update |= SYS_UPDATECFG;
 	}
 	::sysmng_update(update);
@@ -441,6 +463,15 @@ BOOL CNPDISPPage::OnCommand(WPARAM wParam, LPARAM lParam)
 	{
 	case IDC_NPDISPENABLED:
 		m_enabled = (m_chkenabled.SendMessage(BM_GETCHECK, 0, 0) ? 1 : 0);
+		return TRUE;
+	case IDC_NPDISPLEGACY:
+		m_acceleration = NPDISP_ACCEL_LEGACY;
+		return TRUE;
+	case IDC_NPDISPDIRECTDRAW:
+		m_acceleration = NPDISP_ACCEL_DIRECTDRAW;
+		return TRUE;
+	case IDC_NPDISPDIRECT3D:
+		m_acceleration = NPDISP_ACCEL_DIRECT3D;
 		return TRUE;
 	}
 	return FALSE;

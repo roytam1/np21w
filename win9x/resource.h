@@ -354,6 +354,9 @@
 #define IDC_WABMULTHREAD                19016
 #define IDC_GD5430FAKECURSOR            19017
 #define IDC_NPDISPENABLED               19020
+#define IDC_NPDISPLEGACY                19021
+#define IDC_NPDISPDIRECTDRAW            19022
+#define IDC_NPDISPDIRECT3D              19023
 #define IDC_GA1280AENABLED              19030
 #define IDC_PCIENABLE                   19070
 #define IDC_PCIPCMCTYPE                 19071

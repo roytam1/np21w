@@ -28,6 +28,9 @@
 #include	"npdispdef.h"
 #include	"npdisp.h"
 #include	"npdisp_dd.h"
+#if defined(SUPPORT_NPDISP_D3D)
+#include	"npdisp_d3d.h"
+#endif
 #include	"npdisp_statsave.h"
 #include	"npdisp_rle.h"
 #include	"npdisp_mem.h"
@@ -322,7 +325,7 @@ void npdispcs_shutdown(void)
 
 // *** エクスポート関数処理 *****************
 
-static void npdisp_func_NP2Initialize(UINT16 dpiX, UINT16 dpiY, UINT16 width, UINT16 height, UINT16 bpp, UINT8 isWin9x, UINT16 vramSelector, UINT32 bmpinfoAddr, UINT32 beginAccessAddr, UINT32 endAccessAddr, UINT32 dcibufAddr, UINT32 dciBeginAccessAddr, UINT32 dciEndAccessAddr, UINT32 dciDestroySurfaceAddr, UINT32 vramLinearAddr, UINT32 vramPhysicalAddr, UINT32 ddCallbacksAddr, UINT32 ddSurfaceCallbacksAddr, UINT32 ddHalInfoAddr, UINT32 ddModeInfoAddr, UINT32 ddPaletteCallbacksAddr, UINT32 ddVidMemAddr)
+static void npdisp_func_NP2Initialize(UINT16 dpiX, UINT16 dpiY, UINT16 width, UINT16 height, UINT16 bpp, UINT8 isWin9x, UINT16 vramSelector, UINT32 bmpinfoAddr, UINT32 beginAccessAddr, UINT32 endAccessAddr, UINT32 dcibufAddr, UINT32 dciBeginAccessAddr, UINT32 dciEndAccessAddr, UINT32 dciDestroySurfaceAddr, UINT32 vramLinearAddr, UINT32 vramPhysicalAddr, UINT32 ddCallbacksAddr, UINT32 ddSurfaceCallbacksAddr, UINT32 ddHalInfoAddr, UINT32 ddModeInfoAddr, UINT32 ddPaletteCallbacksAddr, UINT32 ddVidMemAddr, UINT32 ddBridgeInfoAddr, UINT32 d3dGlobalDriverDataAddr, UINT32 d3dHalCallbacksAddr)
 {
 	bool resize = npdisp.enabled && npdisp.active;
 
@@ -379,7 +382,7 @@ static void npdisp_func_NP2Initialize(UINT16 dpiX, UINT16 dpiY, UINT16 width, UI
 		npdisp.mm_vramSelector = (npdisp.version >= 8 && npdisp.isWin9x) ? vramSelector : 0;
 		TRACEOUT11(("NPDISP11 INIT_VRAM linear=%08x physical=%08x selector=%04x",
 			npdisp.mm_vramLinearAddr, npdisp.mm_vramPhysicalAddr, npdisp.mm_vramSelector));
-		if (npdisp.version >= 6) {
+		if (npdisp.acceleration >= NPDISP_ACCEL_DIRECTDRAW && npdisp.version >= 6) {
 			npdisp.mm_ddCallbacksAddr = ddCallbacksAddr;
 			npdisp.mm_ddSurfaceCallbacksAddr = ddSurfaceCallbacksAddr;
 		}
@@ -387,25 +390,25 @@ static void npdisp_func_NP2Initialize(UINT16 dpiX, UINT16 dpiY, UINT16 width, UI
 			npdisp.mm_ddCallbacksAddr = 0;
 			npdisp.mm_ddSurfaceCallbacksAddr = 0;
 		}
-		if (npdisp.version >= 7) {
+		if (npdisp.acceleration >= NPDISP_ACCEL_DIRECTDRAW && npdisp.version >= 7) {
 			npdisp.mm_ddHalInfoAddr = ddHalInfoAddr;
 		}
 		else {
 			npdisp.mm_ddHalInfoAddr = 0;
 		}
-		if (npdisp.version >= 9) {
+		if (npdisp.acceleration >= NPDISP_ACCEL_DIRECTDRAW && npdisp.version >= 9) {
 			npdisp.mm_ddModeInfoAddr = ddModeInfoAddr;
 		}
 		else {
 			npdisp.mm_ddModeInfoAddr = 0;
 		}
-		if (npdisp.version >= 10) {
+		if (npdisp.acceleration >= NPDISP_ACCEL_DIRECTDRAW && npdisp.version >= 10) {
 			npdisp.mm_ddPaletteCallbacksAddr = ddPaletteCallbacksAddr;
 		}
 		else {
 			npdisp.mm_ddPaletteCallbacksAddr = 0;
 		}
-		if (npdisp.version >= 12 && npdisp.isWin9x) {
+		if (npdisp.acceleration >= NPDISP_ACCEL_DIRECTDRAW && npdisp.version >= 12 && npdisp.isWin9x) {
 			npdisp.mm_ddVidMemAddr = ddVidMemAddr;
 			if (!npdisp_dd_ensureOffscreenBacking()) {
 				npdisp.mm_ddVidMemAddr = 0;
@@ -415,11 +418,18 @@ static void npdisp_func_NP2Initialize(UINT16 dpiX, UINT16 dpiY, UINT16 width, UI
 			npdisp.mm_ddVidMemAddr = 0;
 			npdisp_dd_releaseOffscreenBacking();
 		}
-		TRACEOUT11(("NPDISP11 INIT_DD cb=%08x surfcb=%08x palcb=%08x hal=%08x mode=%08x vidmem=%08x offhost=%p",
+		npdisp.mm_ddBridgeInfoAddr = (npdisp.acceleration >= NPDISP_ACCEL_DIRECTDRAW && npdisp.version >= 15) ? ddBridgeInfoAddr : 0;
+		npdisp.mm_d3dGlobalDriverDataAddr = (npdisp.acceleration >= NPDISP_ACCEL_DIRECT3D && npdisp.version >= 16) ? d3dGlobalDriverDataAddr : 0;
+		npdisp.mm_d3dHalCallbacksAddr = (npdisp.acceleration >= NPDISP_ACCEL_DIRECT3D && npdisp.version >= 16) ? d3dHalCallbacksAddr : 0;
+		TRACEOUT11(("NPDISP11 INIT_DD cb=%08x surfcb=%08x palcb=%08x hal=%08x mode=%08x vidmem=%08x bridge=%08x d3dg=%08x d3dcb=%08x offhost=%p",
 			npdisp.mm_ddCallbacksAddr, npdisp.mm_ddSurfaceCallbacksAddr, npdisp.mm_ddPaletteCallbacksAddr,
-			npdisp.mm_ddHalInfoAddr, npdisp.mm_ddModeInfoAddr, npdisp.mm_ddVidMemAddr, npdisp.mm_ddOffscreenPtr));
-		if (!resize) {
-			npdisp.mm_dciEnable = (npdisp.version >= 6) ? 1 : 0;
+			npdisp.mm_ddHalInfoAddr, npdisp.mm_ddModeInfoAddr, npdisp.mm_ddVidMemAddr, npdisp.mm_ddBridgeInfoAddr,
+			npdisp.mm_d3dGlobalDriverDataAddr, npdisp.mm_d3dHalCallbacksAddr, npdisp.mm_ddOffscreenPtr));
+		if (npdisp.acceleration >= NPDISP_ACCEL_DIRECTDRAW) {
+			npdisp.mm_dciEnable = 1;
+		}
+		else if (!resize) {
+			npdisp.mm_dciEnable = 0;
 		}
 	}
 	else {
@@ -437,6 +447,9 @@ static void npdisp_func_NP2Initialize(UINT16 dpiX, UINT16 dpiY, UINT16 width, UI
 		npdisp.mm_ddHalInfoAddr = 0;
 		npdisp.mm_ddModeInfoAddr = 0;
 		npdisp.mm_ddVidMemAddr = 0;
+		npdisp.mm_ddBridgeInfoAddr = 0;
+		npdisp.mm_d3dGlobalDriverDataAddr = 0;
+		npdisp.mm_d3dHalCallbacksAddr = 0;
 		npdisp.mm_vramLinearAddr = 0;
 		npdisp.mm_vramSelector = 0;
 		npdisp.mm_dciEnable = 0;
@@ -1721,7 +1734,7 @@ static UINT16 npdisp_func_Control(UINT32 lpDestDevAddr, UINT16 wFunction, UINT32
 		}
 		case NPDISP_CONTROL_NP2DCIDISABLE:
 		{
-			npdisp.mm_dciEnable = 0;
+			npdisp.mm_dciEnable = (npdisp.acceleration >= NPDISP_ACCEL_DIRECTDRAW) ? 1 : 0;
 			break;
 		}
 		case NPDISP_CONTROL_SETCOLORTABLE:
@@ -1825,7 +1838,7 @@ static UINT16 npdisp_func_Control(UINT32 lpDestDevAddr, UINT16 wFunction, UINT32
 					case NPDISP_CONTROL_DCI_DDNEWCALLBACKFNS:
 					case NPDISP_CONTROL_DCI_DDVERSIONINFO:
 					{
-						retValue = npdisp_dd_controlCommand(lpDestDevAddr, &dciCmd, lpOutDataAddr);
+						retValue = (npdisp.acceleration >= NPDISP_ACCEL_DIRECTDRAW) ? npdisp_dd_controlCommand(lpDestDevAddr, &dciCmd, lpOutDataAddr) : (UINT16)-1;
 						break;
 					}
 					}
@@ -4858,7 +4871,7 @@ void npdisp_exec(void) {
 		case NPDISP_FUNCORDER_NP2INITIALIZE:
 		{
 			TRACEOUT(("Initialize"));
-			npdisp_func_NP2Initialize(req.parameters.init.dpiX, req.parameters.init.dpiY, req.parameters.init.width, req.parameters.init.height, req.parameters.init.bpp, req.parameters.init.isWin9x, req.reserved, req.parameters.init.bmpinfoAddr, req.parameters.init.beginAccessAddr, req.parameters.init.endAccessAddr, req.parameters.init.dcibufAddr, req.parameters.init.dciBeginAccessAddr, req.parameters.init.dciEndAccessAddr, req.parameters.init.dciDestroySurfaceAddr, req.parameters.init.vramLinearAddr, req.parameters.init.vramPhysicalAddr, req.parameters.init.ddCallbacksAddr, req.parameters.init.ddSurfaceCallbacksAddr, req.parameters.init.ddHalInfoAddr, req.parameters.init.ddModeInfoAddr, req.parameters.init.ddPaletteCallbacksAddr, req.parameters.init.ddVidMemAddr);
+			npdisp_func_NP2Initialize(req.parameters.init.dpiX, req.parameters.init.dpiY, req.parameters.init.width, req.parameters.init.height, req.parameters.init.bpp, req.parameters.init.isWin9x, req.reserved, req.parameters.init.bmpinfoAddr, req.parameters.init.beginAccessAddr, req.parameters.init.endAccessAddr, req.parameters.init.dcibufAddr, req.parameters.init.dciBeginAccessAddr, req.parameters.init.dciEndAccessAddr, req.parameters.init.dciDestroySurfaceAddr, req.parameters.init.vramLinearAddr, req.parameters.init.vramPhysicalAddr, req.parameters.init.ddCallbacksAddr, req.parameters.init.ddSurfaceCallbacksAddr, req.parameters.init.ddHalInfoAddr, req.parameters.init.ddModeInfoAddr, req.parameters.init.ddPaletteCallbacksAddr, req.parameters.init.ddVidMemAddr, req.parameters.init.ddBridgeInfoAddr, req.parameters.init.d3dGlobalDriverDataAddr, req.parameters.init.d3dHalCallbacksAddr);
 			break;
 		}
 		case NPDISP_FUNCORDER_Enable:
@@ -6000,6 +6013,7 @@ int npdisp_drawGraphic(void)
 
 	if (!npdispwin.hdc) return 0;
 
+	npdisp_d3d_poll();
 	updated = npdisp.updated;
 	paletteUpdated = npdisp.paletteUpdated;
 	npdisp.updated = 0;
@@ -6546,6 +6560,9 @@ static void npdisp_createScreen(bool resize) {
 void npdisp_reset(const NP2CFG* pConfig)
 {
 	int i;
+#if defined(SUPPORT_NPDISP_D3D)
+	npdisp_d3d_reset();
+#endif
 	npdispcs_initialize();
 
 	npdisp_palette_makeTable();
@@ -6554,6 +6571,11 @@ void npdisp_reset(const NP2CFG* pConfig)
 	npdisp_dd_releaseOffscreenBacking();
 
 	npdisp.ioenabled = pConfig->usenpdisp;
+	npdisp.acceleration = pConfig->npdispaccel;
+	if (npdisp.acceleration > NPDISP_ACCEL_DIRECT3D) npdisp.acceleration = NPDISP_ACCEL_DIRECT3D;
+#if !defined(SUPPORT_NPDISP_D3D)
+	if (npdisp.acceleration > NPDISP_ACCEL_DIRECTDRAW) npdisp.acceleration = NPDISP_ACCEL_DIRECTDRAW;
+#endif
 	npdisp.enabled = 0;
 	npdisp.active = 0;
 	npdisp.width = 1024;
@@ -6582,6 +6604,9 @@ void npdisp_reset(const NP2CFG* pConfig)
 	npdisp.mm_ddHalInfoAddr = 0;
 	npdisp.mm_ddModeInfoAddr = 0;
 	npdisp.mm_ddVidMemAddr = 0;
+	npdisp.mm_ddBridgeInfoAddr = 0;
+	npdisp.mm_d3dGlobalDriverDataAddr = 0;
+	npdisp.mm_d3dHalCallbacksAddr = 0;
 	npdisp.mm_ddOffscreenPtr = NULL;
 	npdisp.mm_ddOffscreenSize = 0;
 	npdisp.mm_ddScanoutOffset = 0;
@@ -6590,7 +6615,7 @@ void npdisp_reset(const NP2CFG* pConfig)
 	npdisp.mm_ddFlipPending = 0;
 	npdisp.mm_vramLinearAddr = 0;
 	npdisp.mm_vramSelector = 0;
-	npdisp.mm_dciEnable = 0;
+	npdisp.mm_dciEnable = (npdisp.acceleration >= NPDISP_ACCEL_DIRECTDRAW) ? 1 : 0;
 
 	npdispwin.pensIdx = 1;
 	npdispwin.brushesIdx = 1;
@@ -6643,6 +6668,9 @@ void npdisp_unbind(void)
 
 void npdisp_shutdown()
 {
+#if defined(SUPPORT_NPDISP_D3D)
+	npdisp_d3d_reset();
+#endif
 	npdisp_releaseScreen();
 	npdisp_dd_releaseOffscreenBacking();
 	npdispcs_shutdown();
@@ -6650,11 +6678,19 @@ void npdisp_shutdown()
 
 // ---------- state save
 
+static bool npdisp_sf_canRead(int statLen, int readBufLen, UINT32 size)
+{
+	return statLen >= 0 && readBufLen >= 0 && readBufLen <= statLen && size <= (UINT32)(statLen - readBufLen);
+}
+
 int npdisp_sfsave(STFLAGH sfh, const SFENTRY* tbl)
 {
-	int	sfVersion = 7;
+	int	sfVersion = 8;
 	int	ret = STATFLAG_SUCCESS;
 
+#if defined(SUPPORT_NPDISP_D3D)
+	npdisp_d3d_flush();
+#endif
 	ret = statflag_write(sfh, &sfVersion, sizeof(int));
 	if (ret != STATFLAG_SUCCESS) return ret;
 
@@ -6731,32 +6767,56 @@ int npdisp_sfsave(STFLAGH sfh, const SFENTRY* tbl)
 		for (auto it = npdispwin.bitmaps.begin(); it != npdispwin.bitmaps.end(); ++it) {
 			buffer.insert(buffer.end(), (UINT8*)(&(it->first)), (UINT8*)(&(it->first) + 1));
 			buffer.insert(buffer.end(), (UINT8*)(&(it->second)), (UINT8*)(&(it->second) + 1));
-			int width = it->second.bmphdc.lpbi->bmiHeader.biWidth;
-			int height = it->second.bmphdc.lpbi->bmiHeader.biHeight;
-			int bpp = it->second.bmphdc.lpbi->bmiHeader.biBitCount;
-			if (height < 0) height = -height;
-			int stride = ((width * bpp + 31) / 32) * 4;
+			if (!it->second.bmphdc.lpbi || !it->second.bmphdc.pBits || !it->second.bmphdc.hBmp) return STATFLAG_FAILURE;
+			const BITMAPINFOHEADER* srcBiHeader = &it->second.bmphdc.lpbi->bmiHeader;
+			int width = srcBiHeader->biWidth;
+			int bpp = srcBiHeader->biBitCount;
+			SINT64 height64 = srcBiHeader->biHeight;
+			if (width <= 0 || height64 == 0 ||
+				(bpp != 1 && bpp != 4 && bpp != 8 && bpp != 15 && bpp != 16 && bpp != 24 && bpp != 32)) return STATFLAG_FAILURE;
+			if (height64 < 0) height64 = -height64;
+			UINT64 stride64 = (((UINT64)width * bpp + 31) / 32) * 4;
+			UINT64 pBitsSize64 = stride64 * (UINT64)height64;
+			if (!stride64 || pBitsSize64 > (UINT64)0x7fffffffUL) return STATFLAG_FAILURE;
+
+			BITMAPINFO_8BPP stateBi = { 0 };
+			stateBi.bmiHeader = *srcBiHeader;
+			stateBi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+			stateBi.bmiHeader.biPlanes = 1;
+			stateBi.bmiHeader.biSizeImage = 0;
 			int biSize = sizeof(BITMAPINFOHEADER);
 			if (bpp <= 8) {
-				biSize += sizeof(RGBQUAD) * (1 << bpp);
-			}
-			else if ((bpp == 15 || bpp == 16 || bpp == 32) && it->second.bmphdc.lpbi->bmiHeader.biCompression == BI_BITFIELDS) {
-				biSize += sizeof(RGBQUAD) * 3;
-			}
-			if (it->second.bmphdc.lpbi->bmiHeader.biBitCount <= 8) {
+				UINT32 colorCount = 1U << bpp;
+				UINT32 sourceColorCount = srcBiHeader->biClrUsed;
+				if (!sourceColorCount || sourceColorCount > colorCount) sourceColorCount = colorCount;
+				biSize += sizeof(RGBQUAD) * colorCount;
+				stateBi.bmiHeader.biCompression = BI_RGB;
+				if (stateBi.bmiHeader.biClrUsed > colorCount) stateBi.bmiHeader.biClrUsed = 0;
+				if (stateBi.bmiHeader.biClrImportant > colorCount) stateBi.bmiHeader.biClrImportant = 0;
+				memcpy(stateBi.bmiColors, it->second.bmphdc.lpbi->bmiColors, sizeof(RGBQUAD) * sourceColorCount);
 				HGDIOBJ oldBmp = SelectObject(npdispwin.hdcCache[0], it->second.bmphdc.hBmp);
 				if (oldBmp) {
-					if (!GetDIBColorTable(npdispwin.hdcCache[0], 0, (1 << bpp), it->second.bmphdc.lpbi->bmiColors)) {
-						npdispwin.hdcCache[0] = npdispwin.hdcCache[0];
-					}
+					GetDIBColorTable(npdispwin.hdcCache[0], 0, colorCount, stateBi.bmiColors);
 					SelectObject(npdispwin.hdcCache[0], oldBmp);
 				}
 			}
-			int pBitsSize = stride * height;
-			UINT8* lpbiUINT8 = (UINT8*)it->second.bmphdc.lpbi;
+			else if ((bpp == 15 || bpp == 16 || bpp == 32) && srcBiHeader->biCompression == BI_BITFIELDS) {
+				biSize += sizeof(RGBQUAD) * 3;
+				stateBi.bmiHeader.biCompression = BI_BITFIELDS;
+				stateBi.bmiHeader.biClrUsed = 0;
+				stateBi.bmiHeader.biClrImportant = 0;
+				memcpy(stateBi.bmiColors, it->second.bmphdc.lpbi->bmiColors, sizeof(RGBQUAD) * 3);
+			}
+			else {
+				stateBi.bmiHeader.biCompression = BI_RGB;
+				stateBi.bmiHeader.biClrUsed = 0;
+				stateBi.bmiHeader.biClrImportant = 0;
+			}
+
+			int pBitsSize = (int)pBitsSize64;
 			UINT8* pBitsUINT8 = (UINT8*)it->second.bmphdc.pBits;
 			buffer.insert(buffer.end(), (UINT8*)&biSize, (UINT8*)(&biSize + 1));
-			buffer.insert(buffer.end(), lpbiUINT8, lpbiUINT8 + biSize);
+			buffer.insert(buffer.end(), (UINT8*)&stateBi, (UINT8*)&stateBi + biSize);
 			buffer.insert(buffer.end(), (UINT8*)&pBitsSize, (UINT8*)(&pBitsSize + 1));
 			buffer.insert(buffer.end(), pBitsUINT8, pBitsUINT8 + pBitsSize);
 		}
@@ -6764,23 +6824,29 @@ int npdisp_sfsave(STFLAGH sfh, const SFENTRY* tbl)
 		// ステートver.3以降はDirectDrawオフスクリーンVRAMを64KiBページ単位で保存する。
 		// 全0ページは省略し、host backingの実データだけを追加保存する。
 		if (npdisp.version >= 12 && npdisp.isWin9x && npdisp.mm_ddVidMemAddr) {
-			const UINT32 ddvramMagic = 0x31564444UL; // "DDV1"
+			const UINT32 sectionMagic = 0x31564444UL; // "DDV1"
 			const UINT32 pageSize = 0x00010000UL;
 			const UINT32 pageCount = NPDISP_DD_OFFSCREEN_SIZE / pageSize;
 			const UINT32 bitmapBytes = (pageCount + 7) / 8;
 			std::vector<UINT8> pageMap(bitmapBytes, 0);
 			static const UINT8 zeroPage[0x10000] = { 0 };
+			UINT32 usedPages = 0;
 
 			if (npdisp.mm_ddOffscreenPtr && npdisp.mm_ddOffscreenSize == NPDISP_DD_OFFSCREEN_SIZE) {
 				for (UINT32 page = 0; page < pageCount; ++page) {
 					const UINT8* src = npdisp.mm_ddOffscreenPtr + page * pageSize;
 					if (memcmp(src, zeroPage, pageSize) != 0) {
 						pageMap[page >> 3] |= (UINT8)(1U << (page & 7));
+						++usedPages;
 					}
 				}
 			}
 
-			buffer.insert(buffer.end(), (const UINT8*)&ddvramMagic, (const UINT8*)(&ddvramMagic + 1));
+			UINT64 sectionSize64 = sizeof(pageSize) + sizeof(pageCount) + sizeof(bitmapBytes) + bitmapBytes + (UINT64)usedPages * pageSize;
+			if (sectionSize64 > (UINT64)0xffffffffUL) return STATFLAG_FAILURE;
+			UINT32 sectionSize = (UINT32)sectionSize64;
+			buffer.insert(buffer.end(), (const UINT8*)&sectionMagic, (const UINT8*)(&sectionMagic + 1));
+			buffer.insert(buffer.end(), (const UINT8*)&sectionSize, (const UINT8*)(&sectionSize + 1));
 			buffer.insert(buffer.end(), (const UINT8*)&pageSize, (const UINT8*)(&pageSize + 1));
 			buffer.insert(buffer.end(), (const UINT8*)&pageCount, (const UINT8*)(&pageCount + 1));
 			buffer.insert(buffer.end(), (const UINT8*)&bitmapBytes, (const UINT8*)(&bitmapBytes + 1));
@@ -6795,6 +6861,18 @@ int npdisp_sfsave(STFLAGH sfh, const SFENTRY* tbl)
 				}
 			}
 		}
+#if defined(SUPPORT_NPDISP_D3D)
+		if (npdisp.acceleration >= NPDISP_ACCEL_DIRECT3D) {
+			const UINT32 sectionMagic = 0x31533344UL; // "D3S1"
+			UINT32 sectionSize = npdisp_d3d_stateSize();
+			if (!sectionSize || sectionSize > 0x04000000UL) return STATFLAG_FAILURE;
+			std::vector<UINT8> d3dState(sectionSize);
+			if (!npdisp_d3d_saveState(&d3dState[0], sectionSize)) return STATFLAG_FAILURE;
+			buffer.insert(buffer.end(), (const UINT8*)&sectionMagic, (const UINT8*)(&sectionMagic + 1));
+			buffer.insert(buffer.end(), (const UINT8*)&sectionSize, (const UINT8*)(&sectionSize + 1));
+			buffer.insert(buffer.end(), d3dState.begin(), d3dState.end());
+		}
+#endif
 	}
 
 	// 書き込み
@@ -6816,6 +6894,9 @@ int npdisp_sfload(STFLAGH sfh, const SFENTRY* tbl)
 	int	ret = STATFLAG_SUCCESS;
 
 	// 画面など解放
+#if defined(SUPPORT_NPDISP_D3D)
+	npdisp_d3d_reset();
+#endif
 	npdisp_releaseScreen();
 	npdisp_dd_releaseOffscreenBacking();
 
@@ -6823,76 +6904,132 @@ int npdisp_sfload(STFLAGH sfh, const SFENTRY* tbl)
 	if (ret != STATFLAG_SUCCESS) return ret;
 	ret = statflag_read(sfh, &statLen, sizeof(statLen));
 	if (ret != STATFLAG_SUCCESS) return ret;
+	if (statLen < 0) return STATFLAG_FAILURE;
 	if (statLen == 0) return STATFLAG_SUCCESS; // データ長さ0はバージョンに関係なくOK
 
 	int readBufLen = 0;
 
 	int oldCursorBpp = npdisp.cursorBpp;
 	int oldCursorStride = npdisp.cursorStride;
+	bool accelerationRestored = false;
 
 	// 共通
 	if (sfVersion == 1) {
 		// ステートセーブ ver.1
 		const UINT32 legacyV1Size = (UINT32)offsetof(NPDISP, mm_ddVidMemAddr) - 1;
+		if (!npdisp_sf_canRead(statLen, readBufLen, legacyV1Size)) return STATFLAG_FAILURE;
 		memset(&npdisp, 0, sizeof(npdisp));
 		ret = statflag_read(sfh, &npdisp, legacyV1Size);
 		if (ret != STATFLAG_SUCCESS) return ret;
 		readBufLen += legacyV1Size;
 		npdisp.active = npdisp.enabled;
 	}
-	else if ((sfVersion >= 2 && sfVersion <= 4) || sfVersion == 7) {
-		// ステートセーブ ver.2～4または現行ver.7
+	else if ((sfVersion >= 2 && sfVersion <= 4) || sfVersion == 7 || sfVersion == 8) {
+		// ステートセーブ ver.2～4または現行ver.8
 		UINT32 npdisplen = 0;
+		if (!npdisp_sf_canRead(statLen, readBufLen, sizeof(npdisplen))) return STATFLAG_FAILURE;
 		ret = statflag_read(sfh, &npdisplen, sizeof(npdisplen));
 		readBufLen += sizeof(npdisplen);
 		if (ret != STATFLAG_SUCCESS) return ret;
-		if (npdisplen < 0 || npdisplen > 32768) return STATFLAG_FAILURE; // 異常
+		if (!npdisplen || npdisplen > 32768 || !npdisp_sf_canRead(statLen, readBufLen, npdisplen)) return STATFLAG_FAILURE;
 		std::vector<UINT8> temp(npdisplen);
 		ret = statflag_read(sfh, &(temp[0]), npdisplen);
 		if (ret != STATFLAG_SUCCESS) return ret;
 		readBufLen += npdisplen;
 		memset(&npdisp, 0, sizeof(npdisp));
 		memcpy(&npdisp, &(temp[0]), min(sizeof(npdisp), npdisplen));
+		accelerationRestored = (npdisplen >= offsetof(NPDISP, acceleration) + sizeof(npdisp.acceleration));
 	}
 	else {
 		return STATFLAG_FAILURE;
 	}
+	if (!accelerationRestored) npdisp.acceleration = NPDISP_ACCEL_DIRECT3D;
+	if (npdisp.acceleration > NPDISP_ACCEL_DIRECT3D) npdisp.acceleration = NPDISP_ACCEL_DIRECT3D;
+#if !defined(SUPPORT_NPDISP_D3D)
+	if (npdisp.acceleration > NPDISP_ACCEL_DIRECTDRAW) npdisp.acceleration = NPDISP_ACCEL_DIRECTDRAW;
+#endif
+	if (npdisp.acceleration >= NPDISP_ACCEL_DIRECTDRAW) npdisp.mm_dciEnable = 1;
 	// ステートロード後はhost pointerを再利用せず、オフスクリーン領域を再生成する。
 	npdisp.mm_ddOffscreenPtr = NULL;
 	npdisp.mm_ddOffscreenSize = 0;
-	if (npdisp.version >= 12 && npdisp.enabled && npdisp.isWin9x && !npdisp_dd_ensureOffscreenBacking()) {
+	if (npdisp.acceleration < NPDISP_ACCEL_DIRECTDRAW) {
+		npdisp.mm_ddCallbacksAddr = 0;
+		npdisp.mm_ddSurfaceCallbacksAddr = 0;
+		npdisp.mm_ddPaletteCallbacksAddr = 0;
+		npdisp.mm_ddHalInfoAddr = 0;
+		npdisp.mm_ddModeInfoAddr = 0;
+		npdisp.mm_ddVidMemAddr = 0;
+		npdisp.mm_ddBridgeInfoAddr = 0;
+		npdisp.mm_ddScanoutOffset = 0;
+		npdisp.mm_ddLastScanoutOffset = 0;
+		npdisp.mm_ddPendingFlipOffset = 0;
+		npdisp.mm_ddFlipPending = 0;
+		npdisp.mm_ddOverlayVisible = 0;
+	}
+	if (npdisp.acceleration < NPDISP_ACCEL_DIRECT3D) {
+		npdisp.mm_d3dGlobalDriverDataAddr = 0;
+		npdisp.mm_d3dHalCallbacksAddr = 0;
+	}
+	if (npdisp.acceleration >= NPDISP_ACCEL_DIRECTDRAW && npdisp.version >= 12 && npdisp.enabled && npdisp.isWin9x && !npdisp_dd_ensureOffscreenBacking()) {
 		return STATFLAG_FAILURE;
+	}
+	if (npdisp.enabled) {
+		UINT32 screenBpp = (npdisp.bpp == 15) ? 16 : npdisp.bpp;
+		if (!npdisp.width || !npdisp.height || npdisp.width > 0x7fffffffUL || npdisp.height > 0x7fffffffUL ||
+			(npdisp.bpp != 1 && npdisp.bpp != 4 && npdisp.bpp != 8 && npdisp.bpp != 15 && npdisp.bpp != 16 && npdisp.bpp != 24 && npdisp.bpp != 32)) return STATFLAG_FAILURE;
+		UINT64 screenStride = (((UINT64)npdisp.width * screenBpp + 31) / 32) * 4;
+		UINT64 screenSize = screenStride * npdisp.height;
+		if (!screenStride || screenStride > (UINT64)0xffffffffUL || screenSize > (UINT64)0xffffffffUL || screenSize > (UINT64)(statLen - readBufLen)) return STATFLAG_FAILURE;
 	}
 
 	// WinG特殊DDBはphysical object内のheaderとddbKeyだけで識別する。
 
 	// WAB有効なら読み込み
 	if (npdisp.enabled) {
-		if ((sfVersion >= 1 && sfVersion <= 4) || sfVersion == 7)
+		if ((sfVersion >= 1 && sfVersion <= 4) || sfVersion == 7 || sfVersion == 8)
 		{
 			// 画面など生成
 			npdisp_createScreen();
 
 			// OS依存部
 			// スクリーン
-			ret = statflag_read(sfh, &npdispwin.bi, sizeof(npdispwin.bi));
+			if (!npdisp_sf_canRead(statLen, readBufLen, sizeof(npdispwin.bi))) goto error;
+			BITMAPINFO_8BPP savedScreenBi;
+			ret = statflag_read(sfh, &savedScreenBi, sizeof(savedScreenBi));
 			if (ret != STATFLAG_SUCCESS) goto error;
-			readBufLen += sizeof(npdispwin.bi);
+			readBufLen += sizeof(savedScreenBi);
 			UINT32 screenBufSize;
+			if (!npdisp_sf_canRead(statLen, readBufLen, sizeof(screenBufSize))) goto error;
 			ret = statflag_read(sfh, &screenBufSize, sizeof(screenBufSize));
 			if (ret != STATFLAG_SUCCESS) goto error;
 			readBufLen += sizeof(screenBufSize);
 			if (screenBufSize) {
+				UINT64 expectedScreenSize = (UINT64)npdispwin.stride * (UINT64)npdisp.height;
+				if (!npdispwin.pBits || expectedScreenSize > (UINT64)0xffffffffUL || screenBufSize != (UINT32)expectedScreenSize ||
+					!npdisp_sf_canRead(statLen, readBufLen, screenBufSize)) goto error;
 				ret = statflag_read(sfh, npdispwin.pBits, screenBufSize);
 				if (ret != STATFLAG_SUCCESS) goto error;
 				readBufLen += screenBufSize;
 			}
 			// カーソル
 			UINT32 cursorBufSize;
+			if (!npdisp_sf_canRead(statLen, readBufLen, sizeof(cursorBufSize))) goto error;
 			ret = statflag_read(sfh, &cursorBufSize, sizeof(cursorBufSize));
 			if (ret != STATFLAG_SUCCESS) goto error;
 			readBufLen += sizeof(cursorBufSize);
 			if (cursorBufSize) {
+				UINT64 expectedCursorSize;
+				if (npdisp.cursorWidth <= 0 || npdisp.cursorHeight <= 0 ||
+					(npdisp.cursorBpp != 0 && npdisp.cursorBpp != 1 && npdisp.cursorBpp != 4 && npdisp.cursorBpp != 8 && npdisp.cursorBpp != 15 &&
+					npdisp.cursorBpp != 16 && npdisp.cursorBpp != 24 && npdisp.cursorBpp != 32)) goto error;
+				expectedCursorSize = (UINT64)npdisp.cursorStride * npdisp.cursorHeight;
+				if (!npdisp.cursorStride || expectedCursorSize > (UINT64)0xffffffffUL || cursorBufSize != (UINT32)expectedCursorSize ||
+					(UINT64)cursorBufSize * 2 > (UINT64)(statLen - readBufLen)) goto error;
+				if (npdisp.cursorBpp > 1) {
+					UINT32 dibBpp = (npdisp.cursorBpp == 15) ? 16 : npdisp.cursorBpp;
+					UINT64 dibStride = (((UINT64)npdisp.cursorWidth * dibBpp + 31) / 32) * 4;
+					if ((UINT64)cursorBufSize > dibStride * npdisp.cursorHeight) goto error;
+				}
 				// 読み取りと再生成
 				HBITMAP hBmpCursorMask = NULL;
 				HBITMAP hBmpCursor = NULL;
@@ -7004,16 +7141,19 @@ int npdisp_sfload(STFLAGH sfh, const SFENTRY* tbl)
 			}
 			// パレット
 			if (npdisp.bpp == 1) {
+				if (!npdisp_sf_canRead(statLen, readBufLen, sizeof(npdisp_palette_rgb2))) goto error;
 				ret = statflag_read(sfh, npdisp_palette_rgb2, sizeof(npdisp_palette_rgb2));
 				if (ret != STATFLAG_SUCCESS) goto error;
 				readBufLen += sizeof(npdisp_palette_rgb2);
 			}
 			else if (npdisp.bpp == 4) {
+				if (!npdisp_sf_canRead(statLen, readBufLen, sizeof(npdisp_palette_rgb16))) goto error;
 				ret = statflag_read(sfh, npdisp_palette_rgb16, sizeof(npdisp_palette_rgb16));
 				if (ret != STATFLAG_SUCCESS) goto error;
 				readBufLen += sizeof(npdisp_palette_rgb16);
 			}
 			else if (npdisp.bpp == 8) {
+				if (!npdisp_sf_canRead(statLen, readBufLen, sizeof(npdisp_palette_rgb256) + sizeof(npdisp_palette_transTbl))) goto error;
 				ret = statflag_read(sfh, npdisp_palette_rgb256, sizeof(npdisp_palette_rgb256));
 				if (ret != STATFLAG_SUCCESS) goto error;
 				readBufLen += sizeof(npdisp_palette_rgb256);
@@ -7022,6 +7162,7 @@ int npdisp_sfload(STFLAGH sfh, const SFENTRY* tbl)
 				readBufLen += sizeof(npdisp_palette_transTbl);
 			}
 			// ペン
+			if (!npdisp_sf_canRead(statLen, readBufLen, sizeof(npdispwin.pensIdx) + sizeof(UINT32))) goto error;
 			ret = statflag_read(sfh, &npdispwin.pensIdx, sizeof(npdispwin.pensIdx));
 			if (ret != STATFLAG_SUCCESS) goto error;
 			readBufLen += sizeof(npdispwin.pensIdx);
@@ -7029,7 +7170,8 @@ int npdisp_sfload(STFLAGH sfh, const SFENTRY* tbl)
 			ret = statflag_read(sfh, &penCount, sizeof(penCount));
 			if (ret != STATFLAG_SUCCESS) goto error;
 			readBufLen += sizeof(penCount);
-			for (int i = 0; i < penCount; i++) {
+			if (penCount > (UINT32)(statLen - readBufLen) / (sizeof(UINT32) + sizeof(NPDISP_HOSTPEN))) goto error;
+			for (UINT32 i = 0; i < penCount; i++) {
 				UINT32 key;
 				NPDISP_HOSTPEN pen;
 				ret = statflag_read(sfh, &key, sizeof(key));
@@ -7044,6 +7186,7 @@ int npdisp_sfload(STFLAGH sfh, const SFENTRY* tbl)
 
 			}
 			// ブラシ
+			if (!npdisp_sf_canRead(statLen, readBufLen, sizeof(npdispwin.brushesIdx) + sizeof(UINT32))) goto error;
 			ret = statflag_read(sfh, &npdispwin.brushesIdx, sizeof(npdispwin.brushesIdx));
 			if (ret != STATFLAG_SUCCESS) goto error;
 			readBufLen += sizeof(npdispwin.brushesIdx);
@@ -7051,7 +7194,8 @@ int npdisp_sfload(STFLAGH sfh, const SFENTRY* tbl)
 			ret = statflag_read(sfh, &brushCount, sizeof(brushCount));
 			if (ret != STATFLAG_SUCCESS) goto error;
 			readBufLen += sizeof(brushCount);
-			for (int i = 0; i < brushCount; i++) {
+			if (brushCount > (UINT32)(statLen - readBufLen) / (sizeof(UINT32) + sizeof(NPDISP_HOSTBRUSH))) goto error;
+			for (UINT32 i = 0; i < brushCount; i++) {
 				UINT32 key;
 				NPDISP_HOSTBRUSH brush;
 				ret = statflag_read(sfh, &key, sizeof(key));
@@ -7069,6 +7213,7 @@ int npdisp_sfload(STFLAGH sfh, const SFENTRY* tbl)
 
 			if (readBufLen < statLen) {
 				// ビットマップ
+				if (!npdisp_sf_canRead(statLen, readBufLen, sizeof(npdispwin.bitmapsIdx) + sizeof(UINT32))) goto error;
 				ret = statflag_read(sfh, &npdispwin.bitmapsIdx, sizeof(npdispwin.bitmapsIdx));
 				if (ret != STATFLAG_SUCCESS) goto error;
 				readBufLen += sizeof(npdispwin.bitmapsIdx);
@@ -7076,10 +7221,13 @@ int npdisp_sfload(STFLAGH sfh, const SFENTRY* tbl)
 				ret = statflag_read(sfh, &bitmapCount, sizeof(bitmapCount));
 				if (ret != STATFLAG_SUCCESS) goto error;
 				readBufLen += sizeof(bitmapCount);
+				const UINT32 bitmapMinSize = sizeof(UINT32) + sizeof(NPDISP_HOSTBITMAP) + sizeof(int) + sizeof(BITMAPINFOHEADER) + sizeof(int);
+				if (bitmapCount > (UINT32)(statLen - readBufLen) / bitmapMinSize) goto error;
 				std::vector<UINT32> keys;
-				for (int i = 0; i < bitmapCount; i++) {
+				for (UINT32 i = 0; i < bitmapCount; i++) {
 					UINT32 key;
 					NPDISP_HOSTBITMAP hostbmp = { 0 };
+					if (!npdisp_sf_canRead(statLen, readBufLen, sizeof(key) + sizeof(hostbmp) + sizeof(int))) goto error;
 					ret = statflag_read(sfh, &key, sizeof(key));
 					if (ret != STATFLAG_SUCCESS) goto error;
 					readBufLen += sizeof(key);
@@ -7089,17 +7237,103 @@ int npdisp_sfload(STFLAGH sfh, const SFENTRY* tbl)
 
 					int biSize;
 					ret = statflag_read(sfh, &biSize, sizeof(biSize));
+					if (ret != STATFLAG_SUCCESS) goto error;
 					readBufLen += sizeof(biSize);
+					if (biSize < (int)sizeof(BITMAPINFOHEADER) || biSize > (int)(sizeof(BITMAPINFOHEADER) + sizeof(RGBQUAD) * 256) ||
+						!npdisp_sf_canRead(statLen, readBufLen, (UINT32)biSize + sizeof(int))) goto error;
+					hostbmp.bmphdc.hdc = NULL;
+					hostbmp.bmphdc.pBits = NULL;
+					hostbmp.bmphdc.hBmp = NULL;
+					hostbmp.bmphdc.hOldBmp = NULL;
 					hostbmp.bmphdc.lpbi = (BITMAPINFO*)malloc(biSize);
-					if(!hostbmp.bmphdc.lpbi) goto error;
+					hostbmp.bmphdc.hBmpDDB = NULL;
+					if (!hostbmp.bmphdc.lpbi) goto error;
 					ret = statflag_read(sfh, hostbmp.bmphdc.lpbi, biSize);
+					if (ret != STATFLAG_SUCCESS) {
+						free(hostbmp.bmphdc.lpbi);
+						goto error;
+					}
 					readBufLen += biSize;
+
+					BITMAPINFOHEADER* biHeader = &hostbmp.bmphdc.lpbi->bmiHeader;
+					if (biHeader->biWidth <= 0 || biHeader->biHeight == 0 ||
+						(biHeader->biBitCount != 1 && biHeader->biBitCount != 4 && biHeader->biBitCount != 8 && biHeader->biBitCount != 15 &&
+						biHeader->biBitCount != 16 && biHeader->biBitCount != 24 && biHeader->biBitCount != 32)) {
+						free(hostbmp.bmphdc.lpbi);
+						goto error;
+					}
+					UINT32 expectedBiSize = sizeof(BITMAPINFOHEADER);
+					if (biHeader->biBitCount <= 8) {
+						UINT32 colorCount = 1U << biHeader->biBitCount;
+						expectedBiSize += sizeof(RGBQUAD) * colorCount;
+						if ((UINT32)biSize != expectedBiSize) {
+							free(hostbmp.bmphdc.lpbi);
+							goto error;
+						}
+						biHeader->biCompression = BI_RGB;
+						if (biHeader->biClrUsed > colorCount) biHeader->biClrUsed = 0;
+						if (biHeader->biClrImportant > colorCount) biHeader->biClrImportant = 0;
+					}
+					else if ((biHeader->biBitCount == 15 || biHeader->biBitCount == 16 || biHeader->biBitCount == 32) &&
+						(UINT32)biSize == sizeof(BITMAPINFOHEADER) + sizeof(RGBQUAD) * 3) {
+						expectedBiSize += sizeof(RGBQUAD) * 3;
+						biHeader->biCompression = BI_BITFIELDS;
+						biHeader->biClrUsed = 0;
+						biHeader->biClrImportant = 0;
+					}
+					else if ((UINT32)biSize == sizeof(BITMAPINFOHEADER)) {
+						biHeader->biCompression = BI_RGB;
+						biHeader->biClrUsed = 0;
+						biHeader->biClrImportant = 0;
+					}
+					else {
+						free(hostbmp.bmphdc.lpbi);
+						goto error;
+					}
+					biHeader->biSize = sizeof(BITMAPINFOHEADER);
+					biHeader->biPlanes = 1;
+					biHeader->biSizeImage = 0;
+					UINT64 bitmapHeight = (biHeader->biHeight < 0) ? (UINT64)(-(SINT64)biHeader->biHeight) : (UINT64)biHeader->biHeight;
+					UINT64 bitmapStride = (((UINT64)biHeader->biWidth * biHeader->biBitCount + 31) / 32) * 4;
+					UINT64 expectedBitsSize = bitmapStride * bitmapHeight;
+					if (expectedBitsSize > (UINT64)0x7fffffffUL || !npdisp_sf_canRead(statLen, readBufLen, sizeof(int) + (UINT32)expectedBitsSize)) {
+						free(hostbmp.bmphdc.lpbi);
+						goto error;
+					}
+
+					hostbmp.bmphdc.stride = (UINT32)bitmapStride;
 					hostbmp.bmphdc.hBmp = CreateDIBSection(npdispwin.hdcCache[0], hostbmp.bmphdc.lpbi, DIB_RGB_COLORS, &hostbmp.bmphdc.pBits, NULL, 0);
+					if (!hostbmp.bmphdc.hBmp || !hostbmp.bmphdc.pBits) {
+						if (hostbmp.bmphdc.hBmp) DeleteObject(hostbmp.bmphdc.hBmp);
+						free(hostbmp.bmphdc.lpbi);
+						goto error;
+					}
 
 					int pBitsSize;
+					if (!npdisp_sf_canRead(statLen, readBufLen, sizeof(pBitsSize))) {
+						DeleteObject(hostbmp.bmphdc.hBmp);
+						free(hostbmp.bmphdc.lpbi);
+						goto error;
+					}
 					ret = statflag_read(sfh, &pBitsSize, sizeof(pBitsSize));
+					if (ret != STATFLAG_SUCCESS) {
+						DeleteObject(hostbmp.bmphdc.hBmp);
+						free(hostbmp.bmphdc.lpbi);
+						goto error;
+					}
 					readBufLen += sizeof(pBitsSize);
+					if (pBitsSize < 0 || pBitsSize != (int)expectedBitsSize ||
+						!npdisp_sf_canRead(statLen, readBufLen, (UINT32)pBitsSize)) {
+						DeleteObject(hostbmp.bmphdc.hBmp);
+						free(hostbmp.bmphdc.lpbi);
+						goto error;
+					}
 					ret = statflag_read(sfh, hostbmp.bmphdc.pBits, pBitsSize);
+					if (ret != STATFLAG_SUCCESS) {
+						DeleteObject(hostbmp.bmphdc.hBmp);
+						free(hostbmp.bmphdc.lpbi);
+						goto error;
+					}
 					readBufLen += pBitsSize;
 
 					npdispwin.bitmaps[key] = hostbmp;
@@ -7108,7 +7342,79 @@ int npdisp_sfload(STFLAGH sfh, const SFENTRY* tbl)
 			}
 
 
-			if (sfVersion >= 3 && readBufLen < statLen) {
+			if (sfVersion == 8) {
+				while (readBufLen < statLen) {
+					UINT32 sectionMagic = 0;
+					UINT32 sectionSize = 0;
+					if (statLen - readBufLen < (int)(sizeof(sectionMagic) + sizeof(sectionSize))) goto error;
+					ret = statflag_read(sfh, &sectionMagic, sizeof(sectionMagic));
+					if (ret != STATFLAG_SUCCESS) goto error;
+					readBufLen += sizeof(sectionMagic);
+					ret = statflag_read(sfh, &sectionSize, sizeof(sectionSize));
+					if (ret != STATFLAG_SUCCESS) goto error;
+					readBufLen += sizeof(sectionSize);
+					if (sectionSize > (UINT32)(statLen - readBufLen)) goto error;
+
+					if (sectionMagic == 0x31564444UL && npdisp.acceleration >= NPDISP_ACCEL_DIRECTDRAW) {
+						UINT32 sectionRead = 0;
+						UINT32 pageSize = 0;
+						UINT32 pageCount = 0;
+						UINT32 bitmapBytes = 0;
+						const UINT32 expectedPageSize = 0x00010000UL;
+						const UINT32 expectedPageCount = NPDISP_DD_OFFSCREEN_SIZE / expectedPageSize;
+						const UINT32 expectedBitmapBytes = (expectedPageCount + 7) / 8;
+						ret = statflag_read(sfh, &pageSize, sizeof(pageSize));
+						if (ret != STATFLAG_SUCCESS) goto error;
+						sectionRead += sizeof(pageSize);
+						ret = statflag_read(sfh, &pageCount, sizeof(pageCount));
+						if (ret != STATFLAG_SUCCESS) goto error;
+						sectionRead += sizeof(pageCount);
+						ret = statflag_read(sfh, &bitmapBytes, sizeof(bitmapBytes));
+						if (ret != STATFLAG_SUCCESS) goto error;
+						sectionRead += sizeof(bitmapBytes);
+						if (pageSize != expectedPageSize || pageCount != expectedPageCount || bitmapBytes != expectedBitmapBytes || sectionRead + bitmapBytes > sectionSize) goto error;
+						std::vector<UINT8> pageMap(bitmapBytes, 0);
+						ret = statflag_read(sfh, &pageMap[0], bitmapBytes);
+						if (ret != STATFLAG_SUCCESS) goto error;
+						sectionRead += bitmapBytes;
+						if (!npdisp.mm_ddOffscreenPtr && !npdisp_dd_ensureOffscreenBacking()) goto error;
+						memset(npdisp.mm_ddOffscreenPtr, 0, NPDISP_DD_OFFSCREEN_SIZE);
+						for (UINT32 page = 0; page < pageCount; ++page) {
+							if (pageMap[page >> 3] & (1U << (page & 7))) {
+								if (sectionRead + pageSize > sectionSize) goto error;
+								ret = statflag_read(sfh, npdisp.mm_ddOffscreenPtr + page * pageSize, pageSize);
+								if (ret != STATFLAG_SUCCESS) goto error;
+								sectionRead += pageSize;
+							}
+						}
+						if (sectionRead != sectionSize) goto error;
+						readBufLen += sectionSize;
+					}
+					else {
+#if defined(SUPPORT_NPDISP_D3D)
+						if (sectionMagic == 0x31533344UL && npdisp.acceleration >= NPDISP_ACCEL_DIRECT3D) {
+							if (!sectionSize || sectionSize > 0x04000000UL) goto error;
+							std::vector<UINT8> section(sectionSize);
+							ret = statflag_read(sfh, &section[0], sectionSize);
+							if (ret != STATFLAG_SUCCESS || !npdisp_d3d_loadState(&section[0], sectionSize)) goto error;
+						}
+						else
+#endif
+						{
+							UINT8 discard[4096];
+							UINT32 remain = sectionSize;
+							while (remain) {
+								UINT32 bytes = min(remain, (UINT32)sizeof(discard));
+								ret = statflag_read(sfh, discard, bytes);
+								if (ret != STATFLAG_SUCCESS) goto error;
+								remain -= bytes;
+							}
+						}
+						readBufLen += sectionSize;
+					}
+				}
+			}
+			else if (sfVersion >= 3 && readBufLen < statLen) {
 				UINT32 ddvramMagic = 0;
 				UINT32 pageSize = 0;
 				UINT32 pageCount = 0;
@@ -7157,6 +7463,7 @@ int npdisp_sfload(STFLAGH sfh, const SFENTRY* tbl)
 					pageCount, NPDISP_DD_OFFSCREEN_SIZE));
 			}
 
+
 			if (readBufLen != statLen) goto error;
 
 			// Saved scanout positions are aperture-relative offsets.  Restore only
@@ -7204,6 +7511,9 @@ int npdisp_sfload(STFLAGH sfh, const SFENTRY* tbl)
 
 error:
 
+#if defined(SUPPORT_NPDISP_D3D)
+	npdisp_d3d_reset();
+#endif
 	npdisp_releaseScreen();
 	npdisp_dd_releaseOffscreenBacking();
 	return(STATFLAG_FAILURE);

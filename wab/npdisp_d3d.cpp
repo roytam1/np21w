@@ -39,6 +39,22 @@ static void npdisp_d3d_trace(const char* fmt, ...)
 #define TRACEOUTD3D(s) (void)s
 #endif
 
+#if 0
+static void npdisp_d3d_profTrace(const char* fmt, ...)
+{
+	char stmp[512];
+	va_list ap;
+	va_start(ap, fmt);
+	vsprintf(stmp, fmt, ap);
+	strcat(stmp, "\n");
+	va_end(ap);
+	OutputDebugStringA(stmp);
+}
+#define TRACEOUTD3DPROF(s) npdisp_d3d_profTrace s
+#else
+#define TRACEOUTD3DPROF(s) (void)s
+#endif
+
 #define NPDISP_D3D_MAX_RENDERSTATES	256U
 #define NPDISP_D3DSTATE_OVERRIDE_BIAS	256U
 #define NPDISP_D3DRENDERSTATE_ZVISIBLE	30U
@@ -587,6 +603,120 @@ static bool npdisp_d3d_asyncStop = false;
 static LONG npdisp_d3d_asyncVisibleDirty = 0;
 static LONG npdisp_d3d_asyncError = 0;
 
+static DWORD npdisp_d3d_profileTick = 0;
+static UINT32 npdisp_d3d_profileFlushCalls = 0;
+static UINT32 npdisp_d3d_profileBusyFlushCalls = 0;
+static UINT64 npdisp_d3d_profileWaitUs = 0;
+static UINT32 npdisp_d3d_profileWaitMaxUs = 0;
+static UINT64 npdisp_d3d_profileWorkClock = 0;
+static LONG npdisp_d3d_profileEnqueue = 0;
+static LONG npdisp_d3d_profileEnqueueBytes = 0;
+static LONG npdisp_d3d_profileDraw = 0;
+static LONG npdisp_d3d_profileClear = 0;
+static LONG npdisp_d3d_profileWorkerCommands = 0;
+static LONG npdisp_d3d_profileWorkerMs = 0;
+static LONG npdisp_d3d_profileRasterCalls = 0;
+static LONG npdisp_d3d_profileTriangles = 0;
+static LONG npdisp_d3d_profileDP2 = 0;
+static LONG npdisp_d3d_profileBoxKPixels = 0;
+static LONG npdisp_d3d_profileBoxMaxPixels = 0;
+static LONG npdisp_d3d_profileBox4K = 0;
+static LONG npdisp_d3d_profileBox16K = 0;
+static LONG npdisp_d3d_profileBox64K = 0;
+static LONG npdisp_d3d_profileTextureTriangles = 0;
+static LONG npdisp_d3d_profileZTriangles = 0;
+static LONG npdisp_d3d_profileBlendTriangles = 0;
+static LONG npdisp_d3d_profileAlphaTestTriangles = 0;
+static LONG npdisp_d3d_profileFogTriangles = 0;
+static LONG npdisp_d3d_profileMipTriangles = 0;
+static LONG npdisp_d3d_profileFilterPP = 0;
+static LONG npdisp_d3d_profileFilterPL = 0;
+static LONG npdisp_d3d_profileFilterLP = 0;
+static LONG npdisp_d3d_profileFilterLL = 0;
+static LONG npdisp_d3d_profileTex16Triangles = 0;
+static LONG npdisp_d3d_profileTex32Triangles = 0;
+
+static void npdisp_d3d_profileReport(DWORD now)
+{
+	UINT32 elapsed;
+	LONG enqueue;
+	LONG enqueueBytes;
+	LONG draw;
+	LONG clear;
+	LONG workerCommands;
+	LONG workerMs;
+	LONG rasterCalls;
+	LONG triangles;
+	LONG dp2;
+	LONG boxKPixels;
+	LONG boxMaxPixels;
+	LONG box4K;
+	LONG box16K;
+	LONG box64K;
+	LONG textureTriangles;
+	LONG zTriangles;
+	LONG blendTriangles;
+	LONG alphaTestTriangles;
+	LONG fogTriangles;
+	LONG mipTriangles;
+	LONG filterPP;
+	LONG filterPL;
+	LONG filterLP;
+	LONG filterLL;
+	LONG tex16Triangles;
+	LONG tex32Triangles;
+
+	if (!npdisp_d3d_profileTick) {
+		npdisp_d3d_profileTick = now;
+		return;
+	}
+	elapsed = now - npdisp_d3d_profileTick;
+	if (elapsed < 1000U) return;
+
+	enqueue = InterlockedExchange(&npdisp_d3d_profileEnqueue, 0);
+	enqueueBytes = InterlockedExchange(&npdisp_d3d_profileEnqueueBytes, 0);
+	draw = InterlockedExchange(&npdisp_d3d_profileDraw, 0);
+	clear = InterlockedExchange(&npdisp_d3d_profileClear, 0);
+	workerCommands = InterlockedExchange(&npdisp_d3d_profileWorkerCommands, 0);
+	workerMs = InterlockedExchange(&npdisp_d3d_profileWorkerMs, 0);
+	rasterCalls = InterlockedExchange(&npdisp_d3d_profileRasterCalls, 0);
+	triangles = InterlockedExchange(&npdisp_d3d_profileTriangles, 0);
+	dp2 = InterlockedExchange(&npdisp_d3d_profileDP2, 0);
+	boxKPixels = InterlockedExchange(&npdisp_d3d_profileBoxKPixels, 0);
+	boxMaxPixels = InterlockedExchange(&npdisp_d3d_profileBoxMaxPixels, 0);
+	box4K = InterlockedExchange(&npdisp_d3d_profileBox4K, 0);
+	box16K = InterlockedExchange(&npdisp_d3d_profileBox16K, 0);
+	box64K = InterlockedExchange(&npdisp_d3d_profileBox64K, 0);
+	textureTriangles = InterlockedExchange(&npdisp_d3d_profileTextureTriangles, 0);
+	zTriangles = InterlockedExchange(&npdisp_d3d_profileZTriangles, 0);
+	blendTriangles = InterlockedExchange(&npdisp_d3d_profileBlendTriangles, 0);
+	alphaTestTriangles = InterlockedExchange(&npdisp_d3d_profileAlphaTestTriangles, 0);
+	fogTriangles = InterlockedExchange(&npdisp_d3d_profileFogTriangles, 0);
+	mipTriangles = InterlockedExchange(&npdisp_d3d_profileMipTriangles, 0);
+	filterPP = InterlockedExchange(&npdisp_d3d_profileFilterPP, 0);
+	filterPL = InterlockedExchange(&npdisp_d3d_profileFilterPL, 0);
+	filterLP = InterlockedExchange(&npdisp_d3d_profileFilterLP, 0);
+	filterLL = InterlockedExchange(&npdisp_d3d_profileFilterLL, 0);
+	tex16Triangles = InterlockedExchange(&npdisp_d3d_profileTex16Triangles, 0);
+	tex32Triangles = InterlockedExchange(&npdisp_d3d_profileTex32Triangles, 0);
+
+	TRACEOUTD3DPROF(("NPDISP11 D3D_PROF ms=%u flush=%u busy=%u wait_us=%llu wait_max=%u work=%llu enq=%ld bytes=%ld draw=%ld clear=%ld worker_cmd=%ld worker_ms=%ld dp2=%ld raster=%ld tri=%ld box_kpix=%ld box_max=%ld box4k=%ld box16k=%ld box64k=%ld tex=%ld z=%ld blend=%ld atest=%ld fog=%ld mip=%ld fpp=%ld fpl=%ld flp=%ld fll=%ld tex16=%ld tex32=%ld",
+		elapsed, npdisp_d3d_profileFlushCalls, npdisp_d3d_profileBusyFlushCalls,
+		(unsigned long long)npdisp_d3d_profileWaitUs, npdisp_d3d_profileWaitMaxUs,
+		(unsigned long long)npdisp_d3d_profileWorkClock, enqueue, enqueueBytes, draw, clear,
+		workerCommands, workerMs, dp2, rasterCalls, triangles, boxKPixels, boxMaxPixels,
+		box4K, box16K, box64K, textureTriangles, zTriangles, blendTriangles,
+		alphaTestTriangles, fogTriangles, mipTriangles, filterPP, filterPL, filterLP, filterLL,
+		tex16Triangles, tex32Triangles));
+
+	npdisp_d3d_profileTick = now;
+	npdisp_d3d_profileFlushCalls = 0;
+	npdisp_d3d_profileBusyFlushCalls = 0;
+	npdisp_d3d_profileWaitUs = 0;
+	npdisp_d3d_profileWaitMaxUs = 0;
+	npdisp_d3d_profileWorkClock = 0;
+}
+
 static bool npdisp_d3d_asyncExecute(NPDISP_D3D_ASYNC_COMMAND* command);
 static unsigned int __stdcall npdisp_d3d_asyncThreadProc(void*);
 static bool npdisp_d3d_asyncStart(void);
@@ -1055,8 +1185,14 @@ void npdisp_d3d_flush(void)
 			workClock = (UINT32)work64;
 			CPU_REMCLOCK -= (SINT32)workClock;
 		}
+		++npdisp_d3d_profileFlushCalls;
+		if (queued || active) ++npdisp_d3d_profileBusyFlushCalls;
+		npdisp_d3d_profileWaitUs += elapsedUs;
+		if (elapsedUs > npdisp_d3d_profileWaitMaxUs) npdisp_d3d_profileWaitMaxUs = elapsedUs > 0xffffffffULL ? 0xffffffffUL : (UINT32)elapsedUs;
+		npdisp_d3d_profileWorkClock += workClock;
 		if (elapsedUs) TRACEOUTD3D(("NPDISP11 D3D_ASYNC_WAIT us=%llu work=%u queued=%u bytes=%u active=%08x", (unsigned long long)elapsedUs, workClock, queued, bytes, active));
 	}
+	npdisp_d3d_profileReport(GetTickCount());
 	npdisp_d3d_poll();
 	if (InterlockedExchange(&npdisp_d3d_asyncError, 0)) TRACEOUTD3D(("NPDISP11 D3D_ASYNC_ERROR worker command failed"));
 }
@@ -1109,6 +1245,10 @@ static bool npdisp_d3d_asyncEnqueue(NPDISP_D3D_ASYNC_COMMAND* command)
 	EnterCriticalSection(&npdisp_d3d_asyncLock);
 	npdisp_d3d_asyncQueue.push_back(command);
 	npdisp_d3d_asyncBytes += bytes;
+	InterlockedIncrement(&npdisp_d3d_profileEnqueue);
+	InterlockedExchangeAdd(&npdisp_d3d_profileEnqueueBytes, (LONG)bytes);
+	if (command->type == NPDISP_D3D_ASYNC_DRAW) InterlockedIncrement(&npdisp_d3d_profileDraw);
+	else if (command->type == NPDISP_D3D_ASYNC_CLEAR) InterlockedIncrement(&npdisp_d3d_profileClear);
 	ResetEvent(npdisp_d3d_asyncIdle);
 	SetEvent(npdisp_d3d_asyncWake);
 	LeaveCriticalSection(&npdisp_d3d_asyncLock);
@@ -1141,7 +1281,10 @@ static void npdisp_d3d_asyncStopWorker(void)
 static unsigned int __stdcall npdisp_d3d_asyncThreadProc(void*)
 {
 	for (;;) {
+		DWORD batchStart;
+		UINT32 batchCommands = 0;
 		WaitForSingleObject(npdisp_d3d_asyncWake, INFINITE);
+		batchStart = GetTickCount();
 		for (;;) {
 			NPDISP_D3D_ASYNC_COMMAND* command = NULL;
 			bool stop = false;
@@ -1159,8 +1302,14 @@ static unsigned int __stdcall npdisp_d3d_asyncThreadProc(void*)
 				stop = npdisp_d3d_asyncStop;
 			}
 			LeaveCriticalSection(&npdisp_d3d_asyncLock);
-			if (!command) { if (stop) { _endthreadex(0); return 0; } break; }
+			if (!command) {
+				if (batchCommands) InterlockedExchangeAdd(&npdisp_d3d_profileWorkerMs, (LONG)(GetTickCount() - batchStart));
+				if (stop) { _endthreadex(0); return 0; }
+				break;
+			}
 			if (!npdisp_d3d_asyncExecute(command)) InterlockedExchange(&npdisp_d3d_asyncError, 1);
+			++batchCommands;
+			InterlockedIncrement(&npdisp_d3d_profileWorkerCommands);
 			if (command->target.visible) InterlockedExchange(&npdisp_d3d_asyncVisibleDirty, 1);
 			delete command;
 			EnterCriticalSection(&npdisp_d3d_asyncLock);
@@ -2352,6 +2501,74 @@ static bool npdisp_d3d_line(NPDISP_D3D_TARGET* target, NPDISP_D3D_SW_DEPTH_TARGE
 	return npdisp_d3d_sw_line(&target->sw, depthTarget, &v0, &v1, state);
 }
 
+static void npdisp_d3d_profileTriangle(const NPDISP_D3D_TARGET* target, const NPDISP_D3D_VERTEX* v0, const NPDISP_D3D_VERTEX* v1, const NPDISP_D3D_VERTEX* v2, const NPDISP_D3D_RASTERSTATE* state)
+{
+	float minxf;
+	float minyf;
+	float maxxf;
+	float maxyf;
+	SINT32 left;
+	SINT32 top;
+	SINT32 right;
+	SINT32 bottom;
+	LONG pixels;
+	LONG oldMax;
+	bool textured = false;
+	bool mip = false;
+
+	if (!target || !v0 || !v1 || !v2 || !state || !target->sw.width || !target->sw.height) return;
+	if (state->fillMode == NPDISP_D3DFILL_WIREFRAME) return;
+
+	minxf = v0->x; if (v1->x < minxf) minxf = v1->x; if (v2->x < minxf) minxf = v2->x;
+	maxxf = v0->x; if (v1->x > maxxf) maxxf = v1->x; if (v2->x > maxxf) maxxf = v2->x;
+	minyf = v0->y; if (v1->y < minyf) minyf = v1->y; if (v2->y < minyf) minyf = v2->y;
+	maxyf = v0->y; if (v1->y > maxyf) maxyf = v1->y; if (v2->y > maxyf) maxyf = v2->y;
+	if (maxxf < 0.0f || maxyf < 0.0f || minxf >= (float)target->sw.width || minyf >= (float)target->sw.height) return;
+
+	left = (minxf <= 0.0f) ? 0 : (SINT32)minxf;
+	top = (minyf <= 0.0f) ? 0 : (SINT32)minyf;
+	right = (maxxf >= (float)target->sw.width) ? (SINT32)target->sw.width : (SINT32)maxxf + 1;
+	bottom = (maxyf >= (float)target->sw.height) ? (SINT32)target->sw.height : (SINT32)maxyf + 1;
+	if (right <= left || bottom <= top) return;
+	pixels = (LONG)((right - left) * (bottom - top));
+
+	InterlockedExchangeAdd(&npdisp_d3d_profileBoxKPixels, (pixels + 1023) >> 10);
+	oldMax = npdisp_d3d_profileBoxMaxPixels;
+	while (pixels > oldMax) {
+		LONG previous = InterlockedCompareExchange(&npdisp_d3d_profileBoxMaxPixels, pixels, oldMax);
+		if (previous == oldMax) break;
+		oldMax = previous;
+	}
+	if (pixels >= 4096) InterlockedIncrement(&npdisp_d3d_profileBox4K);
+	if (pixels >= 16384) InterlockedIncrement(&npdisp_d3d_profileBox16K);
+	if (pixels >= 65536) InterlockedIncrement(&npdisp_d3d_profileBox64K);
+
+	for (UINT32 stage = 0; stage < NPDISP_D3D_RASTER_TEXTURE_STAGES; ++stage) {
+		const NPDISP_D3D_TEXTURE* texture = state->textures[stage];
+		if (!texture || texture->colorOp == NPDISP_D3DTOP_DISABLE) break;
+		textured = true;
+		if (!stage) {
+			if (texture->magFilter == NPDISP_D3DTFG_POINT && texture->minFilter == NPDISP_D3DTFN_POINT)
+				InterlockedIncrement(&npdisp_d3d_profileFilterPP);
+			else if (texture->magFilter == NPDISP_D3DTFG_POINT && texture->minFilter == NPDISP_D3DTFN_LINEAR)
+				InterlockedIncrement(&npdisp_d3d_profileFilterPL);
+			else if (texture->magFilter == NPDISP_D3DTFG_LINEAR && texture->minFilter == NPDISP_D3DTFN_POINT)
+				InterlockedIncrement(&npdisp_d3d_profileFilterLP);
+			else if (texture->magFilter == NPDISP_D3DTFG_LINEAR && texture->minFilter == NPDISP_D3DTFN_LINEAR)
+				InterlockedIncrement(&npdisp_d3d_profileFilterLL);
+			if (texture->bpp == 16U) InterlockedIncrement(&npdisp_d3d_profileTex16Triangles);
+			else if (texture->bpp == 32U) InterlockedIncrement(&npdisp_d3d_profileTex32Triangles);
+		}
+		if (texture->mipCount > 1U && texture->mipFilter != NPDISP_D3DTFP_NONE) mip = true;
+	}
+	if (textured) InterlockedIncrement(&npdisp_d3d_profileTextureTriangles);
+	if (state->zEnable) InterlockedIncrement(&npdisp_d3d_profileZTriangles);
+	if (state->alphaBlendEnable) InterlockedIncrement(&npdisp_d3d_profileBlendTriangles);
+	if (state->alphaTestEnable) InterlockedIncrement(&npdisp_d3d_profileAlphaTestTriangles);
+	if (state->fogEnable) InterlockedIncrement(&npdisp_d3d_profileFogTriangles);
+	if (mip) InterlockedIncrement(&npdisp_d3d_profileMipTriangles);
+}
+
 static bool npdisp_d3d_triangle(NPDISP_D3D_TARGET* target, NPDISP_D3D_SW_DEPTH_TARGET* depthTarget, const NPDISP_D3DTLVERTEX32* vertices, UINT32 vertexCount, UINT32 i0, UINT32 i1, UINT32 i2, const NPDISP_D3D_RASTERSTATE* state)
 {
 	NPDISP_D3D_VERTEX v0;
@@ -2361,13 +2578,19 @@ static bool npdisp_d3d_triangle(NPDISP_D3D_TARGET* target, NPDISP_D3D_SW_DEPTH_T
 	v0 = npdisp_d3d_vertex(&vertices[i0]);
 	v1 = npdisp_d3d_vertex(&vertices[i1]);
 	v2 = npdisp_d3d_vertex(&vertices[i2]);
+	npdisp_d3d_profileTriangle(target, &v0, &v1, &v2, state);
 	return npdisp_d3d_sw_triangle(&target->sw, depthTarget, &v0, &v1, &v2, state);
 }
 
 static bool npdisp_d3d_rasterize(NPDISP_D3D_TARGET* target, NPDISP_D3D_SW_DEPTH_TARGET* depth, UINT32 primitiveType, const NPDISP_D3DTLVERTEX32* vertices, UINT32 vertexCount, const UINT16* indices, UINT32 indexCount, const NPDISP_D3D_RASTERSTATE* state)
 {
 	UINT32 count = indices ? indexCount : vertexCount;
+	UINT32 triangles = 0;
 	if (!target || !vertices || !state || count > NPDISP_D3D_MAX_VERTICES) return false;
+	if (primitiveType == NPDISP_D3DPT_TRIANGLELIST) triangles = count / 3U;
+	else if ((primitiveType == NPDISP_D3DPT_TRIANGLESTRIP || primitiveType == NPDISP_D3DPT_TRIANGLEFAN) && count >= 3U) triangles = count - 2U;
+	InterlockedIncrement(&npdisp_d3d_profileRasterCalls);
+	if (triangles) InterlockedExchangeAdd(&npdisp_d3d_profileTriangles, (LONG)triangles);
 	if (primitiveType == NPDISP_D3DPT_POINTLIST) {
 		for (UINT32 i = 0; i < count; ++i) {
 			UINT32 index = indices ? indices[i] : i;
@@ -3920,6 +4143,7 @@ static UINT32 npdisp_d3d_dp2Finish(UINT32 lpDataAddr, NPDISP_D3DHAL_DRAWPRIMITIV
 static UINT32 npdisp_d3d_drawPrimitives2(UINT32 lpDataAddr)
 {
 	NPDISP_D3DHAL_DRAWPRIMITIVES2DATA32 data = { 0 };
+	InterlockedIncrement(&npdisp_d3d_profileDP2);
 	NPDISP_D3D_CONTEXT* context;
 	UINT32 vertexSize;
 	UINT32 cursor = 0;

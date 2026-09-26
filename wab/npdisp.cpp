@@ -31,6 +31,9 @@
 #if defined(SUPPORT_NPDISP_D3D)
 #include	"npdisp_d3d.h"
 #endif
+#if defined(SUPPORT_NPDISP_D3D) && defined(SUPPORT_NPDISP_GL)
+#include	"npdisp_ogl.h"
+#endif
 #include	"npdisp_statsave.h"
 #include	"npdisp_rle.h"
 #include	"npdisp_mem.h"
@@ -160,6 +163,26 @@ static void trace_fmt_exF(const char* fmt, ...)
 #else
 #define	TRACEOUT11(s)	(void)s
 #endif	/* 1 */
+
+#if defined(SUPPORT_NPDISP_D3D) && defined(SUPPORT_NPDISP_GL)
+#if 0
+static void trace_fmt_exOGL(const char* fmt, ...)
+{
+	char stmp[2048];
+	va_list ap;
+	va_start(ap, fmt);
+	vsprintf(stmp, fmt, ap);
+	strcat(stmp, "\n");
+	va_end(ap);
+	OutputDebugStringA(stmp);
+}
+#define	TRACEOUTOGL(s)	trace_fmt_exOGL s
+#else
+#define	TRACEOUTOGL(s)	(void)s
+#endif
+#else
+#define	TRACEOUTOGL(s)	(void)s
+#endif
 
 static void npdisp_releaseScreen(bool resize = false);
 static void npdisp_createScreen(bool resize = false);
@@ -1667,13 +1690,19 @@ static UINT16 npdisp_func_Control(UINT32 lpDestDevAddr, UINT16 wFunction, UINT32
 			UINT16 escNum = npdisp_readMemory16(lpInDataAddr);
 			switch (escNum) {
 			case NPDISP_CONTROL_QUERYESCSUPPORT: // QUERYESCSUPPORTは必ずサポート
-			case NPDISP_CONTROL_OPENGL_CMD:
-			case NPDISP_CONTROL_OPENGL_GETINFO:
-			case NPDISP_CONTROL_WNDOBJ_SETUP:
 			{
 				retValue = 1;
 				break;
 			}
+#if defined(SUPPORT_NPDISP_D3D) && defined(SUPPORT_NPDISP_GL)
+			case NPDISP_CONTROL_GL_CMD:
+			case NPDISP_CONTROL_GL_GETINFO:
+			case NPDISP_CONTROL_WNDOBJ_SETUP:
+			{
+				retValue = (npdisp.acceleration >= NPDISP_ACCEL_DIRECT3D) ? 1 : 0;
+				break;
+			}
+#endif
 			case NPDISP_CONTROL_QUERYDIBSUPPORT: // Undocumented: DIB Support? これを返すだけでパフォーマンスが大幅に上がる
 			{
 				retValue = NPDISP_QDI_SETDIBITS | NPDISP_QDI_GETDIBITS | NPDISP_QDI_DIBTOSCREEN | NPDISP_QDI_STRETCHDIB;
@@ -1703,30 +1732,85 @@ static UINT16 npdisp_func_Control(UINT32 lpDestDevAddr, UINT16 wFunction, UINT32
 			}
 			}
 			TRACEOUT11(("NPDISP11 QUERYESC esc=%04x ret=%04x", escNum, retValue));
+#if defined(SUPPORT_NPDISP_D3D) && defined(SUPPORT_NPDISP_GL)
+			if (escNum == NPDISP_CONTROL_GL_CMD || escNum == NPDISP_CONTROL_GL_GETINFO || escNum == NPDISP_CONTROL_WNDOBJ_SETUP) {
+				static UINT32 oglQueryEscTraceCount = 0;
+				if (oglQueryEscTraceCount < 8) {
+					TRACEOUTOGL(("NPDISPOGL QUERYESCSUPPORT esc=%04x ret=%04x", escNum, retValue));
+				}
+				else if (oglQueryEscTraceCount == 8) {
+					TRACEOUTOGL(("NPDISPOGL QUERYESCSUPPORT further calls suppressed"));
+				}
+				oglQueryEscTraceCount++;
+			}
+#endif
 			break;
 		}
-		case NPDISP_CONTROL_OPENGL_CMD:
+#if defined(SUPPORT_NPDISP_D3D) && defined(SUPPORT_NPDISP_GL)
+		case NPDISP_CONTROL_GL_CMD:
 		{
+			if (npdisp.acceleration < NPDISP_ACCEL_DIRECT3D) {
+				retValue = -1;
+				break;
+			}
+			TRACEOUTOGL(("NPDISPOGL GL_CMD in=%08x out=%08x unsupported", lpInDataAddr, lpOutDataAddr));
 			retValue = -1;
 			break;
 		}
-		case NPDISP_CONTROL_OPENGL_GETINFO:
+		case NPDISP_CONTROL_GL_GETINFO:
 		{
-			if (lpOutDataAddr) {
-				NPDISP_OPENGL_INFO info = { 1, 1, "" };
-				npdisp_writeMemory(&info, lpOutDataAddr, sizeof(NPDISP_OPENGL_INFO));
+			if (npdisp.acceleration < NPDISP_ACCEL_DIRECT3D) {
+				retValue = -1;
+				break;
+			}
+			static UINT32 oglGetInfoTraceCount = 0;
+			UINT32 subEsc = lpInDataAddr ? npdisp_readMemory32(lpInDataAddr) : 0xffffffffU;
+			BOOL traceGetInfo = (oglGetInfoTraceCount < 8);
+			if (traceGetInfo) {
+				TRACEOUTOGL(("NPDISPOGL GL_GETINFO sub=%08x in=%08x out=%08x", subEsc, lpInDataAddr, lpOutDataAddr));
+			}
+			else if (oglGetInfoTraceCount == 8) {
+				TRACEOUTOGL(("NPDISPOGL GL_GETINFO further calls suppressed"));
+			}
+			oglGetInfoTraceCount++;
+			if (lpOutDataAddr && subEsc == 0) {
+				NPDISP_GL_INFO info;
+				memset(&info, 0, sizeof(info));
+				info.version = 2;
+				info.driverVersion = 1;
+				info.dllName[0] = 'N';
+				info.dllName[1] = 'P';
+				info.dllName[2] = 'O';
+				info.dllName[3] = 'G';
+				info.dllName[4] = 'L';
+				info.dllName[5] = '3';
+				info.dllName[6] = '2';
+				npdisp_writeMemory(&info, lpOutDataAddr, sizeof(info));
 				retValue = 1;
+				if (traceGetInfo) {
+					TRACEOUTOGL(("NPDISPOGL GL_GETINFO ret=1 ver=%u drvver=%u name=NPOGL32 payload=%u",
+						info.version, info.driverVersion, (UINT32)sizeof(info)));
+				}
 			}
 			else {
 				retValue = -1;
+				if (traceGetInfo) {
+					TRACEOUTOGL(("NPDISPOGL GL_GETINFO ret=ffff"));
+				}
 			}
 			break;
 		}
 		case NPDISP_CONTROL_WNDOBJ_SETUP:
 		{
+			if (npdisp.acceleration < NPDISP_ACCEL_DIRECT3D) {
+				retValue = -1;
+				break;
+			}
+			TRACEOUTOGL(("NPDISPOGL WNDOBJ_SETUP in=%08x out=%08x unsupported", lpInDataAddr, lpOutDataAddr));
 			retValue = -1;
 			break;
 		}
+#endif
 		case NPDISP_CONTROL_NP2DCIENABLE:
 		{
 			npdisp.mm_dciEnable = 1;
@@ -5187,7 +5271,11 @@ void npdisp_exec_fast(void) {
 	UINT32 lastECX = CPU_ECX;
 
 	UINT16 bx = CPU_BX;
-	const bool isDD32Call = (bx == NPDISP_FUNCORDER_DD32_DISPATCH);
+#if defined(SUPPORT_NPDISP_D3D) && defined(SUPPORT_NPDISP_GL)
+	const bool is32BridgeCall = (bx == NPDISP_FUNCORDER_DD32_DISPATCH || bx == NPDISP_FUNCORDER_OGL32_DISPATCH);
+#else
+	const bool is32BridgeCall = (bx == NPDISP_FUNCORDER_DD32_DISPATCH);
+#endif
 
 	// 関数番号指定
 	npdisp_memory_setFunctionId(bx);
@@ -5834,6 +5922,41 @@ void npdisp_exec_fast(void) {
 		}
 		break;
 	}
+#if defined(SUPPORT_NPDISP_D3D) && defined(SUPPORT_NPDISP_GL)
+	case NPDISP_FUNCORDER_OGL32_DISPATCH:
+	{
+		static UINT32 oglQueryTraceCount = 0;
+		static UINT32 oglClearTraceCount = 0;
+		static UINT32 oglDrawTraceCount = 0;
+		static UINT32 oglSwapTraceCount = 0;
+		const UINT32 oglCommand = CPU_EDI;
+		bool traceCall = true;
+		if (oglCommand == 1) {
+			++oglQueryTraceCount;
+			traceCall = (oglQueryTraceCount <= 8);
+		}
+		else if (oglCommand == 4) {
+			++oglClearTraceCount;
+			traceCall = (oglClearTraceCount <= 8);
+		}
+		else if (oglCommand == 5) {
+			++oglDrawTraceCount;
+			traceCall = (oglDrawTraceCount <= 8);
+		}
+		else if (oglCommand == 6) {
+			++oglSwapTraceCount;
+			traceCall = (oglSwapTraceCount <= 8);
+		}
+		if (traceCall) TRACEOUTOGL(("NPDISPOGL BRIDGE cmd=%u data=%08x", oglCommand, CPU_ESI));
+		const UINT32 retValue = (npdisp.acceleration >= NPDISP_ACCEL_DIRECT3D) ? npdisp_ogl_dispatch(oglCommand, CPU_ESI) : 0;
+		if (traceCall || !retValue) TRACEOUTOGL(("NPDISPOGL BRIDGE_RET cmd=%u ret=%u", oglCommand, retValue));
+		if (!npdisp.longjmpnum) {
+			CPU_EAX = retValue;
+			CPU_ECX = 0;
+		}
+		break;
+	}
+#endif
 	case NPDISP_FUNCORDER_DCI_BEGINACCESS:
 	{
 		NPDISP_REQUEST req;
@@ -5915,7 +6038,7 @@ void npdisp_exec_fast(void) {
 		TRACEOUTF(("EXCEPTION!!!!!!"));
 
 		// 戻れるようにレジスタセット
-		if (isDD32Call) {
+		if (is32BridgeCall) {
 			CPU_EAX = lastEAX;
 			CPU_EDX = lastEDX;
 			CPU_ECX = lastECX;
@@ -6563,6 +6686,9 @@ void npdisp_reset(const NP2CFG* pConfig)
 #if defined(SUPPORT_NPDISP_D3D)
 	npdisp_d3d_reset();
 #endif
+#if defined(SUPPORT_NPDISP_D3D) && defined(SUPPORT_NPDISP_GL)
+	npdisp_ogl_reset();
+#endif
 	npdispcs_initialize();
 
 	npdisp_palette_makeTable();
@@ -6670,6 +6796,9 @@ void npdisp_shutdown()
 {
 #if defined(SUPPORT_NPDISP_D3D)
 	npdisp_d3d_reset();
+#endif
+#if defined(SUPPORT_NPDISP_D3D) && defined(SUPPORT_NPDISP_GL)
+	npdisp_ogl_reset();
 #endif
 	npdisp_releaseScreen();
 	npdisp_dd_releaseOffscreenBacking();
@@ -6873,6 +7002,18 @@ int npdisp_sfsave(STFLAGH sfh, const SFENTRY* tbl)
 			buffer.insert(buffer.end(), d3dState.begin(), d3dState.end());
 		}
 #endif
+#if defined(SUPPORT_NPDISP_D3D) && defined(SUPPORT_NPDISP_GL)
+		if (npdisp.acceleration >= NPDISP_ACCEL_DIRECT3D) {
+			const UINT32 sectionMagic = 0x31534c47UL; // "GLS1"
+			UINT32 sectionSize = npdisp_ogl_stateSize();
+			if (!sectionSize || sectionSize > NPDISP_OGL_STATE_MAX_SIZE) return STATFLAG_FAILURE;
+			std::vector<UINT8> oglState(sectionSize);
+			if (!npdisp_ogl_saveState(&oglState[0], sectionSize)) return STATFLAG_FAILURE;
+			buffer.insert(buffer.end(), (const UINT8*)&sectionMagic, (const UINT8*)(&sectionMagic + 1));
+			buffer.insert(buffer.end(), (const UINT8*)&sectionSize, (const UINT8*)(&sectionSize + 1));
+			buffer.insert(buffer.end(), oglState.begin(), oglState.end());
+		}
+#endif
 	}
 
 	// 書き込み
@@ -6896,6 +7037,9 @@ int npdisp_sfload(STFLAGH sfh, const SFENTRY* tbl)
 	// 画面など解放
 #if defined(SUPPORT_NPDISP_D3D)
 	npdisp_d3d_reset();
+#endif
+#if defined(SUPPORT_NPDISP_D3D) && defined(SUPPORT_NPDISP_GL)
+	npdisp_ogl_reset();
 #endif
 	npdisp_releaseScreen();
 	npdisp_dd_releaseOffscreenBacking();
@@ -7400,6 +7544,15 @@ int npdisp_sfload(STFLAGH sfh, const SFENTRY* tbl)
 						}
 						else
 #endif
+#if defined(SUPPORT_NPDISP_D3D) && defined(SUPPORT_NPDISP_GL)
+						if (sectionMagic == 0x31534c47UL && npdisp.acceleration >= NPDISP_ACCEL_DIRECT3D) {
+							if (!sectionSize || sectionSize > NPDISP_OGL_STATE_MAX_SIZE) goto error;
+							std::vector<UINT8> section(sectionSize);
+							ret = statflag_read(sfh, &section[0], sectionSize);
+							if (ret != STATFLAG_SUCCESS || !npdisp_ogl_loadState(&section[0], sectionSize)) goto error;
+						}
+						else
+#endif
 						{
 							UINT8 discard[4096];
 							UINT32 remain = sectionSize;
@@ -7513,6 +7666,9 @@ error:
 
 #if defined(SUPPORT_NPDISP_D3D)
 	npdisp_d3d_reset();
+#endif
+#if defined(SUPPORT_NPDISP_D3D) && defined(SUPPORT_NPDISP_GL)
+	npdisp_ogl_reset();
 #endif
 	npdisp_releaseScreen();
 	npdisp_dd_releaseOffscreenBacking();

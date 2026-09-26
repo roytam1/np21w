@@ -215,7 +215,9 @@ static INLINE bool floatx80_lt(sw_extFloat80_t a, sw_extFloat80_t b) {
 	return extF80_lt(a, b);
 }
 static INLINE bool floatx80_is_nan(sw_extFloat80_t a) {
-	return extF80_isSignalingNaN(a);
+	const uint16_t exponent = a.signExp & 0x7FFF;
+	const uint64_t significand = a.signif;
+	return (exponent == 0x7FFF) && ((significand & UINT64_C(0x7FFFFFFFFFFFFFFF)) != 0);
 }
 static INLINE bool floatx80_is_inf(sw_extFloat80_t a) {
 	uint16_t exponent = a.signExp & 0x7FFF;

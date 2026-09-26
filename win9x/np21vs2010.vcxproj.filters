@@ -2451,6 +2451,9 @@
     <ClCompile Include="..\generic\hostdrv9x.c">
       <Filter>ソース ファイル\generic</Filter>
     </ClCompile>
+    <ClCompile Include="..\wab\npdisp_ogl.cpp">
+      <Filter>ソース ファイル\wab</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\calendar.h">
@@ -3661,6 +3664,9 @@
     </ClInclude>
     <ClInclude Include="..\generic\hostdrv9xdef.h">
       <Filter>ヘッダー ファイル\generic</Filter>
+    </ClInclude>
+    <ClInclude Include="..\wab\npdisp_ogl.h">
+      <Filter>ヘッダー ファイル\wab</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

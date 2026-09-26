@@ -16,6 +16,10 @@
 #include	"npdisp_d3d.h"
 #include	"npdisp_d3d_sw.h"
 
+#ifndef NPDISP_D3DTOP_BLENDTEXTUREALPHA
+#define NPDISP_D3DTOP_BLENDTEXTUREALPHA 13U
+#endif
+
 static UINT32 npdisp_d3d_sw_bytesPerPixel(UINT32 bpp)
 {
 	if (bpp == 15 || bpp == 16) return 2;
@@ -118,11 +122,85 @@ static bool npdisp_d3d_sw_blend(UINT32 src, UINT32 dst, UINT32 srcBlend, UINT32 
 	return true;
 }
 
+static bool npdisp_d3d_sw_blend16(UINT8* p, UINT32 bpp, UINT32 src, UINT32 srcBlend, UINT32 destBlend)
+{
+	UINT16 raw;
+	UINT32 sr, sg, sb;
+	UINT32 dr, dg, db;
+	UINT32 r, g, b;
+	UINT32 sa;
+
+	if (!p || (bpp != 15U && bpp != 16U)) return false;
+	if (!((srcBlend == NPDISP_D3DBLEND_SRCALPHA && destBlend == NPDISP_D3DBLEND_INVSRCALPHA) ||
+		(srcBlend == NPDISP_D3DBLEND_SRCALPHA && destBlend == NPDISP_D3DBLEND_ONE) ||
+		(srcBlend == NPDISP_D3DBLEND_ONE && destBlend == NPDISP_D3DBLEND_ONE) ||
+		(srcBlend == NPDISP_D3DBLEND_ONE && destBlend == NPDISP_D3DBLEND_ZERO) ||
+		(srcBlend == NPDISP_D3DBLEND_DESTCOLOR && destBlend == NPDISP_D3DBLEND_ZERO) ||
+		(srcBlend == NPDISP_D3DBLEND_ZERO && destBlend == NPDISP_D3DBLEND_SRCCOLOR))) return false;
+
+	sr = (src >> 16) & 0xffU;
+	sg = (src >> 8) & 0xffU;
+	sb = src & 0xffU;
+	if (srcBlend == NPDISP_D3DBLEND_ONE && destBlend == NPDISP_D3DBLEND_ZERO) {
+		raw = bpp == 15U ? (UINT16)(((sr >> 3) << 10) | ((sg >> 3) << 5) | (sb >> 3)) :
+			(UINT16)(((sr >> 3) << 11) | ((sg >> 2) << 5) | (sb >> 3));
+		p[0] = (UINT8)raw;
+		p[1] = (UINT8)(raw >> 8);
+		return true;
+	}
+
+	raw = (UINT16)((UINT16)p[0] | ((UINT16)p[1] << 8));
+	if (bpp == 15U) {
+		dr = ((raw >> 10) & 0x1fU) * 255U / 31U;
+		dg = ((raw >> 5) & 0x1fU) * 255U / 31U;
+		db = (raw & 0x1fU) * 255U / 31U;
+	}
+	else {
+		dr = ((raw >> 11) & 0x1fU) * 255U / 31U;
+		dg = ((raw >> 5) & 0x3fU) * 255U / 63U;
+		db = (raw & 0x1fU) * 255U / 31U;
+	}
+
+	if (srcBlend == NPDISP_D3DBLEND_SRCALPHA) {
+		sa = (src >> 24) & 0xffU;
+		if (destBlend == NPDISP_D3DBLEND_INVSRCALPHA) {
+			UINT32 da = 255U - sa;
+			r = (sr * sa + dr * da + 127U) / 255U;
+			g = (sg * sa + dg * da + 127U) / 255U;
+			b = (sb * sa + db * da + 127U) / 255U;
+		}
+		else {
+			r = (sr * sa + dr * 255U + 127U) / 255U;
+			g = (sg * sa + dg * 255U + 127U) / 255U;
+			b = (sb * sa + db * 255U + 127U) / 255U;
+		}
+	}
+	else if (srcBlend == NPDISP_D3DBLEND_ONE && destBlend == NPDISP_D3DBLEND_ONE) {
+		r = sr + dr;
+		g = sg + dg;
+		b = sb + db;
+	}
+	else {
+		r = (sr * dr + 127U) / 255U;
+		g = (sg * dg + 127U) / 255U;
+		b = (sb * db + 127U) / 255U;
+	}
+	if (r > 255U) r = 255U;
+	if (g > 255U) g = 255U;
+	if (b > 255U) b = 255U;
+	raw = bpp == 15U ? (UINT16)(((r >> 3) << 10) | ((g >> 3) << 5) | (b >> 3)) :
+		(UINT16)(((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3));
+	p[0] = (UINT8)raw;
+	p[1] = (UINT8)(raw >> 8);
+	return true;
+}
+
 static bool npdisp_d3d_sw_outputPixel(NPDISP_D3D_SW_TARGET* target, UINT8* p, const NPDISP_D3D_RASTERSTATE* state, UINT32 color)
 {
 	if (!target || !p || !state) return false;
 	if (state->alphaBlendEnable) {
 		UINT32 blended;
+		if ((target->bpp == 15U || target->bpp == 16U) && npdisp_d3d_sw_blend16(p, target->bpp, color, state->srcBlend, state->destBlend)) return true;
 		if (!npdisp_d3d_sw_blend(color, npdisp_d3d_sw_readPixel(p, target->bpp), state->srcBlend, state->destBlend, &blended)) return false;
 		color = blended;
 	}
@@ -170,6 +248,42 @@ static UINT32 npdisp_d3d_sw_texturePixel(const NPDISP_D3D_TEXTURE* texture, SINT
 	if (bytesPerPixel == 4U) value |= ((UINT32)p[2] << 16) | ((UINT32)p[3] << 24);
 	if (transparent && texture->colorKeyEnable && ((value & texture->colorKeyMask) >= texture->colorKeyLow) && ((value & texture->colorKeyMask) <= texture->colorKeyHigh)) *transparent = true;
 	if (texture->format == NPDISP_D3D_TEXTURE_FORMAT_P8) return texture->palette[value & 0xffU];
+
+	/* Common Direct3D texture formats avoid repeated generic mask scans. */
+	if (texture->format == NPDISP_D3D_TEXTURE_FORMAT_RGB16) {
+		if (texture->rMask == 0x0000f800UL && texture->gMask == 0x000007e0UL &&
+			texture->bMask == 0x0000001fUL && !texture->aMask) {
+			r = ((value >> 11) & 0x1fU) * 255U / 31U;
+			g = ((value >> 5) & 0x3fU) * 255U / 63U;
+			b = (value & 0x1fU) * 255U / 31U;
+			return 0xff000000UL | (r << 16) | (g << 8) | b;
+		}
+		if (texture->rMask == 0x00007c00UL && texture->gMask == 0x000003e0UL &&
+			texture->bMask == 0x0000001fUL &&
+			(!texture->aMask || texture->aMask == 0x00008000UL)) {
+			a = texture->aMask ? ((value & 0x00008000UL) ? 255U : 0U) : 255U;
+			r = ((value >> 10) & 0x1fU) * 255U / 31U;
+			g = ((value >> 5) & 0x1fU) * 255U / 31U;
+			b = (value & 0x1fU) * 255U / 31U;
+			return (a << 24) | (r << 16) | (g << 8) | b;
+		}
+		if (texture->rMask == 0x00000f00UL && texture->gMask == 0x000000f0UL &&
+			texture->bMask == 0x0000000fUL && texture->aMask == 0x0000f000UL) {
+			a = ((value >> 12) & 0x0fU) * 17U;
+			r = ((value >> 8) & 0x0fU) * 17U;
+			g = ((value >> 4) & 0x0fU) * 17U;
+			b = (value & 0x0fU) * 17U;
+			return (a << 24) | (r << 16) | (g << 8) | b;
+		}
+	}
+	else if (texture->format == NPDISP_D3D_TEXTURE_FORMAT_RGB32 &&
+		texture->rMask == 0x00ff0000UL && texture->gMask == 0x0000ff00UL &&
+		texture->bMask == 0x000000ffUL &&
+		(!texture->aMask || texture->aMask == 0xff000000UL)) {
+		a = texture->aMask ? ((value >> 24) & 0xffU) : 255U;
+		return (a << 24) | (value & 0x00ffffffUL);
+	}
+
 	a = texture->aMask ? npdisp_d3d_sw_maskTo8(value, texture->aMask) : 255U;
 	r = npdisp_d3d_sw_maskTo8(value, texture->rMask);
 	g = npdisp_d3d_sw_maskTo8(value, texture->gMask);
@@ -181,6 +295,7 @@ static SINT32 npdisp_d3d_sw_addressIndex(SINT32 value, UINT32 size, UINT32 addre
 {
 	if (!size) return 0;
 	if (address == NPDISP_D3DTADDRESS_WRAP) {
+		if (!(size & (size - 1U))) return (SINT32)((UINT32)value & (size - 1U));
 		SINT32 result = value % (SINT32)size;
 		if (result < 0) result += (SINT32)size;
 		return result;
@@ -190,8 +305,11 @@ static SINT32 npdisp_d3d_sw_addressIndex(SINT32 value, UINT32 size, UINT32 addre
 		SINT32 result;
 		if (size > 0x3fffffffU) return 0;
 		period = (SINT32)(size * 2U);
-		result = value % period;
-		if (result < 0) result += period;
+		if (!(size & (size - 1U))) result = (SINT32)((UINT32)value & ((UINT32)period - 1U));
+		else {
+			result = value % period;
+			if (result < 0) result += period;
+		}
 		if (result >= (SINT32)size) result = period - 1 - result;
 		return result;
 	}
@@ -287,11 +405,15 @@ static bool npdisp_d3d_sw_sampleTextureLevel(const NPDISP_D3D_TEXTURE* texture, 
 		{
 			float fx = x - (float)x0;
 			float fy = y - (float)y0;
+			SINT32 sx0 = npdisp_d3d_sw_addressIndex(x0, texture->width, texture->addressU);
+			SINT32 sx1 = npdisp_d3d_sw_addressIndex(x1, texture->width, texture->addressU);
+			SINT32 sy0 = npdisp_d3d_sw_addressIndex(y0, texture->height, texture->addressV);
+			SINT32 sy1 = npdisp_d3d_sw_addressIndex(y1, texture->height, texture->addressV);
 			bool t00 = false, t10 = false, t01 = false, t11 = false;
-			UINT32 c00 = npdisp_d3d_sw_texturePixel(texture, npdisp_d3d_sw_addressIndex(x0, texture->width, texture->addressU), npdisp_d3d_sw_addressIndex(y0, texture->height, texture->addressV), &t00);
-			UINT32 c10 = npdisp_d3d_sw_texturePixel(texture, npdisp_d3d_sw_addressIndex(x1, texture->width, texture->addressU), npdisp_d3d_sw_addressIndex(y0, texture->height, texture->addressV), &t10);
-			UINT32 c01 = npdisp_d3d_sw_texturePixel(texture, npdisp_d3d_sw_addressIndex(x0, texture->width, texture->addressU), npdisp_d3d_sw_addressIndex(y1, texture->height, texture->addressV), &t01);
-			UINT32 c11 = npdisp_d3d_sw_texturePixel(texture, npdisp_d3d_sw_addressIndex(x1, texture->width, texture->addressU), npdisp_d3d_sw_addressIndex(y1, texture->height, texture->addressV), &t11);
+			UINT32 c00 = npdisp_d3d_sw_texturePixel(texture, sx0, sy0, &t00);
+			UINT32 c10 = npdisp_d3d_sw_texturePixel(texture, sx1, sy0, &t10);
+			UINT32 c01 = npdisp_d3d_sw_texturePixel(texture, sx0, sy1, &t01);
+			UINT32 c11 = npdisp_d3d_sw_texturePixel(texture, sx1, sy1, &t11);
 			if (transparent) *transparent = t00 && t10 && t01 && t11;
 			*color = npdisp_d3d_sw_lerpColor(npdisp_d3d_sw_lerpColor(c00, c10, fx), npdisp_d3d_sw_lerpColor(c01, c11, fx), fy);
 		}
@@ -370,6 +492,16 @@ static UINT32 npdisp_d3d_sw_modulate(UINT32 c0, UINT32 c1)
 	UINT32 g = ((((c0 >> 8) & 0xffU) * ((c1 >> 8) & 0xffU)) + 127U) / 255U;
 	UINT32 b = (((c0 & 0xffU) * (c1 & 0xffU)) + 127U) / 255U;
 	return (a << 24) | (r << 16) | (g << 8) | b;
+}
+
+static UINT32 npdisp_d3d_sw_blendTextureAlpha(UINT32 arg1, UINT32 arg2, UINT32 texture)
+{
+	UINT32 a = (texture >> 24) & 0xffU;
+	UINT32 ia = 255U - a;
+	UINT32 r = ((((arg1 >> 16) & 0xffU) * a) + (((arg2 >> 16) & 0xffU) * ia) + 127U) / 255U;
+	UINT32 g = ((((arg1 >> 8) & 0xffU) * a) + (((arg2 >> 8) & 0xffU) * ia) + 127U) / 255U;
+	UINT32 b = (((arg1 & 0xffU) * a) + ((arg2 & 0xffU) * ia) + 127U) / 255U;
+	return (arg2 & 0xff000000UL) | (r << 16) | (g << 8) | b;
 }
 
 static UINT32 npdisp_d3d_sw_addColor(UINT32 c0, UINT32 c1)
@@ -561,6 +693,7 @@ static bool npdisp_d3d_sw_applyTextureStages(const NPDISP_D3D_RASTERSTATE* state
 		case NPDISP_D3DTOP_SELECTARG2: colorResult = colorArg2; break;
 		case NPDISP_D3DTOP_MODULATE: colorResult = npdisp_d3d_sw_modulate(colorArg1, colorArg2); break;
 		case NPDISP_D3DTOP_ADD: colorResult = npdisp_d3d_sw_addColor(colorArg1, colorArg2); break;
+		case NPDISP_D3DTOP_BLENDTEXTUREALPHA: colorResult = npdisp_d3d_sw_blendTextureAlpha(colorArg1, colorArg2, texel); break;
 		default: return false;
 		}
 		alphaResult = current;
@@ -808,6 +941,21 @@ static bool npdisp_d3d_sw_depthStencilPass(UINT8* zp, UINT16 zValue, const NPDIS
 	}
 	if (state->stencilEnable) npdisp_d3d_sw_updateStencil(zp, state, state->stencilPass);
 	return true;
+}
+
+static bool npdisp_d3d_sw_polygonStipplePass(SINT32 x, SINT32 y, const NPDISP_D3D_RASTERSTATE* state)
+{
+	SINT32 gx, gy, row, col;
+	UINT8 bits;
+	if (!state || !state->polygonStippleEnable) return true;
+	if (!state->polygonStipplePattern || !state->polygonStippleHeight) return false;
+	gx = x + state->polygonStippleOriginX;
+	gy = y + state->polygonStippleOriginY;
+	if (gx < 0 || gy < 0 || gy >= (SINT32)state->polygonStippleHeight) return false;
+	row = ((SINT32)state->polygonStippleHeight - 1 - gy) & 31;
+	col = gx & 31;
+	bits = state->polygonStipplePattern[row * 4 + (col >> 3)];
+	return (bits & (UINT8)(0x80U >> (col & 7))) != 0;
 }
 
 static void npdisp_d3d_sw_writeDepth(UINT8* zp, UINT16 zValue, const NPDISP_D3D_RASTERSTATE* state)
@@ -1119,6 +1267,7 @@ bool npdisp_d3d_sw_triangle(NPDISP_D3D_SW_TARGET* target, NPDISP_D3D_SW_DEPTH_TA
 			const float w0 = e0 * invArea;
 			const float w1 = e1 * invArea;
 			const float w2 = e2 * invArea;
+			if (!npdisp_d3d_sw_polygonStipplePass(x, y, state)) continue;
 			if (state->zEnable || state->stencilEnable) {
 				if (state->zEnable) zValue = npdisp_d3d_sw_depthValue(v0->z * w0 + v1->z * w1 + v2->z * w2, state->depthMask);
 				zp = depthTarget->pixels + (size_t)y * (size_t)depthTarget->pitch + (size_t)x * 2U;

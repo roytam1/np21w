@@ -106,6 +106,11 @@ typedef struct {
 	UINT32 stencilZFail;
 	UINT32 stencilPass;
 	UINT32 coordWrap[2];
+	UINT32 polygonStippleEnable;
+	const UINT8* polygonStipplePattern;
+	SINT32 polygonStippleOriginX;
+	SINT32 polygonStippleOriginY;
+	UINT32 polygonStippleHeight;
 	const NPDISP_D3D_TEXTURE* textures[NPDISP_D3D_RASTER_TEXTURE_STAGES];
 } NPDISP_D3D_RASTERSTATE;
 

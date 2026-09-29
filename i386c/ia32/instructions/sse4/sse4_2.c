@@ -48,15 +48,15 @@
 
 static INLINE void
 SSE4_2_check_NM_EXCEPTION(){
-	// SSE4.2 È‚  È‚ UD(     I y R [ h  O) ğ”­       
+	// SSE4.2 ?  ? UD(     I y R [ h  O) ??       
 	if(!(i386cpuid.cpu_feature_ecx & CPU_FEATURE_ECX_SSE4_2)){
 		EXCEPTION(UD_EXCEPTION, 0);
 	}
-	//  G ~     [ V     È‚ UD(     I y R [ h  O) ğ”­       
+	//  G ~     [ V     ? UD(     I y R [ h  O) ??       
 	if(CPU_CR0 & CPU_CR0_EM){
 		EXCEPTION(UD_EXCEPTION, 0);
 	}
-	//  ^ X N X C b `    NM( f o C X g p s Â— O) ğ”­       
+	//  ^ X N X C b `    NM( f o C X g p s ? O) ??       
 	if (CPU_CR0 & CPU_CR0_TS) {
 		EXCEPTION(NM_EXCEPTION, 0);
 	}
@@ -67,7 +67,7 @@ SSE4_2_setTag(void)
 {
 }
 
-// mmx.c Ì‚ Ì‚Æ“   
+// mmx.c ? ??   
 static INLINE void
 MMX_setTag(void)
 {
@@ -93,7 +93,7 @@ MMX_setTag(void)
  * SSE4.2 interface
  */
 
-//  R [ h       È‚ Ì‚Å‚ â‹­   É‹  Ê‰ 
+//  R [ h       ? ?? ?   ?  ? 
 // xmm/m128 -> xmm
 static INLINE void SSE_PART_GETDATA1DATA2_PD(double **data1, double **data2, double *data2buf){
 	UINT32 op;
@@ -195,7 +195,7 @@ static INLINE int overrideIfDataInvalid(UINT8 **data1, UINT8 **data2, UINT8 *dat
 			}
 		}
 	}
-	return 0; // ã‚³ãƒ³ãƒ‘ã‚¤ãƒ«ã‚¨ãƒ©ãƒ¼å›é¿ä»®
+	return 0; // ƒRƒ“ƒpƒCƒ‹ƒGƒ‰[‰ñ”ğ‰¼
 }
 
 static INLINE UINT32 sse42_compare_string_explicit_len(UINT8 **data1, UINT8 **data2, UINT8 *data2buf, int cmpmode, int lmem, int lreg){

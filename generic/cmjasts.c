@@ -61,6 +61,12 @@ static UINT8 jsgetstat(COMMNG self) {
 	return(0);
 }
 
+static UINT8 jsisimm(COMMNG self) {
+
+	(void)self;
+	return(1);
+}
+
 static INTPTR jsmsg(COMMNG self, UINT msg, INTPTR param) {
 
 	(void)self;
@@ -135,6 +141,7 @@ COMMNG cmjasts_create(void) {
 	ret->read = jsread;
 	ret->write = jswrite;
 	ret->getstat = jsgetstat;
+	ret->isimm = jsisimm;
 	ret->msg = jsmsg;
 	ret->release = jsrelease;
 	js = (CMJAST)(ret + 1);

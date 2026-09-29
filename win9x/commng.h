@@ -72,6 +72,7 @@ struct _commng
 	void	(*endblocktranster)(COMMNG self);					/*!< end block transfer */
 	UINT	(*lastwritesuccess)(COMMNG self);					/*!< last write success */
 	UINT8	(*getstat)(COMMNG self);							/*!< get status */
+	UINT8   (*isimm)(COMMNG self);								/*!< immediate write mode */
 	INTPTR	(*msg)(COMMNG self, UINT msg, INTPTR param);		/*!< message */
 	void	(*release)(COMMNG self);							/*!< release */
 };

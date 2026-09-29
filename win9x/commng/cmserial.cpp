@@ -592,6 +592,14 @@ UINT8 CComSerial::GetStat()
 }
 
 /**
+ * STROBEなしで即時書き込み？
+ */
+UINT8 CComSerial::IsImm()
+{
+	return 0;
+}
+
+/**
  * メッセージ
  * @param[in] nMessage メッセージ
  * @param[in] nParam パラメタ

@@ -38,42 +38,75 @@ static void trace_fmt_exw(const WCHAR* fmt, ...)
 	static REG8 lastData = 0xff;
 	static REG8 i44Data = 0x00;
 	static int selectBusyFlag = 0;
-	static int selectCounter = 0;
+	static REG8 writeOK = 1;
+	static UINT64 selectBusyTime = 0;
+	static UINT64 selectBusyTimeLen = 0;
 
 // ---- I/O
 
-static void IOOUTCALL prt_o40(UINT port, REG8 dat) {
+static void prt_strobe(UINT8 is_strobe) {
 
-	COMMNG	prt;
+	COMMNG prt;
+	UINT8 send = is_strobe;
 
 	prt = cm_prt;
 	if (prt == NULL) {
 		prt = commng_create(COMCREATE_PRINTER, FALSE);
 		cm_prt = prt;
 	}
-	prt->write(prt, (UINT8)dat);
-	lastData = dat;
-	if (lastData == 0x11) { // DC1 Select
-		// WORKAROUND: 制御文字でDC1 Selectを連続で送ってきているときはBUSYを一時的に立てる。本当はプリンタコマンドのSELECTに応答すべき？
-		if (selectCounter > 5) {
-			selectBusyFlag = 1;
+	if (prt != NULL && prt->isimm(prt)) {
+		send = is_strobe ? 0 : 1; // 即時書き込みモードはポート書き込みだけで送る
+	}
+	if (send && !writeOK) {
+		if (prt != NULL) {
+			prt->write(prt, (UINT8)lastData);
+		}
+		writeOK = 1;
+
+		selectBusyFlag = 1;
+		selectBusyTime = CPU_CLOCK + CPU_BASECLOCK - CPU_REMCLOCK;
+		if (lastData == 0x11) {
+			selectBusyTimeLen = pccore.realclock / 1000 / 10; // 100usec位で・・・
 		}
 		else {
-			selectCounter++;
+			selectBusyTimeLen = pccore.realclock / 1000 * 20 / 1000; // 20usec位で・・・
 		}
 	}
-	else {
-		selectCounter = 0;
+}
+
+static void prt_set_portc(REG8 dat) {
+
+	if (/*(i44Data & 0x80) &&*/ !(dat & 0x80)) {
+		prt_strobe(1); // STROBE書き込み用
 	}
+	i44Data = dat;
+}
+
+static void IOOUTCALL prt_o40(UINT port, REG8 dat) {
+
+	lastData = dat;
+	writeOK = 0;
+	prt_strobe(0); // 即時書き込み用
 	TRACEOUT(("prt %.3x - %.2x", port, dat));
 	(void)port;
 }
+
 static void IOOUTCALL prt_o44(UINT port, REG8 dat) {
 
-	if (!(i44Data & 0x80) && (dat & 0x80)) {
-		TRACEOUT(("Strobe"));
+	prt_set_portc(dat);
+	(void)port;
+}
+
+static void IOOUTCALL prt_o46(UINT port, REG8 dat) {
+
+	if (!(dat & 0x80)) {
+		REG8 mask;
+		REG8 value;
+
+		mask = (REG8)(1 << ((dat >> 1) & 7));
+		value = (dat & 1) ? (REG8)(i44Data | mask) : (REG8)(i44Data & (REG8)~mask);
+		prt_set_portc(value);
 	}
-	i44Data = dat;
 	(void)port;
 }
 
@@ -107,9 +140,14 @@ static REG8 IOINPCALL prt_i42(UINT port) {
 		}
 	}
 	if (selectBusyFlag) {
-		// Selectすると一瞬だけBusyが立つ（負論理なのでビットは0になる）らしい
-		ret &= ~0x04;
-		selectBusyFlag = 0;
+		// 送るとき一瞬だけBusyが立つ（負論理なのでビットは0になる）らしい
+		UINT64 curTime =  CPU_CLOCK + CPU_BASECLOCK - CPU_REMCLOCK;
+		if (curTime - selectBusyTime < selectBusyTimeLen) {
+			ret &= ~0x04;
+		}
+		else {
+			selectBusyFlag = 0;
+		}
 	}
 	(void)port;
 	return(ret); // 0x04 Low PWR ON
@@ -299,7 +337,7 @@ static REG8 IOINPCALL prt_i14e(UINT port) {
 // ---- I/F
 
 static const IOOUT prto40[4] = {
-					prt_o40,	NULL, prt_o44,	 NULL};
+					prt_o40,	NULL, prt_o44,	 prt_o46};
 
 static const IOINP prti40[4] = {
 					prt_i40, prt_i42, prt_i44,	 NULL};
@@ -310,6 +348,9 @@ void printif_reset(const NP2CFG *pConfig) {
 	cm_prt = NULL;
 
 	// 適当な初期値
+	lastData = 0xff;
+	i44Data = 0x00;
+	writeOK = 1;
 	selectBusyFlag = 0;
 	prtIEEE_data = 0xff;
 	prtIEEE_status = 0x00;

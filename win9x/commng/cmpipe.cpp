@@ -278,6 +278,14 @@ UINT8 CComPipe::GetStat()
 }
 
 /**
+ * STROBEなしで即時書き込み？
+ */
+UINT8 CComPipe::IsImm()
+{
+	return 0;
+}
+
+/**
  * メッセージ
  * @param[in] nMessage メッセージ
  * @param[in] nParam パラメタ

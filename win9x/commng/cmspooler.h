@@ -68,6 +68,7 @@ protected:
 	virtual UINT Read(UINT8* pData);
 	virtual UINT Write(UINT8 cData);
 	virtual UINT8 GetStat();
+	virtual UINT8 IsImm();
 	virtual INTPTR Message(UINT nMessage, INTPTR nParam);
 
 private:

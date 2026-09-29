@@ -32,6 +32,7 @@ protected:
 	virtual UINT WriteRetry();
 	virtual UINT LastWriteSuccess(); // 最後の書き込みが成功しているかチェック
 	virtual UINT8 GetStat();
+	virtual UINT8 IsImm();
 	virtual INTPTR Message(UINT nMessage, INTPTR nParam);
 	virtual void BeginBlockTransfer();
 	virtual void EndBlockTransfer();

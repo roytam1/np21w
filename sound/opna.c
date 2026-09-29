@@ -455,7 +455,7 @@ int opna_sfsave(PCOPNA opna, STFLAGH sfh, const SFENTRY *tbl)
 	int ret = statflag_write(sfh, &opna->s, sizeof(opna->s));
 	if (opna->s.cCaps & OPNA_HAS_ADPCM)
 	{
-		ret |= statflag_write(sfh, &opna->adpcm, sizeof(opna->adpcm));
+		ret |= statflag_write(sfh, &opna->adpcm, sizeof(_ADPCM_OLD));
 	}
 
 	return ret;
@@ -473,7 +473,9 @@ int opna_sfload(POPNA opna, STFLAGH sfh, const SFENTRY *tbl)
 	int ret = statflag_read(sfh, &opna->s, sizeof(opna->s));
 	if (opna->s.cCaps & OPNA_HAS_ADPCM)
 	{
-		ret |= statflag_read(sfh, &opna->adpcm, sizeof(opna->adpcm));
+		memset(&opna->adpcm, 0, sizeof(opna->adpcm));
+		ret |= statflag_read(sfh, &opna->adpcm, sizeof(_ADPCM_OLD));
+		opna->adpcm.cpufifolow = 0;
 		adpcm_update(&opna->adpcm);
 	}
 

@@ -20,6 +20,7 @@ CComBase::CComBase(UINT nConnect)
 	this->endblocktranster = cEndBlockTransfer;
 	this->lastwritesuccess = cLastWriteSuccess;
 	this->getstat = cGetStat;
+	this->isimm = cIsImm;
 	this->msg = cMessage;
 	this->release = cRelease;
 }
@@ -99,6 +100,16 @@ UINT CComBase::cLastWriteSuccess(COMMNG cm)
 UINT8 CComBase::cGetStat(COMMNG cm)
 {
 	return static_cast<CComBase*>(cm)->GetStat();
+}
+
+/**
+ * STROBEを待たずに即時書き込み
+ * @param[in] cm COMMNG インスタンス
+ * @return 即時なら1
+ */
+UINT8 CComBase::cIsImm(COMMNG cm)
+{
+	return 0;
 }
 
 /**

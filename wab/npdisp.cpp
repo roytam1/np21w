@@ -6197,19 +6197,22 @@ int npdisp_drawGraphic(void)
 		UINT8* scanoutBase = npdisp_ddraw_getScanoutHostBase();
 		const bool overlayVisible = npdisp_dd_overlayVisible();
 		if (scanoutBase && (npdisp.mm_ddScanoutOffset != 0 || overlayVisible)) {
-			// DirectDraw scanout/overlay uses the auxiliary DIB so presentation never modifies the fixed GDI primary.
+			// DirectDraw表示は固定GDI primaryを変更せず、補助DIBへ最終表示pixelだけを生成する。
 			const int bytesPerPixel = (npdispwin.bi.bmiHeader.biBitCount + 7) >> 3;
 			const int copyWidth = npdispwin.dirtyRect.right - npdispwin.dirtyRect.left;
 			const int copyHeight = npdispwin.dirtyRect.bottom - npdispwin.dirtyRect.top;
 			const UINT32 byteOffset = (UINT32)npdispwin.dirtyRect.left * (UINT32)bytesPerPixel;
 			const UINT32 copyBytes = (UINT32)copyWidth * (UINT32)bytesPerPixel;
-			for (int y = npdispwin.dirtyRect.top; y < npdispwin.dirtyRect.bottom; y++) {
-				memcpy((UINT8*)npdispwin.pBitsBltBuf + (UINT32)y * npdispwin.stride + byteOffset,
-					scanoutBase + (UINT32)y * npdispwin.stride + byteOffset, copyBytes);
-			}
+			bool composed = false;
 			if (overlayVisible) {
-				npdisp_dd_compositeOverlay((UINT8*)npdispwin.pBitsBltBuf, npdispwin.stride,
+				composed = npdisp_dd_compositeOverlay((UINT8*)npdispwin.pBitsBltBuf, npdispwin.stride, scanoutBase, npdispwin.stride,
 					npdispwin.dirtyRect.left, npdispwin.dirtyRect.top, npdispwin.dirtyRect.right, npdispwin.dirtyRect.bottom);
+			}
+			if (!composed) {
+				for (int y = npdispwin.dirtyRect.top; y < npdispwin.dirtyRect.bottom; y++) {
+					memcpy((UINT8*)npdispwin.pBitsBltBuf + (UINT32)y * npdispwin.stride + byteOffset,
+						scanoutBase + (UINT32)y * npdispwin.stride + byteOffset, copyBytes);
+				}
 			}
 			if (npdisp.usePalette) SetDIBColorTable(npdispwin.hdcBltBuf, 0, 256, (RGBQUAD*)npdisp_palette_rgb256);
 			BitBlt(hdc, npdispwin.dirtyRect.left, npdispwin.dirtyRect.top, copyWidth, copyHeight,

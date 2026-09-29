@@ -148,9 +148,40 @@ static const UINT8 f12keys[] = {
 			0x61, 0x60, 0x4d, 0x4f, 0x76, 0x77, 0xff, 0xff, 0xff, 0xff, 0xff};
 
 
+// 変な仮想キーコードが送られてくることがあるので、scancodeを使って検証する
+static UINT8 winkbd_scancode_fallback(WPARAM wParam, LPARAM lParam, BOOL *shift) {
+
+	UINT	scancode;
+
+	*shift = FALSE;
+
+	if (lParam & 0x01000000) {
+		return(NC);
+	}
+
+	scancode = (UINT)((lParam & 0x00ff0000) >> 16);
+	switch (scancode) {
+		case 0x7e:						// Keypad comma
+			return(0x4f);
+
+		case 0x59:						// Keypad equal
+			return(0x4d);
+
+		case 0x4c:						// Keypad 5 with NumLock off
+			if ((np2oscfg.KEYBOARD != KEY_PC98) && (wParam == VK_CLEAR) && (!np2oscfg.USENUMLOCK)) {
+				*shift = TRUE;
+				return(0x47);
+			}
+			break;
+	}
+	return(NC);
+}
+
+
 void winkbd_keydown(WPARAM wParam, LPARAM lParam) {
 
 	UINT8	data;
+	BOOL	shiftfallback;
 	
 	np2_multithread_EnterCriticalSection();
 	if (wParam == VK_SHIFT) {
@@ -159,7 +190,14 @@ void winkbd_keydown(WPARAM wParam, LPARAM lParam) {
 	}
 
 	data = key106[wParam & 0xff];
+	shiftfallback = FALSE;
+	if (data == NC) {
+		data = winkbd_scancode_fallback(wParam, lParam, &shiftfallback);
+	}
 	if (data != NC) {
+		if (shiftfallback) {
+			keystat_senddata(0x70);
+		}
 		if ((data == 0x73) &&
 				(np2oscfg.KEYBOARD == KEY_KEY101) &&
 				(lParam & 0x01000000)) {
@@ -182,18 +220,13 @@ void winkbd_keydown(WPARAM wParam, LPARAM lParam) {
 			keystat_senddata(data);
 		}
 	}
-	else {													// ver0.28
-		if ((!np2oscfg.KEYBOARD != KEY_PC98) && (wParam == 0x0c)) {
-			keystat_senddata(0x70);							// PC/AT only
-			keystat_senddata(0x47);
-		}
-	}
 	np2_multithread_LeaveCriticalSection();
 }
 
 void winkbd_keyup(WPARAM wParam, LPARAM lParam) {
 
 	UINT8	data;
+	BOOL	shiftfallback;
 	
 	np2_multithread_EnterCriticalSection();
 	if (wParam == VK_SHIFT) {
@@ -202,7 +235,14 @@ void winkbd_keyup(WPARAM wParam, LPARAM lParam) {
 	}
 
 	data = key106[wParam & 0xff];
+	shiftfallback = FALSE;
+	if (data == NC) {
+		data = winkbd_scancode_fallback(wParam, lParam, &shiftfallback);
+	}
 	if (data != NC) {
+		if (shiftfallback) {
+			keystat_senddata(0x70 | 0x80);
+		}
 		if ((data == 0x73) &&
 				(np2oscfg.KEYBOARD == KEY_KEY101) &&
 				(lParam & 0x01000000)) {
@@ -223,12 +263,6 @@ void winkbd_keyup(WPARAM wParam, LPARAM lParam) {
 		else
 		{
 			keystat_senddata((UINT8)(data | 0x80));
-		}
-	}
-	else {												// ver0.28
-		if ((np2oscfg.KEYBOARD != KEY_PC98) && (wParam == 0x0c)) {
-			keystat_senddata(0x70 | 0x80);				// PC/AT only
-			keystat_senddata(0x47 | 0x80);
 		}
 	}
 	np2_multithread_LeaveCriticalSection();

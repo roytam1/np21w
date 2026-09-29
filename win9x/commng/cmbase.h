@@ -64,6 +64,12 @@ protected:
 	virtual UINT8 GetStat() = 0;
 
 	/**
+	 * ステータスを得る
+	 * @return ステータス
+	 */
+	virtual UINT8 IsImm() = 0;
+
+	/**
 	 * メッセージ
 	 * @param[in] nMessage メッセージ
 	 * @param[in] nParam パラメタ
@@ -79,6 +85,7 @@ private:
 	static void cEndBlockTransfer(COMMNG cm);
 	static UINT cLastWriteSuccess(COMMNG cm);
 	static UINT8 cGetStat(COMMNG cm);
+	static UINT8 cIsImm(COMMNG cm);
 	static INTPTR cMessage(COMMNG cm, UINT nMessage, INTPTR nParam);
 	static void cRelease(COMMNG cm);
 };

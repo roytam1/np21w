@@ -48,7 +48,7 @@ REG8 SOUNDCALL adpcm_readsample(ADPCM ad) {
 		}
 		data = data32 & 0xff;
 	}
-	else if (!(ad->reg.ctrl2 & 2)) {
+	else if ((ad->reg.ctrl1 & 0x60) == 0x20) {
 		pos = ad->pos & 0x1fffff;
 		if (!(ad->reg.ctrl2 & 2)) {
 			data = ad->buf[pos >> 3];

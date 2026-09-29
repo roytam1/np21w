@@ -3112,7 +3112,7 @@ static UINT32 npdisp_d3d_renderPrimitive(UINT32 lpDataAddr)
 		TRACEOUTD3D(("NPDISP11 D3D_RP_REJECT stage=instruction op=%u stride=%u count=%u", opcode, stride, count));
 		return NPDISP_DDHAL_DRIVER_NOTHANDLED;
 	}
-	// ZVISIBLE queryã¯æç”»ã›ãšã€æœªå®Ÿè£…æ™‚ã¯å¯è¦–ã¨ã—ã¦å‡¦ç†ã™ã‚‹ã€‚
+	// ZVISIBLE query‚Í•`‰æ‚¹‚¸A–¢ŽÀ‘•Žž‚Í‰ÂŽ‹‚Æ‚µ‚Äˆ—‚·‚éB
 	if (context->renderStates[NPDISP_D3DRENDERSTATE_ZVISIBLE]) {
 		data.dwStatus &= ~NPDISP_D3DSTATUS_ZNOTVISIBLE;
 		data.ddrval = 0;

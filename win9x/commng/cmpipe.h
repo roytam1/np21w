@@ -25,6 +25,7 @@ protected:
 	virtual UINT WriteRetry(); // 書き込み損なっていたら再書き込みする
 	virtual UINT LastWriteSuccess(); // 最後の書き込みが成功しているかチェック
 	virtual UINT8 GetStat();
+	virtual UINT8 IsImm();
 	virtual INTPTR Message(UINT nMessage, INTPTR nParam);
 
 private:

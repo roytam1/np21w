@@ -1152,7 +1152,7 @@ static void npdisp_dd_writeRgbPixel(UINT8* p, UINT32 bytesPerPixel, UINT8 r, UIN
 	}
 }
 
-void npdisp_dd_compositeOverlay(UINT8* dest, UINT32 destStride, int left, int top, int right, int bottom)
+bool npdisp_dd_compositeOverlay(UINT8* dest, UINT32 destStride, const UINT8* primary, UINT32 primaryStride, int left, int top, int right, int bottom)
 {
 	const UINT32 bytesPerPixel = npdisp_ddraw_bytesPerPixel();
 	const bool yuy2 = npdisp.mm_ddOverlayFourCC == NPDISP_DD_FOURCC_YUY2;
@@ -1160,33 +1160,37 @@ void npdisp_dd_compositeOverlay(UINT8* dest, UINT32 destStride, int left, int to
 	const bool srcKey = (npdisp.mm_ddOverlayFlags & (NPDISP_DDOVER_KEYSRC | NPDISP_DDOVER_KEYSRCOVERRIDE)) != 0;
 	const bool mirrorX = (npdisp.mm_ddOverlayDDFX & NPDISP_DDOVERFX_MIRRORLEFTRIGHT) != 0;
 	const bool mirrorY = (npdisp.mm_ddOverlayDDFX & NPDISP_DDOVERFX_MIRRORUPDOWN) != 0;
-	SINT32 dl = npdisp.mm_ddOverlayDstLeft;
-	SINT32 dt = npdisp.mm_ddOverlayDstTop;
-	SINT32 dr = npdisp.mm_ddOverlayDstRight;
-	SINT32 db = npdisp.mm_ddOverlayDstBottom;
+	const SINT32 overlayLeft = npdisp.mm_ddOverlayDstLeft;
+	const SINT32 overlayTop = npdisp.mm_ddOverlayDstTop;
+	const SINT32 overlayRight = npdisp.mm_ddOverlayDstRight;
+	const SINT32 overlayBottom = npdisp.mm_ddOverlayDstBottom;
 	const SINT32 sw = npdisp.mm_ddOverlaySrcRight - npdisp.mm_ddOverlaySrcLeft;
 	const SINT32 sh = npdisp.mm_ddOverlaySrcBottom - npdisp.mm_ddOverlaySrcTop;
-	const SINT32 dw = dr - dl;
-	const SINT32 dh = db - dt;
-	UINT8* srcBase;
+	const SINT32 dw = overlayRight - overlayLeft;
+	const SINT32 dh = overlayBottom - overlayTop;
+	SINT32 dl = left > overlayLeft ? left : overlayLeft;
+	SINT32 dt = top > overlayTop ? top : overlayTop;
+	SINT32 dr = right < overlayRight ? right : overlayRight;
+	SINT32 db = bottom < overlayBottom ? bottom : overlayBottom;
+	const UINT8* srcBase;
 	UINT32 xStep, xRemStep, yStep, yRemStep;
 	UINT32 xBase, xRemBase, yBase, yRemBase;
 	UINT32 ddOverlayDestKeyHigh = npdisp.mm_ddOverlayDestKeyHigh;
+	const UINT32 copyOffset = (UINT32)left * bytesPerPixel;
+	const UINT32 copyBytes = (UINT32)(right - left) * bytesPerPixel;
 
-	if (!dest || !bytesPerPixel || !npdisp_dd_overlayVisible() || sw <= 0 || sh <= 0 || dw <= 0 || dh <= 0) return;
-	if (yuy2 && npdisp.bpp < 15) return;
-	if (left > dl) dl = left;
-	if (top > dt) dt = top;
-	if (right < dr) dr = right;
-	if (bottom < db) db = bottom;
-	if (dl < 0) dl = 0;
-	if (dt < 0) dt = 0;
-	if (dr > (SINT32)npdisp.width) dr = (SINT32)npdisp.width;
-	if (db > (SINT32)npdisp.height) db = (SINT32)npdisp.height;
-	if (dl >= dr || dt >= db) return;
+	if (!dest || !primary || !bytesPerPixel || !npdisp_dd_overlayVisible() || sw <= 0 || sh <= 0 || dw <= 0 || dh <= 0 ||
+		left < 0 || top < 0 || right > (SINT32)npdisp.width || bottom > (SINT32)npdisp.height || left >= right || top >= bottom) return false;
+	if (yuy2 && npdisp.bpp < 15) return false;
+	if (dl >= dr || dt >= db) {
+		for (SINT32 y = top; y < bottom; ++y) {
+			memcpy(dest + (UINT32)y * destStride + copyOffset, primary + (UINT32)y * primaryStride + copyOffset, copyBytes);
+		}
+		return true;
+	}
 	srcBase = npdisp.mm_ddOffscreenPtr + (npdisp.mm_ddOverlayOffset - NPDISP_DD_OFFSCREEN_OFFSET);
 
-	// WORKAROUND: 色変換規則のずれを吸収する ただし真っ白は作らない
+	// 色変換規則のずれを吸収する。ただし真っ白は作らない。
 	if (npdisp.bpp == 16) {
 		UINT32 b = ddOverlayDestKeyHigh & 0x1f;
 		UINT32 g = (ddOverlayDestKeyHigh >> 5) & 0x3f;
@@ -1206,14 +1210,22 @@ void npdisp_dd_compositeOverlay(UINT8* dest, UINT32 destStride, int left, int to
 		ddOverlayDestKeyHigh = b | (g << 5) | (r << 10);
 	}
 
-	// Preserve floor((position * sourceSize) / destinationSize) without per-pixel division.
+	// Overlay外はPrimaryを最終出力として直接書く。
+	for (SINT32 y = top; y < dt; ++y) {
+		memcpy(dest + (UINT32)y * destStride + copyOffset, primary + (UINT32)y * primaryStride + copyOffset, copyBytes);
+	}
+	for (SINT32 y = db; y < bottom; ++y) {
+		memcpy(dest + (UINT32)y * destStride + copyOffset, primary + (UINT32)y * primaryStride + copyOffset, copyBytes);
+	}
+
+	// floor((position * sourceSize) / destinationSize)を除算なしで維持する。
 	xStep = (UINT32)(sw / dw);
 	xRemStep = (UINT32)(sw % dw);
 	yStep = (UINT32)(sh / dh);
 	yRemStep = (UINT32)(sh % dh);
 	{
-		const UINT64 xStart = (UINT64)(UINT32)(dl - npdisp.mm_ddOverlayDstLeft) * (UINT32)sw;
-		const UINT64 yStart = (UINT64)(UINT32)(dt - npdisp.mm_ddOverlayDstTop) * (UINT32)sh;
+		const UINT64 xStart = (UINT64)(UINT32)(dl - overlayLeft) * (UINT32)sw;
+		const UINT64 yStart = (UINT64)(UINT32)(dt - overlayTop) * (UINT32)sh;
 		xBase = (UINT32)(xStart / (UINT32)dw);
 		xRemBase = (UINT32)(xStart % (UINT32)dw);
 		yBase = (UINT32)(yStart / (UINT32)dh);
@@ -1223,16 +1235,20 @@ void npdisp_dd_compositeOverlay(UINT8* dest, UINT32 destStride, int left, int to
 	for (SINT32 y = dt; y < db; ++y) {
 		const SINT32 sy = npdisp.mm_ddOverlaySrcTop + (mirrorY ? sh - 1 - (SINT32)yBase : (SINT32)yBase);
 		UINT8* drow = dest + (UINT32)y * destStride;
+		const UINT8* prow = primary + (UINT32)y * primaryStride;
 		const UINT8* srow = srcBase + (UINT32)sy * (UINT32)npdisp.mm_ddOverlayPitch;
 		UINT32 xBaseLine = xBase;
 		UINT32 xRem = xRemBase;
+
+		if (left < dl) memcpy(drow + (UINT32)left * bytesPerPixel, prow + (UINT32)left * bytesPerPixel, (UINT32)(dl - left) * bytesPerPixel);
 		for (SINT32 x = dl; x < dr; ++x) {
 			const SINT32 sx = npdisp.mm_ddOverlaySrcLeft + (mirrorX ? sw - 1 - (SINT32)xBaseLine : (SINT32)xBaseLine);
 			UINT8* dp = drow + (UINT32)x * bytesPerPixel;
+			const UINT8* pp = prow + (UINT32)x * bytesPerPixel;
 			bool drawPixel = true;
 
 			if (destKey) {
-				const UINT32 dv = npdisp_dd_overlayReadPixel(dp, bytesPerPixel);
+				const UINT32 dv = npdisp_dd_overlayReadPixel(pp, bytesPerPixel);
 				drawPixel = dv >= npdisp.mm_ddOverlayDestKeyLow && dv <= ddOverlayDestKeyHigh;
 			}
 			if (drawPixel) {
@@ -1244,15 +1260,15 @@ void npdisp_dd_compositeOverlay(UINT8* dest, UINT32 destStride, int left, int to
 				}
 				else {
 					const UINT8* sp = srow + (UINT32)sx * bytesPerPixel;
-					if (!srcKey) {
-						memcpy(dp, sp, bytesPerPixel);
-					}
+					if (!srcKey) memcpy(dp, sp, bytesPerPixel);
 					else {
 						const UINT32 sv = npdisp_dd_overlayReadPixel(sp, bytesPerPixel);
 						if (sv < npdisp.mm_ddOverlaySrcKeyLow || sv > npdisp.mm_ddOverlaySrcKeyHigh) memcpy(dp, sp, bytesPerPixel);
+						else memcpy(dp, pp, bytesPerPixel);
 					}
 				}
 			}
+			else memcpy(dp, pp, bytesPerPixel);
 
 			xBaseLine += xStep;
 			xRem += xRemStep;
@@ -1261,6 +1277,8 @@ void npdisp_dd_compositeOverlay(UINT8* dest, UINT32 destStride, int left, int to
 				xBaseLine++;
 			}
 		}
+		if (dr < right) memcpy(drow + (UINT32)dr * bytesPerPixel, prow + (UINT32)dr * bytesPerPixel, (UINT32)(right - dr) * bytesPerPixel);
+
 		yBase += yStep;
 		yRemBase += yRemStep;
 		if (yRemBase >= (UINT32)dh) {
@@ -1268,6 +1286,7 @@ void npdisp_dd_compositeOverlay(UINT8* dest, UINT32 destStride, int left, int to
 			yBase++;
 		}
 	}
+	return true;
 }
 
 static void npdisp_ddraw_commitPendingFlip(void)

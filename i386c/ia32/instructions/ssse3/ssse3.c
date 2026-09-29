@@ -46,15 +46,15 @@
 
 static INLINE void
 SSSE3_check_NM_EXCEPTION(){
-	// SSSE3 Ȃ  Ȃ UD(     I y R [ h  O) 𔭐       
+	// SSSE3 ?  ? UD(     I y R [ h  O) ??       
 	if(!(i386cpuid.cpu_feature_ecx & CPU_FEATURE_ECX_SSSE3)){
 		EXCEPTION(UD_EXCEPTION, 0);
 	}
-	//  G ~     [ V     Ȃ UD(     I y R [ h  O) 𔭐       
+	//  G ~     [ V     ? UD(     I y R [ h  O) ??       
 	if(CPU_CR0 & CPU_CR0_EM){
 		EXCEPTION(UD_EXCEPTION, 0);
 	}
-	//  ^ X N X C b `    NM( f o C X g p s  O) 𔭐       
+	//  ^ X N X C b `    NM( f o C X g p s ? O) ??       
 	if (CPU_CR0 & CPU_CR0_TS) {
 		EXCEPTION(NM_EXCEPTION, 0);
 	}
@@ -65,7 +65,7 @@ SSSE3_setTag(void)
 {
 }
 
-// mmx.c ̂ ̂Ɠ   
+// mmx.c ? ??   
 static INLINE void
 MMX_setTag(void)
 {
@@ -91,7 +91,7 @@ MMX_setTag(void)
  * SSE3 interface
  */
 
-//  R [ h       Ȃ ̂ł ⋭   ɋ  ʉ 
+//  R [ h       ? ?? ?   ?  ? 
 // xmm/m128 -> xmm
 static INLINE void SSE_PART_GETDATA1DATA2_PD(double **data1, double **data2, double *data2buf){
 	UINT32 op;

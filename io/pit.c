@@ -18,6 +18,14 @@ extern	COMMNG	cm_rs232c;
 #define	uPD71054
 #endif
 
+// 0のときカウンタを動かしたままにする（PC-9801準拠）
+// 1のときBEEPが鳴っていないときカウンタを止める（PC-9821以降の省電力？仕様）
+#ifndef PIT1_GATE_PC9821
+#define PIT1_GATE_PC9821 0
+#endif
+
+#define	PIT1_GATE_PC9821_ACTIVE()	(!PIT1_GATE_PC9821 || !(sysport.c & 0x08))
+
 
 // --- Interval timer
 
@@ -95,7 +103,7 @@ void beeponeshot(NEVENTITEM item) {
 			beep_lheventset(0);
 		}
 #if defined(uPD71054)
-		if ((pitch->ctrl & 0x06) == 0x02)
+		if (PIT1_GATE_PC9821_ACTIVE() ? (pitch->ctrl & 0x02) : ((pitch->ctrl & 0x06) == 0x02))
 #else
 		if (pitch->ctrl & 0x02)
 #endif
@@ -181,9 +189,12 @@ static UINT getcount(const _PITCH *pitch) {
 #endif
 				case 0x04:
 					return(pitch->value);
-#ifdef uPD71054
+#if defined(uPD71054)
 				case 0x06:
-					return(pitch->value & (~1));
+					if (!PIT1_GATE_PC9821_ACTIVE()) {
+						return(pitch->value & (~1));
+					}
+					break;
 #endif
 			}
 			clk = nevent_getremain(NEVENT_BEEP);

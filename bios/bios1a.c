@@ -26,17 +26,17 @@ void bios0x1a_cmt(void) {
 
 static void printerbios_11(void) {
 
-	if (iocore_inp8(0x42) & 0x04) {				// busy?
+	//if (iocore_inp8(0x42) & 0x04) {				// busy Å® XXX: ñ≥éã ver0.86 rev105
 		CPU_AH = 0x01;
 		iocore_out8(0x40, CPU_AL);
-#if 0
+
+		// strobe
 		iocore_out8(0x46, 0x0e);
 		iocore_out8(0x46, 0x0f);
-#endif
-	}
-	else {
-		CPU_AH = 0x02;
-	}
+	//}
+	//else {
+	//	CPU_AH = 0x02;
+	//}
 }
 
 void bios0x1a_prt(void) {

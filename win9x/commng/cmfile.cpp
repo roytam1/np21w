@@ -292,6 +292,14 @@ UINT8 CComFile::GetStat()
 }
 
 /**
+ * STROBEなしで即時書き込み？
+ */
+UINT8 CComFile::IsImm()
+{
+    return 0;
+}
+
+/**
  * メッセージ
  * @param[in] nMessage メッセージ
  * @param[in] nParam パラメタ

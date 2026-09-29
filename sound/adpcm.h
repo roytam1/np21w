@@ -57,25 +57,48 @@ typedef struct {
 	UINT8		fifo[2];
 	UINT8		cpustream;
 	UINT8		cpufifolow;
-	union {
-		UINT8		buf[0x40000];
-		struct {
-			// ステートセーブ互換のために非CPU経路のバッファを流用…
-			UINT8		dummy[0x20000];
-			UINT8		cpufifocur;
-			UINT8		padding[3];
-			UINT32		cpufiford;
-			UINT32		cpufifowr;
-			UINT32		cpufifocount;
-			UINT8		cpufifo[ADPCM_CPUFIFO_SIZE];
-		} cfifo;
-	};
+	UINT8		buf[0x40000];
+	struct {
+		UINT8		cpufifocur;
+		UINT8		padding[3];
+		UINT32		cpufiford;
+		UINT32		cpufifowr;
+		UINT32		cpufifocount;
+		UINT8		cpufifo[ADPCM_CPUFIFO_SIZE];
+	} cfifo;
 } _ADPCM, *ADPCM;
 
 typedef struct {
 	UINT	rate;
 	UINT	vol;
 } ADPCMCFG;
+
+// ステートセーブ互換用　cpufifoが消えるのは諦める
+typedef struct {
+	ADPCMREG	reg;
+	UINT32		pos;
+	UINT32		start;
+	UINT32		stop;
+	UINT32		limit;
+	SINT32		level;
+	UINT32		base;
+	SINT32		samp;
+	SINT32		delta;
+	SINT32		remain;
+	SINT32		step;
+	SINT32		out0;
+	SINT32		out1;
+	SINT32		fb;
+	SINT32		pertim;
+	UINT8		status;
+	UINT8		play;
+	UINT8		mask;
+	UINT8		fifopos;
+	UINT8		fifo[2];
+	UINT8		cpustream;
+	UINT8		cpufifolow;
+	UINT8		buf[0x40000];
+} _ADPCM_OLD, * ADPCM_OLD;
 
 
 #ifdef __cplusplus

@@ -47,15 +47,15 @@
 
 static INLINE void
 SSE4_1_check_NM_EXCEPTION(){
-	// SSE4.1 È‚  È‚ UD(     I y R [ h  O) ğ”­       
+	// SSE4.1 ?  ? UD(     I y R [ h  O) ??       
 	if(!(i386cpuid.cpu_feature_ecx & CPU_FEATURE_ECX_SSE4_1)){
 		EXCEPTION(UD_EXCEPTION, 0);
 	}
-	//  G ~     [ V     È‚ UD(     I y R [ h  O) ğ”­       
+	//  G ~     [ V     ? UD(     I y R [ h  O) ??       
 	if(CPU_CR0 & CPU_CR0_EM){
 		EXCEPTION(UD_EXCEPTION, 0);
 	}
-	//  ^ X N X C b `    NM( f o C X g p s Â— O) ğ”­       
+	//  ^ X N X C b `    NM( f o C X g p s ? O) ??       
 	if (CPU_CR0 & CPU_CR0_TS) {
 		EXCEPTION(NM_EXCEPTION, 0);
 	}
@@ -66,7 +66,7 @@ SSE4_1_setTag(void)
 {
 }
 
-// mmx.c Ì‚ Ì‚Æ“   
+// mmx.c ? ??   
 static INLINE void
 MMX_setTag(void)
 {
@@ -94,23 +94,23 @@ static INLINE float NEARBYINTF(float val)
 	float floorval;
 	floorval = floorf(val);
 	if (val - floorval > 0.5f){
-		return (floorval + 1); // åˆ‡ã‚Šä¸Šã’
+		return (floorval + 1); // Ø‚èã‚°
 	}else if (val - floorval < 0.5f){
-		return (floorval); // åˆ‡ã‚Šæ¨ã¦
+		return (floorval); // Ø‚èÌ‚Ä
 	}else{
 		if(floor(floorval / 2) == floorval/2){
-			return (floorval); // å¶æ•°
+			return (floorval); // ‹ô”
 		}else{
-			return (floorval+1); // å¥‡æ•°
+			return (floorval+1); // Šï”
 		}
 	}
 }
 static INLINE float TRUNCF(float val)
 {
 	if(val < 0){
-		return ceilf(val); // ã‚¼ãƒ­æ–¹å‘ã¸ã®åˆ‡ã‚Šæ¨ã¦
+		return ceilf(val); // ƒ[ƒ•ûŒü‚Ö‚ÌØ‚èÌ‚Ä
 	}else{
-		return floorf(val); // ã‚¼ãƒ­æ–¹å‘ã¸ã®åˆ‡ã‚Šæ¨ã¦
+		return floorf(val); // ƒ[ƒ•ûŒü‚Ö‚ÌØ‚èÌ‚Ä
 	}
 }
 static INLINE double NEARBYINT(double val)
@@ -118,23 +118,23 @@ static INLINE double NEARBYINT(double val)
 	double floorval;
 	floorval = floor(val);
 	if (val - floorval > 0.5f){
-		return (floorval + 1); // åˆ‡ã‚Šä¸Šã’
+		return (floorval + 1); // Ø‚èã‚°
 	}else if (val - floorval < 0.5f){
-		return (floorval); // åˆ‡ã‚Šæ¨ã¦
+		return (floorval); // Ø‚èÌ‚Ä
 	}else{
 		if(floor(floorval / 2) == floorval/2){
-			return (floorval); // å¶æ•°
+			return (floorval); // ‹ô”
 		}else{
-			return (floorval+1); // å¥‡æ•°
+			return (floorval+1); // Šï”
 		}
 	}
 }
 static INLINE double TRUNC(double val)
 {
 	if(val < 0){
-		return ceil(val); // ã‚¼ãƒ­æ–¹å‘ã¸ã®åˆ‡ã‚Šæ¨ã¦
+		return ceil(val); // ƒ[ƒ•ûŒü‚Ö‚ÌØ‚èÌ‚Ä
 	}else{
-		return floor(val); // ã‚¼ãƒ­æ–¹å‘ã¸ã®åˆ‡ã‚Šæ¨ã¦
+		return floor(val); // ƒ[ƒ•ûŒü‚Ö‚ÌØ‚èÌ‚Ä
 	}
 }
 
@@ -142,7 +142,7 @@ static INLINE double TRUNC(double val)
  * SSE3 interface
  */
 
-//  R [ h       È‚ Ì‚Å‚ â‹­   É‹  Ê‰ 
+//  R [ h       ? ?? ?   ?  ? 
 // xmm/m128 -> xmm
 static INLINE void SSE_PART_GETDATA1DATA2_PD(double **data1, double **data2, double *data2buf){
 	UINT32 op;

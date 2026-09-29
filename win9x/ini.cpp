@@ -761,7 +761,7 @@ static const PFTBL s_IniItems[] =
 	PFSTR("smpuBdef", PFTYPE_STR,		np2oscfg.smpuB.def),
 #endif
 
-	PFMAX("com1port", PFTYPE_UINT8,		&np2oscfg.com1.port,	5),
+	PFMAX("com1port", PFTYPE_UINT8,		&np2oscfg.com1.port,	13),
 	PFVAL("com1para", PFTYPE_UINT8,		&np2oscfg.com1.param),
 	PFVAL("com1_bps", PFTYPE_UINT32,	&np2oscfg.com1.speed),
 	PFVAL("com1fbps", PFTYPE_BOOL,		&np2oscfg.com1.fixedspeed),
@@ -785,7 +785,7 @@ static const PFTBL s_IniItems[] =
 	PFVAL("com1spoy", PFTYPE_UINT32,	&np2oscfg.com1.spoolOffsetYmm),
 	PFVAL("com1spsc", PFTYPE_UINT32,	&np2oscfg.com1.spoolScale),
 
-	PFMAX("com2port", PFTYPE_UINT8,		&np2oscfg.com2.port,	5),
+	PFMAX("com2port", PFTYPE_UINT8,		&np2oscfg.com2.port,	13),
 	PFVAL("com2para", PFTYPE_UINT8,		&np2oscfg.com2.param),
 	PFVAL("com2_bps", PFTYPE_UINT32,	&np2oscfg.com2.speed),
 	PFVAL("com2fbps", PFTYPE_BOOL,		&np2oscfg.com2.fixedspeed),
@@ -809,7 +809,7 @@ static const PFTBL s_IniItems[] =
 	PFVAL("com2spoy", PFTYPE_UINT32,	&np2oscfg.com2.spoolOffsetYmm),
 	PFVAL("com2spsc", PFTYPE_UINT32,	&np2oscfg.com2.spoolScale),
 
-	PFMAX("com3port", PFTYPE_UINT8,		&np2oscfg.com3.port,	5),
+	PFMAX("com3port", PFTYPE_UINT8,		&np2oscfg.com3.port,	13),
 	PFVAL("com3para", PFTYPE_UINT8,		&np2oscfg.com3.param),
 	PFVAL("com3_bps", PFTYPE_UINT32,	&np2oscfg.com3.speed),
 	PFVAL("com3fbps", PFTYPE_BOOL,		&np2oscfg.com3.fixedspeed),
@@ -833,7 +833,7 @@ static const PFTBL s_IniItems[] =
 	PFVAL("com3spoy", PFTYPE_UINT32,	&np2oscfg.com3.spoolOffsetYmm),
 	PFVAL("com3spsc", PFTYPE_UINT32,	&np2oscfg.com3.spoolScale),
 
-	PFMAX("lpt1port", PFTYPE_UINT8,		&np2oscfg.lpt1.port,	5),
+	PFMAX("lpt1port", PFTYPE_UINT8,		&np2oscfg.lpt1.port,	13),
 	PFVAL("lpt1para", PFTYPE_UINT8,		&np2oscfg.lpt1.param),
 	PFVAL("lpt1_bps", PFTYPE_UINT32,	&np2oscfg.lpt1.speed),
 	PFVAL("lpt1fbps", PFTYPE_BOOL,		&np2oscfg.lpt1.fixedspeed),

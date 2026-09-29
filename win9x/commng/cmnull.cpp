@@ -52,6 +52,14 @@ UINT8 CComNull::GetStat()
 }
 
 /**
+ * STROBEなしで即時書き込み？
+ */
+UINT8 CComNull::IsImm()
+{
+	return 0;
+}
+
+/**
  * メッセージ
  * @param[in] nMessage メッセージ
  * @param[in] nParam パラメタ

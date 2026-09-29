@@ -17,6 +17,10 @@
       <Configuration>ReleaseHAXM</Configuration>
       <Platform>x64</Platform>
     </ProjectConfiguration>
+    <ProjectConfiguration Include="ReleaseWHPX|x64">
+      <Configuration>ReleaseWHPX</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
     <ProjectConfiguration Include="Release|Win32">
       <Configuration>Release</Configuration>
       <Platform>Win32</Platform>
@@ -74,6 +78,13 @@
     <CharacterSet>Unicode</CharacterSet>
     <PlatformToolset>v142</PlatformToolset>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseWHPX|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+    <PlatformToolset>v142</PlatformToolset>
+  </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <ImportGroup Label="ExtensionSettings">
     <Import Project="x86\vs2010\x86.props" />
@@ -95,6 +106,9 @@
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
   <ImportGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseHAXM|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseWHPX|x64'" Label="PropertySheets">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
@@ -145,6 +159,15 @@
     <LibraryPath>C:\Program Files (x86)\Microsoft DirectX SDK (June 2010)\Lib\x64;$(LibraryPath)</LibraryPath>
     <TargetName>np21x64w</TargetName>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseWHPX|x64'">
+    <OutDir>..\bin\$(SolutionName)\$(PlatformName)\$(Configuration)\</OutDir>
+    <IntDir>..\obj\$(SolutionName)\$(PlatformName)\$(Configuration)\$(ProjectName)\</IntDir>
+    <IncludePath>C:\VST3_SDK;H:\WinDDK\7600.16385.1\inc;$(IncludePath)</IncludePath>
+    <LinkIncremental>false</LinkIncremental>
+    <CodeAnalysisRuleSet>AllRules.ruleset</CodeAnalysisRuleSet>
+    <LibraryPath>C:\Program Files (x86)\Microsoft DirectX SDK (June 2010)\Lib\x64;$(LibraryPath)</LibraryPath>
+    <TargetName>np21x64w</TargetName>
+  </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
       <PrecompiledHeader>
@@ -159,6 +182,8 @@
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <FloatingPointModel>Fast</FloatingPointModel>
       <FloatingPointExceptions>false</FloatingPointExceptions>
+      <UndefinePreprocessorDefinitions>SUPPORT_NPDISP_W2K</UndefinePreprocessorDefinitions>
+      <UndefinePreprocessorDefinitions>SUPPORT_NPDISP_W2K</UndefinePreprocessorDefinitions>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -187,6 +212,7 @@
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <FloatingPointModel>Fast</FloatingPointModel>
       <FloatingPointExceptions>false</FloatingPointExceptions>
+      <UndefinePreprocessorDefinitions>SUPPORT_NPDISP_W2K</UndefinePreprocessorDefinitions>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -214,7 +240,7 @@
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <PreprocessorDefinitions>WIN32;NDEBUG;_WINDOWS;_CRT_SECURE_NO_WARNINGS;SUPPORT_PC9821;SUPPORT_IDEIO;SUPPORT_LARGE_HDD;SUPPORT_LARGE_MEMORY;SUPPORT_NET;SUPPORT_LGY98;SUPPORT_WAB;SUPPORT_CL_GD5430;SUPPORT_WAB_NPDISP;SUPPORT_NPDISP_D3D;SUPPORT_NPDISP_GL;SUPPORT_WAB_GA1280A;SUPPORT_HRTIMER;SUPPORT_VPCVHD;SUPPORT_KAI_IMAGES;SUPPORT_NVL_IMAGES;SUPPORT_PHYSICAL_CDDRV;SUPPORT_FMGEN;SUPPORT_SOUND_SB16;SUPPORT_FPU_DOSBOX2_COMPATIBLE;SUPPORT_FPU_SOFTFLOAT3;SUPPORT_GPIB;SUPPORT_PCI;SUPPORT_SCRN_DIRECT3D;SUPPORT_FAST_MEMORYCHECK;SUPPORT_PEGC;SUPPORT_ASYNC_CPU;SUPPORT_SMPU98;SUPPORT_WACOM_TABLET;SUPPORT_RS232C_FIFO;SUPPORT_NAMED_PIPE;SUPPORT_VGA_MODEX;SUPPORT_GAMEPORT;SUPPORT_IDEIO_48BIT;SUPPORT_MULTITHREAD;SUPPORT_TEXTHOOK;SUPPORT_HOSTDRVNT;SUPPORT_HOSTDRV9X;SUPPORT_NP2SCSI;HOOK_SYSKEY;ALLOW_MULTIRUN;USE_FPU;USE_MMX;USE_3DNOW;USE_SSE;USE_SSE2;USE_SSE3;USE_SSSE3;USE_SSE4_1;USE_SSE4_2;USE_SSE4A;USE_TSC;USE_MAME;USE_MAME_BSD;USE_FASTPAGING;USE_VME;USE_CPU_PLATFORMINT;USE_CPU_INLINEINST;USE_CPU_DIRECTREG;USE_CPU_EIPMASK;BIOS_IO_EMULATION;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_WINDOWS;_CRT_SECURE_NO_WARNINGS;SUPPORT_PC9821;SUPPORT_IDEIO;SUPPORT_LARGE_HDD;SUPPORT_LARGE_MEMORY;SUPPORT_NET;SUPPORT_LGY98;SUPPORT_WAB;SUPPORT_CL_GD5430;SUPPORT_WAB_NPDISP;SUPPORT_NPDISP_W2K;SUPPORT_NPDISP_D3D;SUPPORT_NPDISP_GL;SUPPORT_WAB_GA1280A;SUPPORT_HRTIMER;SUPPORT_VPCVHD;SUPPORT_KAI_IMAGES;SUPPORT_NVL_IMAGES;SUPPORT_PHYSICAL_CDDRV;SUPPORT_FMGEN;SUPPORT_SOUND_SB16;SUPPORT_FPU_DOSBOX2_COMPATIBLE;SUPPORT_FPU_SOFTFLOAT3;SUPPORT_GPIB;SUPPORT_PCI;SUPPORT_SCRN_DIRECT3D;SUPPORT_FAST_MEMORYCHECK;SUPPORT_PEGC;SUPPORT_ASYNC_CPU;SUPPORT_SMPU98;SUPPORT_WACOM_TABLET;SUPPORT_RS232C_FIFO;SUPPORT_NAMED_PIPE;SUPPORT_VGA_MODEX;SUPPORT_GAMEPORT;SUPPORT_IDEIO_48BIT;SUPPORT_MULTITHREAD;SUPPORT_TEXTHOOK;SUPPORT_HOSTDRVNT;SUPPORT_HOSTDRV9X;SUPPORT_NP2SCSI;HOOK_SYSKEY;ALLOW_MULTIRUN;USE_FPU;USE_MMX;USE_3DNOW;USE_SSE;USE_SSE2;USE_SSE3;USE_SSSE3;USE_SSE4_1;USE_SSE4_2;USE_SSE4A;USE_TSC;USE_MAME;USE_MAME_BSD;USE_FASTPAGING;USE_VME;USE_CPU_PLATFORMINT;USE_CPU_INLINEINST;USE_CPU_DIRECTREG;USE_CPU_EIPMASK;BIOS_IO_EMULATION;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>.\;.\x86;..\;..\common;..\i386c;..\mem;..\io;..\cbus;..\vram;..\sound;..\generic;..\zlib</AdditionalIncludeDirectories>
       <DisableSpecificWarnings>4819</DisableSpecificWarnings>
       <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
@@ -224,6 +250,7 @@
       <FloatingPointExceptions>false</FloatingPointExceptions>
       <WarningLevel>Level3</WarningLevel>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <UndefinePreprocessorDefinitions>SUPPORT_NPDISP_W2K</UndefinePreprocessorDefinitions>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -250,7 +277,7 @@
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <PreprocessorDefinitions>WIN32;NDEBUG;_WINDOWS;_CRT_SECURE_NO_WARNINGS;SUPPORT_PC9821;SUPPORT_IDEIO;SUPPORT_LARGE_HDD;SUPPORT_LARGE_MEMORY;SUPPORT_NET;SUPPORT_LGY98;SUPPORT_WAB;SUPPORT_NPDISP_D3D;SUPPORT_NPDISP_GL;SUPPORT_CL_GD5430;SUPPORT_HRTIMER;SUPPORT_VPCVHD;SUPPORT_KAI_IMAGES;SUPPORT_NVL_IMAGES;SUPPORT_PHYSICAL_CDDRV;SUPPORT_FMGEN;SUPPORT_SOUND_SB16;SUPPORT_FPU_DOSBOX2_COMPATIBLE;SUPPORT_FPU_SOFTFLOAT3;SUPPORT_GPIB;SUPPORT_PCI;SUPPORT_SCRN_DIRECT3D;SUPPORT_FAST_MEMORYCHECK;SUPPORT_PEGC;SUPPORT_ASYNC_CPU;SUPPORT_SMPU98;SUPPORT_WACOM_TABLET;SUPPORT_RS232C_FIFO;SUPPORT_NAMED_PIPE;SUPPORT_VGA_MODEX;SUPPORT_GAMEPORT;SUPPORT_IDEIO_48BIT;SUPPORT_MULTITHREAD;SUPPORT_TEXTHOOK;SUPPORT_HOSTDRVNT;SUPPORT_NP2SCSI;SUPPORT_IA32_HAXM;HOOK_SYSKEY;ALLOW_MULTIRUN;USE_FPU;USE_MMX;USE_3DNOW;USE_SSE;USE_SSE2;USE_SSE3;USE_SSSE3;USE_SSE4_1;USE_SSE4_2;USE_SSE4A;USE_TSC;USE_MAME;USE_MAME_BSD;USE_FASTPAGING;USE_VME;BIOS_IO_EMULATION;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_WINDOWS;_CRT_SECURE_NO_WARNINGS;SUPPORT_PC9821;SUPPORT_IDEIO;SUPPORT_LARGE_HDD;SUPPORT_LARGE_MEMORY;SUPPORT_NET;SUPPORT_LGY98;SUPPORT_WAB;SUPPORT_WAB_NPDISP;SUPPORT_NPDISP_W2K;SUPPORT_NPDISP_D3D;SUPPORT_NPDISP_GL;SUPPORT_CL_GD5430;SUPPORT_HRTIMER;SUPPORT_VPCVHD;SUPPORT_KAI_IMAGES;SUPPORT_NVL_IMAGES;SUPPORT_PHYSICAL_CDDRV;SUPPORT_FMGEN;SUPPORT_SOUND_SB16;SUPPORT_FPU_DOSBOX2_COMPATIBLE;SUPPORT_FPU_SOFTFLOAT3;SUPPORT_GPIB;SUPPORT_PCI;SUPPORT_SCRN_DIRECT3D;SUPPORT_FAST_MEMORYCHECK;SUPPORT_PEGC;SUPPORT_SMPU98;SUPPORT_WACOM_TABLET;SUPPORT_RS232C_FIFO;SUPPORT_NAMED_PIPE;SUPPORT_VGA_MODEX;SUPPORT_GAMEPORT;SUPPORT_IDEIO_48BIT;SUPPORT_MULTITHREAD;SUPPORT_TEXTHOOK;SUPPORT_HOSTDRVNT;SUPPORT_NP2SCSI;SUPPORT_IA32_HAXM;HOOK_SYSKEY;ALLOW_MULTIRUN;USE_FPU;USE_MMX;USE_3DNOW;USE_SSE;USE_SSE2;USE_SSE3;USE_SSSE3;USE_SSE4_1;USE_SSE4_2;USE_SSE4A;USE_TSC;USE_MAME;USE_MAME_BSD;USE_FASTPAGING;USE_VME;BIOS_IO_EMULATION;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>.\;.\x86;..\;..\common;..\i386c;..\mem;..\io;..\cbus;..\vram;..\sound;..\generic;..\zlib</AdditionalIncludeDirectories>
       <DisableSpecificWarnings>4819</DisableSpecificWarnings>
       <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
@@ -260,6 +287,7 @@
       <FloatingPointExceptions>false</FloatingPointExceptions>
       <WarningLevel>Level3</WarningLevel>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <UndefinePreprocessorDefinitions>SUPPORT_NPDISP_W2K</UndefinePreprocessorDefinitions>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -273,7 +301,7 @@
       <AdditionalOptions>-I.\x86\ -I..\i386c\x86\ -I..\io\x86\ %(AdditionalOptions)</AdditionalOptions>
     </NASM>
     <ResourceCompile>
-      <PreprocessorDefinitions>_UNICODE;UNICODE;SUPPORT_PC9821;SUPPORT_IDEIO;SUPPORT_LARGE_HDD;SUPPORT_LARGE_MEMORY;SUPPORT_NET;SUPPORT_LGY98;SUPPORT_WAB;SUPPORT_CL_GD5430;SUPPORT_HRTIMER;SUPPORT_VPCVHD;SUPPORT_KAI_IMAGES;SUPPORT_NVL_IMAGES;SUPPORT_PHYSICAL_CDDRV;SUPPORT_FMGEN;SUPPORT_SOUND_SB16;SUPPORT_FPU_DOSBOX2_COMPATIBLE;SUPPORT_FPU_SOFTFLOAT3;SUPPORT_GPIB;SUPPORT_PCI;SUPPORT_SCRN_DIRECT3D;SUPPORT_FAST_MEMORYCHECK;SUPPORT_PEGC;SUPPORT_ASYNC_CPU;SUPPORT_SMPU98;SUPPORT_WACOM_TABLET;SUPPORT_RS232C_FIFO;SUPPORT_NAMED_PIPE;SUPPORT_IA32_HAXM;HOOK_SYSKEY;ALLOW_MULTIRUN;USE_FPU;USE_MMX;USE_3DNOW;USE_SSE;USE_SSE2;USE_SSE3;USE_SSSE3;USE_SSE4_1;USE_SSE4_2;USE_SSE4A;USE_TSC;USE_MAME;USE_MAME_BSD;USE_FASTPAGING;USE_VME;BIOS_IO_EMULATION;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_UNICODE;UNICODE;SUPPORT_PC9821;SUPPORT_IDEIO;SUPPORT_LARGE_HDD;SUPPORT_LARGE_MEMORY;SUPPORT_NET;SUPPORT_LGY98;SUPPORT_WAB;SUPPORT_WAB_NPDISP;SUPPORT_NPDISP_W2K;SUPPORT_CL_GD5430;SUPPORT_HRTIMER;SUPPORT_VPCVHD;SUPPORT_KAI_IMAGES;SUPPORT_NVL_IMAGES;SUPPORT_PHYSICAL_CDDRV;SUPPORT_FMGEN;SUPPORT_SOUND_SB16;SUPPORT_FPU_DOSBOX2_COMPATIBLE;SUPPORT_FPU_SOFTFLOAT3;SUPPORT_GPIB;SUPPORT_PCI;SUPPORT_SCRN_DIRECT3D;SUPPORT_FAST_MEMORYCHECK;SUPPORT_PEGC;SUPPORT_SMPU98;SUPPORT_WACOM_TABLET;SUPPORT_RS232C_FIFO;SUPPORT_NAMED_PIPE;SUPPORT_IA32_HAXM;HOOK_SYSKEY;ALLOW_MULTIRUN;USE_FPU;USE_MMX;USE_3DNOW;USE_SSE;USE_SSE2;USE_SSE3;USE_SSSE3;USE_SSE4_1;USE_SSE4_2;USE_SSE4A;USE_TSC;USE_MAME;USE_MAME_BSD;USE_FASTPAGING;USE_VME;BIOS_IO_EMULATION;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ResourceCompile>
     <Manifest>
       <EnableDpiAwareness>true</EnableDpiAwareness>
@@ -285,7 +313,7 @@
       <PrecompiledHeader>
       </PrecompiledHeader>
       <FunctionLevelLinking>true</FunctionLevelLinking>
-      <PreprocessorDefinitions>WIN32;NDEBUG;_CRTDBG_MAP_ALLOC;_WINDOWS;_CRT_SECURE_NO_WARNINGS;SUPPORT_PC9821;SUPPORT_IDEIO;SUPPORT_LARGE_HDD;SUPPORT_LARGE_MEMORY;SUPPORT_NET;SUPPORT_LGY98;SUPPORT_WAB;SUPPORT_CL_GD5430;SUPPORT_WAB_NPDISP;SUPPORT_NPDISP_D3D;SUPPORT_NPDISP_GL;SUPPORT_WAB_GA1280A;SUPPORT_HRTIMER;SUPPORT_VPCVHD;SUPPORT_KAI_IMAGES;SUPPORT_NVL_IMAGES;SUPPORT_PHYSICAL_CDDRV;SUPPORT_FMGEN;SUPPORT_SOUND_SB16;SUPPORT_FPU_DOSBOX2_COMPATIBLE;SUPPORT_FPU_SOFTFLOAT3;SUPPORT_GPIB;SUPPORT_PCI;SUPPORT_SCRN_DIRECT3D;SUPPORT_FAST_MEMORYCHECK;SUPPORT_PEGC;SUPPORT_ASYNC_CPU;SUPPORT_SMPU98;SUPPORT_WACOM_TABLET;SUPPORT_RS232C_FIFO;SUPPORT_NAMED_PIPE;SUPPORT_VGA_MODEX;SUPPORT_GAMEPORT;SUPPORT_IDEIO_48BIT;SUPPORT_MULTITHREAD;SUPPORT_TEXTHOOK;SUPPORT_HOSTDRVNT;SUPPORT_HOSTDRV9X;SUPPORT_NP2SCSI;HOOK_SYSKEY;ALLOW_MULTIRUN;USE_FPU;USE_MMX;USE_3DNOW;USE_SSE;USE_SSE2;USE_SSE3;USE_SSSE3;USE_SSE4_1;USE_SSE4_2;USE_SSE4A;USE_TSC;USE_MAME;USE_MAME_BSD;USE_FASTPAGING;USE_VME;USE_CPU_PLATFORMINT;USE_CPU_INLINEINST;USE_CPU_DIRECTREG;USE_CPU_EIPMASK;BIOS_IO_EMULATION;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_CRTDBG_MAP_ALLOC;_WINDOWS;_CRT_SECURE_NO_WARNINGS;SUPPORT_PC9821;SUPPORT_IDEIO;SUPPORT_LARGE_HDD;SUPPORT_LARGE_MEMORY;SUPPORT_NET;SUPPORT_LGY98;SUPPORT_WAB;SUPPORT_CL_GD5430;SUPPORT_WAB_NPDISP;SUPPORT_NPDISP_W2K;SUPPORT_NPDISP_D3D;SUPPORT_NPDISP_GL;SUPPORT_WAB_GA1280A;SUPPORT_HRTIMER;SUPPORT_VPCVHD;SUPPORT_KAI_IMAGES;SUPPORT_NVL_IMAGES;SUPPORT_PHYSICAL_CDDRV;SUPPORT_FMGEN;SUPPORT_SOUND_SB16;SUPPORT_FPU_DOSBOX2_COMPATIBLE;SUPPORT_FPU_SOFTFLOAT3;SUPPORT_GPIB;SUPPORT_PCI;SUPPORT_SCRN_DIRECT3D;SUPPORT_FAST_MEMORYCHECK;SUPPORT_PEGC;SUPPORT_ASYNC_CPU;SUPPORT_SMPU98;SUPPORT_WACOM_TABLET;SUPPORT_RS232C_FIFO;SUPPORT_NAMED_PIPE;SUPPORT_VGA_MODEX;SUPPORT_GAMEPORT;SUPPORT_IDEIO_48BIT;SUPPORT_MULTITHREAD;SUPPORT_TEXTHOOK;SUPPORT_HOSTDRVNT;SUPPORT_HOSTDRV9X;SUPPORT_NP2SCSI;HOOK_SYSKEY;ALLOW_MULTIRUN;USE_FPU;USE_MMX;USE_3DNOW;USE_SSE;USE_SSE2;USE_SSE3;USE_SSSE3;USE_SSE4_1;USE_SSE4_2;USE_SSE4A;USE_TSC;USE_MAME;USE_MAME_BSD;USE_FASTPAGING;USE_VME;USE_CPU_PLATFORMINT;USE_CPU_INLINEINST;USE_CPU_DIRECTREG;USE_CPU_EIPMASK;BIOS_IO_EMULATION;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>.\;.\x64;..\;..\common;..\i386c;..\mem;..\io;..\cbus;..\vram;..\sound;..\generic;..\zlib</AdditionalIncludeDirectories>
       <DisableSpecificWarnings>4819</DisableSpecificWarnings>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
@@ -296,6 +324,7 @@
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
+      <UndefinePreprocessorDefinitions>SUPPORT_NPDISP_W2K</UndefinePreprocessorDefinitions>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -327,7 +356,7 @@
       </PrecompiledHeader>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <PreprocessorDefinitions>WIN32;NDEBUG;_CRTDBG_MAP_ALLOC;_WINDOWS;_CRT_SECURE_NO_WARNINGS;SUPPORT_PC9821;SUPPORT_IDEIO;SUPPORT_LARGE_HDD;SUPPORT_LARGE_MEMORY;SUPPORT_NET;SUPPORT_LGY98;SUPPORT_WAB;SUPPORT_NPDISP_D3D;SUPPORT_NPDISP_GL;SUPPORT_CL_GD5430;SUPPORT_HRTIMER;SUPPORT_VPCVHD;SUPPORT_KAI_IMAGES;SUPPORT_NVL_IMAGES;SUPPORT_PHYSICAL_CDDRV;SUPPORT_FMGEN;SUPPORT_SOUND_SB16;SUPPORT_FPU_DOSBOX2_COMPATIBLE;SUPPORT_FPU_SOFTFLOAT3;SUPPORT_GPIB;SUPPORT_PCI;SUPPORT_SCRN_DIRECT3D;SUPPORT_FAST_MEMORYCHECK;SUPPORT_PEGC;SUPPORT_ASYNC_CPU;SUPPORT_SMPU98;SUPPORT_WACOM_TABLET;SUPPORT_RS232C_FIFO;SUPPORT_NAMED_PIPE;SUPPORT_VGA_MODEX;SUPPORT_GAMEPORT;SUPPORT_IDEIO_48BIT;SUPPORT_MULTITHREAD;SUPPORT_TEXTHOOK;SUPPORT_HOSTDRVNT;SUPPORT_NP2SCSI;SUPPORT_IA32_HAXM;HOOK_SYSKEY;ALLOW_MULTIRUN;USE_FPU;USE_MMX;USE_3DNOW;USE_SSE;USE_SSE2;USE_SSE3;USE_SSSE3;USE_SSE4_1;USE_SSE4_2;USE_SSE4A;USE_TSC;USE_MAME;USE_MAME_BSD;USE_FASTPAGING;USE_VME;BIOS_IO_EMULATION;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_CRTDBG_MAP_ALLOC;_WINDOWS;_CRT_SECURE_NO_WARNINGS;SUPPORT_PC9821;SUPPORT_IDEIO;SUPPORT_LARGE_HDD;SUPPORT_LARGE_MEMORY;SUPPORT_NET;SUPPORT_LGY98;SUPPORT_WAB;SUPPORT_WAB_NPDISP;SUPPORT_NPDISP_W2K;SUPPORT_NPDISP_D3D;SUPPORT_NPDISP_GL;SUPPORT_CL_GD5430;SUPPORT_HRTIMER;SUPPORT_VPCVHD;SUPPORT_KAI_IMAGES;SUPPORT_NVL_IMAGES;SUPPORT_PHYSICAL_CDDRV;SUPPORT_FMGEN;SUPPORT_SOUND_SB16;SUPPORT_FPU_DOSBOX2_COMPATIBLE;SUPPORT_FPU_SOFTFLOAT3;SUPPORT_GPIB;SUPPORT_PCI;SUPPORT_SCRN_DIRECT3D;SUPPORT_FAST_MEMORYCHECK;SUPPORT_PEGC;SUPPORT_SMPU98;SUPPORT_WACOM_TABLET;SUPPORT_RS232C_FIFO;SUPPORT_NAMED_PIPE;SUPPORT_VGA_MODEX;SUPPORT_GAMEPORT;SUPPORT_IDEIO_48BIT;SUPPORT_MULTITHREAD;SUPPORT_TEXTHOOK;SUPPORT_HOSTDRVNT;SUPPORT_NP2SCSI;SUPPORT_IA32_HAXM;HOOK_SYSKEY;ALLOW_MULTIRUN;USE_FPU;USE_MMX;USE_3DNOW;USE_SSE;USE_SSE2;USE_SSE3;USE_SSSE3;USE_SSE4_1;USE_SSE4_2;USE_SSE4A;USE_TSC;USE_MAME;USE_MAME_BSD;USE_FASTPAGING;USE_VME;BIOS_IO_EMULATION;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>.\;.\x64;..\;..\common;..\i386c;..\mem;..\io;..\cbus;..\vram;..\sound;..\generic;..\zlib</AdditionalIncludeDirectories>
       <DisableSpecificWarnings>4819</DisableSpecificWarnings>
       <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
@@ -337,6 +366,7 @@
       <ForcedIncludeFiles>
       </ForcedIncludeFiles>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <UndefinePreprocessorDefinitions>SUPPORT_NPDISP_W2K</UndefinePreprocessorDefinitions>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -354,7 +384,49 @@
       <AdditionalOptions>-I.\x64\ -I..\i386c\x64\ -I..\io\x64\ %(AdditionalOptions)</AdditionalOptions>
     </YASM>
     <ResourceCompile>
-      <PreprocessorDefinitions>_WIN64;_UNICODE;UNICODE;SUPPORT_PC9821;SUPPORT_IDEIO;SUPPORT_LARGE_HDD;SUPPORT_LARGE_MEMORY;SUPPORT_NET;SUPPORT_LGY98;SUPPORT_WAB;SUPPORT_CL_GD5430;SUPPORT_HRTIMER;SUPPORT_VPCVHD;SUPPORT_KAI_IMAGES;SUPPORT_NVL_IMAGES;SUPPORT_PHYSICAL_CDDRV;SUPPORT_FMGEN;SUPPORT_SOUND_SB16;SUPPORT_FPU_DOSBOX2_COMPATIBLE;SUPPORT_FPU_SOFTFLOAT3;SUPPORT_GPIB;SUPPORT_PCI;SUPPORT_SCRN_DIRECT3D;SUPPORT_FAST_MEMORYCHECK;SUPPORT_PEGC;SUPPORT_ASYNC_CPU;SUPPORT_SMPU98;SUPPORT_WACOM_TABLET;SUPPORT_RS232C_FIFO;SUPPORT_NAMED_PIPE;SUPPORT_IA32_HAXM;HOOK_SYSKEY;ALLOW_MULTIRUN;USE_FPU;USE_MMX;USE_3DNOW;USE_SSE;USE_SSE2;USE_SSE3;USE_SSSE3;USE_SSE4_1;USE_SSE4_2;USE_SSE4A;USE_TSC;USE_MAME;USE_MAME_BSD;USE_FASTPAGING;USE_VME;BIOS_IO_EMULATION;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_WIN64;_UNICODE;UNICODE;SUPPORT_PC9821;SUPPORT_IDEIO;SUPPORT_LARGE_HDD;SUPPORT_LARGE_MEMORY;SUPPORT_NET;SUPPORT_LGY98;SUPPORT_WAB;SUPPORT_WAB_NPDISP;SUPPORT_NPDISP_W2K;SUPPORT_CL_GD5430;SUPPORT_HRTIMER;SUPPORT_VPCVHD;SUPPORT_KAI_IMAGES;SUPPORT_NVL_IMAGES;SUPPORT_PHYSICAL_CDDRV;SUPPORT_FMGEN;SUPPORT_SOUND_SB16;SUPPORT_FPU_DOSBOX2_COMPATIBLE;SUPPORT_FPU_SOFTFLOAT3;SUPPORT_GPIB;SUPPORT_PCI;SUPPORT_SCRN_DIRECT3D;SUPPORT_FAST_MEMORYCHECK;SUPPORT_PEGC;SUPPORT_SMPU98;SUPPORT_WACOM_TABLET;SUPPORT_RS232C_FIFO;SUPPORT_NAMED_PIPE;SUPPORT_IA32_HAXM;HOOK_SYSKEY;ALLOW_MULTIRUN;USE_FPU;USE_MMX;USE_3DNOW;USE_SSE;USE_SSE2;USE_SSE3;USE_SSSE3;USE_SSE4_1;USE_SSE4_2;USE_SSE4A;USE_TSC;USE_MAME;USE_MAME_BSD;USE_FASTPAGING;USE_VME;BIOS_IO_EMULATION;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ResourceCompile>
+    <Manifest>
+      <EnableDPIAwareness>true</EnableDPIAwareness>
+    </Manifest>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseWHPX|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <PrecompiledHeader>
+      </PrecompiledHeader>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_CRTDBG_MAP_ALLOC;_WINDOWS;_CRT_SECURE_NO_WARNINGS;SUPPORT_PC9821;SUPPORT_IDEIO;SUPPORT_LARGE_HDD;SUPPORT_LARGE_MEMORY;SUPPORT_NET;SUPPORT_LGY98;SUPPORT_WAB;SUPPORT_WAB_NPDISP;SUPPORT_NPDISP_W2K;SUPPORT_NPDISP_D3D;SUPPORT_NPDISP_GL;SUPPORT_CL_GD5430;SUPPORT_HRTIMER;SUPPORT_VPCVHD;SUPPORT_KAI_IMAGES;SUPPORT_NVL_IMAGES;SUPPORT_PHYSICAL_CDDRV;SUPPORT_FMGEN;SUPPORT_SOUND_SB16;SUPPORT_FPU_DOSBOX2_COMPATIBLE;SUPPORT_FPU_SOFTFLOAT3;SUPPORT_GPIB;SUPPORT_PCI;SUPPORT_SCRN_DIRECT3D;SUPPORT_FAST_MEMORYCHECK;SUPPORT_PEGC;SUPPORT_SMPU98;SUPPORT_WACOM_TABLET;SUPPORT_RS232C_FIFO;SUPPORT_NAMED_PIPE;SUPPORT_VGA_MODEX;SUPPORT_GAMEPORT;SUPPORT_IDEIO_48BIT;SUPPORT_MULTITHREAD;SUPPORT_TEXTHOOK;SUPPORT_HOSTDRVNT;SUPPORT_NP2SCSI;SUPPORT_IA32_WHPX;HOOK_SYSKEY;ALLOW_MULTIRUN;USE_FPU;USE_MMX;USE_3DNOW;USE_SSE;USE_SSE2;USE_SSE3;USE_SSSE3;USE_SSE4_1;USE_SSE4_2;USE_SSE4A;USE_TSC;USE_MAME;USE_MAME_BSD;USE_FASTPAGING;USE_VME;BIOS_IO_EMULATION;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>.\;.\x64;..\;..\common;..\i386c;..\mem;..\io;..\cbus;..\vram;..\sound;..\generic;..\zlib</AdditionalIncludeDirectories>
+      <DisableSpecificWarnings>4819</DisableSpecificWarnings>
+      <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <FloatingPointModel>Fast</FloatingPointModel>
+      <FloatingPointExceptions>false</FloatingPointExceptions>
+      <ForcedIncludeFiles>
+      </ForcedIncludeFiles>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <UndefinePreprocessorDefinitions>SUPPORT_NPDISP_W2K</UndefinePreprocessorDefinitions>
+    </ClCompile>
+    <Link>
+      <AdditionalDependencies>WinHvPlatform.lib;WinHvEmulation.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <LargeAddressAware>true</LargeAddressAware>
+      <DelayLoadDLLs>d3d9.dll;%(DelayLoadDLLs)</DelayLoadDLLs>
+      <RandomizedBaseAddress>false</RandomizedBaseAddress>
+    </Link>
+    <NASM>
+      <AdditionalOptions>-I.\x86\ -I..\i386c\x86\ -I..\io\x86\ %(AdditionalOptions)</AdditionalOptions>
+    </NASM>
+    <YASM>
+      <AdditionalOptions>-I.\x64\ -I..\i386c\x64\ -I..\io\x64\ %(AdditionalOptions)</AdditionalOptions>
+    </YASM>
+    <ResourceCompile>
+      <PreprocessorDefinitions>_WIN64;_UNICODE;UNICODE;SUPPORT_PC9821;SUPPORT_IDEIO;SUPPORT_LARGE_HDD;SUPPORT_LARGE_MEMORY;SUPPORT_NET;SUPPORT_LGY98;SUPPORT_WAB;SUPPORT_WAB_NPDISP;SUPPORT_NPDISP_W2K;SUPPORT_CL_GD5430;SUPPORT_HRTIMER;SUPPORT_VPCVHD;SUPPORT_KAI_IMAGES;SUPPORT_NVL_IMAGES;SUPPORT_PHYSICAL_CDDRV;SUPPORT_FMGEN;SUPPORT_SOUND_SB16;SUPPORT_FPU_DOSBOX2_COMPATIBLE;SUPPORT_FPU_SOFTFLOAT3;SUPPORT_GPIB;SUPPORT_PCI;SUPPORT_SCRN_DIRECT3D;SUPPORT_FAST_MEMORYCHECK;SUPPORT_PEGC;SUPPORT_SMPU98;SUPPORT_WACOM_TABLET;SUPPORT_RS232C_FIFO;SUPPORT_NAMED_PIPE;SUPPORT_IA32_WHPX;HOOK_SYSKEY;ALLOW_MULTIRUN;USE_FPU;USE_MMX;USE_3DNOW;USE_SSE;USE_SSE2;USE_SSE3;USE_SSSE3;USE_SSE4_1;USE_SSE4_2;USE_SSE4A;USE_TSC;USE_MAME;USE_MAME_BSD;USE_FASTPAGING;USE_VME;BIOS_IO_EMULATION;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ResourceCompile>
     <Manifest>
       <EnableDPIAwareness>true</EnableDPIAwareness>
@@ -401,6 +473,7 @@
     <ClCompile Include="..\cbus\scsicmd.c" />
     <ClCompile Include="..\cbus\scsiio.c">
       <InlineFunctionExpansion Condition="'$(Configuration)|$(Platform)'=='ReleaseHAXM|x64'">OnlyExplicitInline</InlineFunctionExpansion>
+      <InlineFunctionExpansion Condition="'$(Configuration)|$(Platform)'=='ReleaseWHPX|x64'">OnlyExplicitInline</InlineFunctionExpansion>
     </ClCompile>
     <ClCompile Include="..\cbus\smpu98.c" />
     <ClCompile Include="..\codecnv\sjisucs2.c" />
@@ -495,6 +568,7 @@
     <ClCompile Include="..\i386c\ia32\instructions\fpu\fpemul_dosbox.c">
       <FloatingPointModel Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Precise</FloatingPointModel>
       <FloatingPointModel Condition="'$(Configuration)|$(Platform)'=='ReleaseHAXM|x64'">Precise</FloatingPointModel>
+      <FloatingPointModel Condition="'$(Configuration)|$(Platform)'=='ReleaseWHPX|x64'">Precise</FloatingPointModel>
       <FloatingPointModel Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Precise</FloatingPointModel>
       <FloatingPointModel Condition="'$(Configuration)|$(Platform)'=='ReleaseHAXM|Win32'">Precise</FloatingPointModel>
       <EnableEnhancedInstructionSet Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotSet</EnableEnhancedInstructionSet>
@@ -839,9 +913,21 @@
     <ClCompile Include="..\i386c\ia32\resolve.c" />
     <ClCompile Include="..\i386c\ia32\segments.c" />
     <ClCompile Include="..\i386c\ia32\task.c" />
-    <ClCompile Include="..\i386hax\haxcore.c" />
-    <ClCompile Include="..\i386hax\haxfunc.c" />
-    <ClCompile Include="..\io\artic.c" />
+    <ClCompile Include="..\i386hax\haxcore.c">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='ReleaseWHPX|x64'">true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="..\i386hax\haxfunc.c">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='ReleaseWHPX|x64'">true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="..\i386whpx\whpxcore.c">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'!='ReleaseWHPX|x64'">true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="..\i386whpx\whpxfunc.c">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'!='ReleaseWHPX|x64'">true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="..\io\artic.c">
+      <Optimization Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Disabled</Optimization>
+    </ClCompile>
     <ClCompile Include="..\io\cgrom.c" />
     <ClCompile Include="..\io\cpuio.c" />
     <ClCompile Include="..\io\crtc.c" />
@@ -929,6 +1015,7 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='ReleaseHAXM|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='ReleaseHAXM|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='ReleaseWHPX|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
     </ClCompile>
     <ClCompile Include="..\sound\oplgenc.c" />
@@ -981,7 +1068,9 @@
     <ClCompile Include="..\vram\vram.c" />
     <ClCompile Include="..\wab\cirrus_vga.c" />
     <ClCompile Include="..\wab\ga1280a.cpp" />
-    <ClCompile Include="..\wab\npdisp.cpp" />
+    <ClCompile Include="..\wab\npdisp.cpp">
+      <Optimization Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Disabled</Optimization>
+    </ClCompile>
     <ClCompile Include="..\wab\npdisp_newfont.cpp" />
     <ClCompile Include="..\wab\npdisp_dd.cpp" />
     <ClCompile Include="..\wab\npdisp_ddbridge.cpp" />
@@ -1257,6 +1346,8 @@
     <ClInclude Include="..\i386c\ia32\task.h" />
     <ClInclude Include="..\i386hax\haxcore.h" />
     <ClInclude Include="..\i386hax\haxfunc.h" />
+    <ClInclude Include="..\i386whpx\whpxcore.h" />
+    <ClInclude Include="..\i386whpx\whpxfunc.h" />
     <ClInclude Include="..\io\artic.h" />
     <ClInclude Include="..\io\cgrom.h" />
     <ClInclude Include="..\io\cpuio.h" />
@@ -1388,6 +1479,7 @@
     <ClInclude Include="..\wab\ga1280a.h" />
     <ClInclude Include="..\wab\ga1280adef.h" />
     <ClInclude Include="..\wab\npdisp.h" />
+    <ClInclude Include="..\wab\npdisp_internal.h" />
     <ClInclude Include="..\wab\npdisp_dd.h" />
     <ClInclude Include="..\wab\npdisp_ddbridge.h" />
     <ClInclude Include="..\wab\npdisp_d3d.h" />
@@ -1531,12 +1623,14 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='ReleaseHAXM|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='ReleaseWHPX|x64'">true</ExcludedFromBuild>
     </NASM>
     <NASM Include="x86\makegrph.x86">
       <FileType>Document</FileType>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='ReleaseHAXM|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='ReleaseWHPX|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='ReleaseHAXM|Win32'">true</ExcludedFromBuild>
     </NASM>
     <NASM Include="x86\opngeng.x86">
@@ -1544,12 +1638,14 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='ReleaseHAXM|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='ReleaseWHPX|x64'">true</ExcludedFromBuild>
     </NASM>
     <NASM Include="x86\parts.x86">
       <FileType>Document</FileType>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='ReleaseHAXM|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='ReleaseWHPX|x64'">true</ExcludedFromBuild>
     </NASM>
   </ItemGroup>
   <ItemGroup>
@@ -1558,12 +1654,14 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='ReleaseHAXM|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='ReleaseHAXM|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='ReleaseWHPX|x64'">true</ExcludedFromBuild>
     </YASM>
     <YASM Include="x64\parts.x64">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='ReleaseHAXM|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='ReleaseHAXM|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='ReleaseWHPX|x64'">true</ExcludedFromBuild>
     </YASM>
   </ItemGroup>
   <ItemGroup>

@@ -149,6 +149,9 @@ const SDRAWFN	*sdrawfn;
 #if defined(SUPPORT_IA32_HAXM)
 	gdcs.grphdisp |= GDCSCRN_ALLDRAW2;
 #endif
+#if defined(SUPPORT_IA32_WHPX)
+	gdcs.grphdisp |= GDCSCRN_ALLDRAW2;
+#endif
 
 	ret = 0;
 #ifdef SUPPORT_WAB

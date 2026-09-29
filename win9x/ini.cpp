@@ -643,6 +643,9 @@ static const PFTBL s_IniItems[] =
 #if defined(SUPPORT_WAB_NPDISP)
 	PFVAL("USENPDSP", PFTYPE_BOOL,		&np2cfg.usenpdisp),
 	PFVAL("NPDSPACC", PFTYPE_UINT8,	&np2cfg.npdispaccel),
+	PFVAL("NPDTNLEN", PFTYPE_BOOL,	&np2cfg.npdisptnlenable),
+	PFVAL("NPDTNLFT", PFTYPE_BOOL,	&np2cfg.npdisptnlfast),	// legacy: migrated by NPDISP settings UI
+	PFVAL("NPD3DQLT", PFTYPE_UINT8,	&np2cfg.npdispd3dquality),
 #endif
 #if defined(SUPPORT_WAB_GA1280A)
 	PFVAL("USEGADSP", PFTYPE_BOOL,		&np2cfg.usega1280a),

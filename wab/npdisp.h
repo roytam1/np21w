@@ -7,6 +7,7 @@
 
 #if defined(SUPPORT_WAB_NPDISP)
 
+
 #define NPDISP_DD_PRIMARY_REGION_SIZE  0x04000000UL
 #define NPDISP_DD_OFFSCREEN_OFFSET     0x04000000UL
 #define NPDISP_DD_OFFSCREEN_SIZE       0x0c000000UL
@@ -114,6 +115,9 @@ extern "C" {
 
 		// 現在動作中のアクセラレーションモード。ステートセーブ対象。
 		UINT8 acceleration;
+
+		// Windows 2000 linear framebuffer mode.
+		UINT8 w2kLfb;
 	} NPDISP;
 
 	extern NPDISP		npdisp;
@@ -124,6 +128,8 @@ extern "C" {
 	void npdisp_setDirty(int x1, int y1, int x2, int y2);
 	void npdisp_setDirtyAll(void);
 	void npdisp_resetDirty(void);
+	void npdisp_setCursorLinear(UINT32 linearAddr);
+	void npdisp_moveCursorAbsolute(UINT16 x, UINT16 y);
 
 	int npdisp_drawGraphic(void);
 

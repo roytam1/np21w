@@ -39,6 +39,9 @@
 #ifdef SUPPORT_IA32_HAXM
 #include "bios/bios.h"
 #endif
+#ifdef SUPPORT_IA32_WHPX
+#include "bios/bios.h"
+#endif
 void
 LEA_GwM(void)
 {
@@ -77,6 +80,11 @@ void
 _NOP(void)
 {
 #if defined(SUPPORT_IA32_HAXM) && defined(USE_CUSTOM_HOOKINST)
+	if (bioshookinfo.hookinst != 0x90) {
+		return;
+	}
+#endif
+#if defined(SUPPORT_IA32_WHPX) && defined(USE_CUSTOM_HOOKINST)
 	if (bioshookinfo.hookinst != 0x90) {
 		return;
 	}

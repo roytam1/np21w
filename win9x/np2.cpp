@@ -112,6 +112,10 @@
 #include	"i386hax/haxfunc.h"
 #include	"i386hax/haxcore.h"
 #endif
+#if defined(SUPPORT_IA32_WHPX)
+#include	"i386whpx/whpxfunc.h"
+#include	"i386whpx/whpxcore.h"
+#endif
 #include	<process.h>
 
 extern bool scrnmng_create_pending; // グラフィックレンダラ生成保留中
@@ -3907,6 +3911,12 @@ static void processwait(UINT cnt) {
 			lateframecount = 0;
 		}
 #endif
+#if defined(SUPPORT_IA32_WHPX)
+		if (np2whpx.enable) {
+			np2whpxcore.hurryup = 0;
+			lateframecount = 0;
+		}
+#endif
 		if(lateframecount > np2oscfg.cpustabf) lateframecount = np2oscfg.cpustabf;
 		timing_setcount(0);
 		framereset(cnt);
@@ -4426,13 +4436,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInst,
 		return(FALSE);
 	}
 #else
-	if ((hWnd = FindWindow(szClassName, NULL)) != NULL && np2oscfg.resume) {
-		// レジュームの時は複数起動するとやばいので･･･
-		ShowWindow(hWnd, SW_RESTORE);
-		SetForegroundWindow(hWnd);
-		dosio_term();
-		return(FALSE);
-	}
+	//if ((hWnd = FindWindow(szClassName, NULL)) != NULL && np2oscfg.resume) {
+	//	// レジュームの時は複数起動するとやばいので･･･
+	//	ShowWindow(hWnd, SW_RESTORE);
+	//	SetForegroundWindow(hWnd);
+	//	dosio_term();
+	//	return(FALSE);
+	//}
 #endif
 
 	g_hInstance = hInstance = LoadExternalResource(hInstance);

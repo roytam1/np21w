@@ -358,6 +358,12 @@
     <Filter Include="ヘッダー ファイル\win9x\commng\print">
       <UniqueIdentifier>{dbff6607-6ee4-474d-a723-dbea076c0af7}</UniqueIdentifier>
     </Filter>
+    <Filter Include="ソース ファイル\i386whpx">
+      <UniqueIdentifier>{1bde2e18-7628-4d88-a083-0d5150afdf66}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ヘッダー ファイル\i386whpx">
+      <UniqueIdentifier>{42a720fa-0276-4359-95e3-3f2477c56d70}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\calendar.c">
@@ -2475,6 +2481,12 @@
     <ClCompile Include="..\wab\npdisp_ogl.cpp">
       <Filter>ソース ファイル\wab</Filter>
     </ClCompile>
+    <ClCompile Include="..\i386whpx\whpxfunc.c">
+      <Filter>ソース ファイル\i386whpx</Filter>
+    </ClCompile>
+    <ClCompile Include="..\i386whpx\whpxcore.c">
+      <Filter>ソース ファイル\i386whpx</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\calendar.h">
@@ -3659,6 +3671,9 @@
     <ClInclude Include="..\wab\npdisp.h">
       <Filter>ヘッダー ファイル\wab</Filter>
     </ClInclude>
+    <ClInclude Include="..\wab\npdisp_internal.h">
+      <Filter>ヘッダー ファイル\wab</Filter>
+    </ClInclude>
     <ClInclude Include="..\wab\npdisp_dd.h">
       <Filter>ヘッダー ファイル\wab</Filter>
     </ClInclude>
@@ -3718,6 +3733,12 @@
     </ClInclude>
     <ClInclude Include="..\wab\npdisp_ogl.h">
       <Filter>ヘッダー ファイル\wab</Filter>
+    </ClInclude>
+    <ClInclude Include="..\i386whpx\whpxfunc.h">
+      <Filter>ヘッダー ファイル\i386whpx</Filter>
+    </ClInclude>
+    <ClInclude Include="..\i386whpx\whpxcore.h">
+      <Filter>ヘッダー ファイル\i386whpx</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

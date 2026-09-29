@@ -650,7 +650,7 @@ CLASS "np2dialog"
 FONT 9, "Microsoft JhengHei UI"
 BEGIN
     ICON            IDI_ICON1,IDC_NP2ICON,8,8,20,20
-    LTEXT           "",IDC_NP2VER,36,16,152,8
+    LTEXT           "",IDC_NP2VER,30,16,158,8
     DEFPUSHBUTTON   "確定",IDOK,168,8,40,14,WS_GROUP
     PUSHBUTTON      "詳細 >>",IDC_MORE,168,26,40,14
     EDITTEXT        IDC_NP2INFO,8,52,200,48,ES_MULTILINE | ES_READONLY | ES_WANTRETURN | WS_VSCROLL
@@ -711,6 +711,9 @@ GROUPBOX        "加速等級", IDC_STATIC, 8, 26, 168, 30
 CONTROL         "None", IDC_NPDISPLEGACY, "Button", BS_AUTORADIOBUTTON | WS_GROUP | WS_TABSTOP, 16, 40, 40, 10
 CONTROL         "DirectDraw", IDC_NPDISPDIRECTDRAW, "Button", BS_AUTORADIOBUTTON | WS_TABSTOP, 58, 40, 64, 10
 CONTROL         "Direct3D", IDC_NPDISPDIRECT3D, "Button", BS_AUTORADIOBUTTON | WS_TABSTOP, 124, 40, 50, 10
+CONTROL         "啟用 T&&L 模擬", IDC_NPDISPTNLENABLE, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 16, 60, 152, 10
+LTEXT           "D3D 品質", IDC_STATIC, 16, 82, 52, 8
+COMBOBOX        IDC_NPDISPD3DQUALITY, 70, 78, 96, 72, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
 END
 
 IDD_GA1280A DIALOGEX 0, 0, 184, 124
@@ -1624,6 +1627,8 @@ NP21TOOL                BITMAP                  "..\\np21tool.bmp"
 // remains consistent on all systems.
 #ifdef SUPPORT_IA32_HAXM
 IDI_ICON1               ICON                    "..\\haxmnp2.ico"
+#elif defined(SUPPORT_IA32_WHPX)
+IDI_ICON1               ICON                    "..\\haxmnp2.ico"
 #else
 IDI_ICON1               ICON                    "..\\np2.ico"
 #endif
@@ -1867,6 +1872,15 @@ BEGIN
     IDS_GD5430_AUTO_XE10_WABS    "自動選擇(Xe10, WAB-S)"
     IDS_GD5430_AUTO_XE10_WSN2    "自動選擇(Xe10, WSN-A2F)"
     IDS_GD5430_AUTO_XE10_WSN4    "自動選擇(Xe10, WSN-A4F)"
+END
+
+STRINGTABLE
+BEGIN
+    IDS_NPDISP_D3DQUALITY_0 "高精度"
+    IDS_NPDISP_D3DQUALITY_1 "快速等級 1"
+    IDS_NPDISP_D3DQUALITY_2 "快速等級 2"
+    IDS_NPDISP_D3DQUALITY_3 "快速等級 3"
+    IDS_NPDISP_D3DQUALITY_4 "快速等級 4"
 END
 
 STRINGTABLE

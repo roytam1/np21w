@@ -362,6 +362,10 @@ static REG8 IOINPCALL wss_i548f(UINT port)
 static LARGE_INTEGER gameport_qpf;
 static int gameport_useqpc = 0;
 #endif
+#if defined(SUPPORT_IA32_WHPX)
+static LARGE_INTEGER gameport_qpf;
+static int gameport_useqpc = 0;
+#endif
 extern int gameport_tsccounter;
 static UINT64 gameport_tsc;
 static REG8 gameport_joyflag_base = 0x00;
@@ -370,7 +374,13 @@ static REG8 gameport_joyflag = 0x00;
 static UINT64 gameport_clkmax;
 static UINT64 gameport_threshold_x = 0;
 static UINT64 gameport_threshold_y = 0;
-#else
+#endif
+#if defined(SUPPORT_IA32_WHPX)
+static UINT64 gameport_clkmax;
+static UINT64 gameport_threshold_x = 0;
+static UINT64 gameport_threshold_y = 0;
+#endif
+#if !defined(SUPPORT_IA32_HAXM) && !defined(SUPPORT_IA32_WHPX)
 static UINT32 gameport_clkmax;
 static UINT32 gameport_threshold_x = 0;
 static UINT32 gameport_threshold_y = 0;
@@ -408,7 +418,22 @@ static void IOOUTCALL gameport_o1480(UINT port, REG8 dat)
 			gameport_useqpc = 0;
 		}
 	}
-#else
+#endif
+#if defined(SUPPORT_IA32_WHPX)
+	{
+		LARGE_INTEGER li = {0};
+		if (QueryPerformanceFrequency(&gameport_qpf)) {
+			QueryPerformanceCounter(&li);
+			//li.QuadPart = li.QuadPart;
+			gameport_tsc = (UINT64)li.QuadPart;
+			gameport_useqpc = 1;
+		}else{
+			gameport_tsc = CPU_MSR_TSC;
+			gameport_useqpc = 0;
+		}
+	}
+#endif
+#if !defined(SUPPORT_IA32_HAXM) && !defined(SUPPORT_IA32_WHPX)
 #if defined(USE_TSC)
 	if(CPU_REMCLOCK > 0){
 		gameport_tsc = CPU_MSR_TSC - (UINT64)CPU_REMCLOCK * pccore.maxmultiple / pccore.multiple;
@@ -432,6 +457,10 @@ static REG8 IOINPCALL gameport_i1480(UINT port)
 	LARGE_INTEGER li = {0};
 	QueryPerformanceCounter(&li);
 #endif
+#if defined(SUPPORT_IA32_WHPX)
+	LARGE_INTEGER li = {0};
+	QueryPerformanceCounter(&li);
+#endif
 	{
 		REG8 joyflag = joymng_getstat();
 		gameport_joyflag = ((joyflag >> 2) & 0x30) | ((joyflag << 2) & 0xc0) | (gameport_joyflag & 0x0f);
@@ -449,7 +478,17 @@ static REG8 IOINPCALL gameport_i1480(UINT port)
 		clockdiff = CPU_MSR_TSC - gameport_tsc;
 		gameport_clkmax = pccore.realclock / 1430; // とりあえず0.7msで･･･
 	}
-#else
+#endif
+#if defined(SUPPORT_IA32_WHPX)
+	if(gameport_useqpc){
+		clockdiff = (unsigned long long)((UINT64)li.QuadPart - gameport_tsc);
+		gameport_clkmax = (UINT64)gameport_qpf.QuadPart / 1300; // とりあえず0.7msで･･･
+	}else{
+		clockdiff = CPU_MSR_TSC - gameport_tsc;
+		gameport_clkmax = pccore.realclock / 1430; // とりあえず0.7msで･･･
+	}
+#endif
+#if !defined(SUPPORT_IA32_HAXM) && !defined(SUPPORT_IA32_WHPX)
 #if defined(USE_TSC)
 	if(CPU_REMCLOCK > 0){
 		clockdiff = CPU_MSR_TSC - (UINT64)CPU_REMCLOCK * pccore.maxmultiple / pccore.multiple - gameport_tsc;
@@ -457,7 +496,7 @@ static REG8 IOINPCALL gameport_i1480(UINT port)
 		clockdiff = CPU_MSR_TSC - gameport_tsc;
 	}
 	gameport_clkmax = pccore.baseclock * pccore.maxmultiple / 1430; // とりあえず0.7msで･･･
-#if !defined(SUPPORT_IA32_HAXM)
+#if !defined(SUPPORT_IA32_HAXM) && !defined(SUPPORT_IA32_WHPX)
 	if(gameport_tsccounter == 0 || !np2cfg.consttsc){
 		gameport_clkmax = gameport_clkmax * pccore.maxmultiple / pccore.multiple; // CPUクロック依存の場合のfix
 	}

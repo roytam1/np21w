@@ -7,6 +7,10 @@
 #include	"i386hax/haxfunc.h"
 #include	"i386hax/haxcore.h"
 #endif
+#if defined(SUPPORT_IA32_WHPX)
+#include	"i386whpx/whpxfunc.h"
+#include	"i386whpx/whpxcore.h"
+#endif
 
 enum {
 	PIC_OCW2_L		= 0x07,
@@ -139,6 +143,14 @@ void pic_irq(void) {												// ver0.78
 	if (!np2hax.emumode && np2hax.enable && CPU_STAT_PM) {
 		// workaround
 		//if (!(np2haxstat.state._eflags & I_FLAG)) {
+		//	return;
+		//}
+	}else
+#endif
+#if defined(SUPPORT_IA32_WHPX)
+	if (!np2whpx.emumode && np2whpx.enable && CPU_STAT_PM) {
+		// workaround
+		//if (!(np2whpxstat.state._eflags & I_FLAG)) {
 		//	return;
 		//}
 	}else

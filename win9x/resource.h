@@ -357,6 +357,8 @@
 #define IDC_NPDISPLEGACY                19021
 #define IDC_NPDISPDIRECTDRAW            19022
 #define IDC_NPDISPDIRECT3D              19023
+#define IDC_NPDISPTNLENABLE                19024
+#define IDC_NPDISPD3DQUALITY             19025
 #define IDC_GA1280AENABLED              19030
 #define IDC_PCIENABLE                   19070
 #define IDC_PCIPCMCTYPE                 19071
@@ -521,6 +523,11 @@
 #define IDS_PCI_PCMC_82434LX            30800
 #define IDS_PCI_PCMC_82441FX            30801
 #define IDS_PCI_PCMC_WILDCAT            30802
+#define IDS_NPDISP_D3DQUALITY_0         30900
+#define IDS_NPDISP_D3DQUALITY_1         30901
+#define IDS_NPDISP_D3DQUALITY_2         30902
+#define IDS_NPDISP_D3DQUALITY_3         30903
+#define IDS_NPDISP_D3DQUALITY_4         30904
 #define IDS_FONTTITLE                   31001
 #define IDS_FONTEXT                     31002
 #define IDS_FONTFILTER                  31003

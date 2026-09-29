@@ -464,10 +464,6 @@ typedef struct hax_cpuid_t {
 #pragma pack()
 #endif
 
-#ifdef __cplusplus
-}
-#endif
-
 /***
   HAXM IOCTL用関数群
  ***/
@@ -498,6 +494,10 @@ UINT8 i386haxfunc_vcpu_interrupt(UINT32 vector); // 指定したベクタの割り込みを発
 UINT8 i386haxfunc_vcpu_kickoff(); // 謎
 UINT8 i386haxfunc_vcpu_debug(HAX_DEBUG *inbuf); // デバッグの有効/無効やデバッグ方法を設定する
 UINT8 i386haxfunc_vcpu_setCPUID(HAX_CPUID *inbuf); // CPUIDを設定する
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif
 

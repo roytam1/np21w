@@ -56,6 +56,9 @@ static void IOOUTCALL artic_o5f(UINT port, REG8 dat) {
 	(void)port;
 	(void)dat;
 	CPU_REMCLOCK -= 20;
+	if (dat != 0x0b && dat != 0x20) {
+		CPU_REMCLOCK -= 20;
+	}
 }
 
 static REG8 IOINPCALL artic_i5c(UINT port) {

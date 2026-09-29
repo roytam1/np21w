@@ -34,6 +34,10 @@ extern "C" {
 #include "i386hax/haxfunc.h"
 #include "i386hax/haxcore.h"
 #endif
+#if defined(SUPPORT_IA32_WHPX)
+#include "i386whpx/whpxfunc.h"
+#include "i386whpx/whpxcore.h"
+#endif
 
 #include    "ga1280adef.h"
 #include    "ga1280a.h"

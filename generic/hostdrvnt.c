@@ -24,6 +24,10 @@
 #include	"i386hax/haxfunc.h"
 #include	"i386hax/haxcore.h"
 #endif
+#if defined(SUPPORT_IA32_WHPX)
+#include	"i386whpx/whpxfunc.h"
+#include	"i386whpx/whpxcore.h"
+#endif
 #include	"dosio.h"
 
 #include	"hostdrv.h"
@@ -3774,6 +3778,14 @@ static void hostdrvNT_invoke()
 	// HAXMレジスタ→猫レジスタにコピー
 	ia32hax_copyregHAXtoNP2();
 #endif
+#if defined(SUPPORT_IA32_WHPX)
+	// WHPXレジスタを読み取り
+	i386whpxfunc_get_registers(&np2whpxstat.state);
+	i386whpxfunc_get_fpu(&np2whpxstat.fpustate);
+	np2whpxstat.update_regs = np2whpxstat.update_fpu = 0;
+	// WHPXレジスタ→猫レジスタにコピー
+	ia32whpx_copyregWHPXtoNP2();
+#endif
 
 	// ドライバから渡されたメモリアドレスからデータを直接読み取り
 	hostdrvNT_memread(cpu_kmemoryread_d(hostdrvNT.dataAddr), &invokeInfo.stack, sizeof(NP2_IO_STACK_LOCATION));
@@ -3942,6 +3954,14 @@ static void hostdrvNT_invokeNotify()
 	np2haxstat.update_regs = np2haxstat.update_fpu = 0;
 	// HAXMレジスタ→猫レジスタにコピー
 	ia32hax_copyregHAXtoNP2();
+#endif
+#if defined(SUPPORT_IA32_WHPX)
+	// WHPXレジスタを読み取り
+	i386whpxfunc_get_registers(&np2whpxstat.state);
+	i386whpxfunc_get_fpu(&np2whpxstat.fpustate);
+	np2whpxstat.update_regs = np2whpxstat.update_fpu = 0;
+	// WHPXレジスタ→猫レジスタにコピー
+	ia32whpx_copyregWHPXtoNP2();
 #endif
 
 	// ドライバから渡されたメモリアドレスからデータを直接読み取り

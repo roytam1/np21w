@@ -99,6 +99,11 @@ void npdisp_dd_vsync(void);
 #include	"i386hax/haxcore.h"
 #include	"dmax86.h"
 #endif
+#if defined(SUPPORT_IA32_WHPX)
+#include	"i386whpx/whpxfunc.h"
+#include	"i386whpx/whpxcore.h"
+#include	"dmax86.h"
+#endif
 
 
 const OEMCHAR np2version[] = OEMTEXT(NP2VER_CORE);
@@ -181,7 +186,7 @@ const OEMCHAR np2version[] = OEMTEXT(NP2VER_CORE);
 				0, 0x5B, 0, CIRRUS_MELCOWAB_OFS_DEFAULT, 0, 
 #endif
 #if defined(SUPPORT_WAB_NPDISP)
-				0, NPDISP_ACCEL_DIRECT3D,
+				0, NPDISP_ACCEL_DIRECT3D, 1, 0, NPDISP_D3D_QUALITY_ACCURATE,
 #endif
 #if defined(SUPPORT_WAB_GA1280A)
 				0,
@@ -428,6 +433,28 @@ void pccore_mem_free(void) {
 	}
 }
 #endif
+#if defined(SUPPORT_IA32_WHPX)
+int pccore_mem_malloc_virtualalloc = 0;
+void pccore_mem_malloc(void) {
+	if(!mem){
+		mem = (UINT8*)_aligned_malloc(0x200000, 4096);
+	}
+	if(!vramex || vramex==vramex_base){
+		vramex = (UINT8*)_aligned_malloc(0x80000, 4096);
+		memset(vramex, 0, 0x80000);
+	}
+}
+void pccore_mem_free(void) {
+	if(mem){
+		_aligned_free(mem);
+		mem = NULL;
+	}
+	if(vramex && vramex!=vramex_base){
+		_aligned_free(vramex);
+		vramex = vramex_base;
+	}
+}
+#endif
 	
 void pccore_init(void) {
 	
@@ -443,8 +470,15 @@ void pccore_init(void) {
 	np2hax.enable = 1;
 	i386hax_initialize();
 #endif
+#if defined(SUPPORT_IA32_WHPX)
+	np2whpx.enable = (i386whpx_check() == SUCCESS);
+	i386whpx_initialize();
+#endif
 	
 #if defined(SUPPORT_IA32_HAXM)
+	pccore_mem_malloc();
+#endif
+#if defined(SUPPORT_IA32_WHPX)
 	pccore_mem_malloc();
 #endif
 
@@ -546,8 +580,14 @@ void pccore_term(void) {
 #if defined(SUPPORT_IA32_HAXM)
 	i386hax_deinitialize();
 #endif
+#if defined(SUPPORT_IA32_WHPX)
+	i386whpx_deinitialize();
+#endif
 	
 #if defined(SUPPORT_IA32_HAXM)
+	pccore_mem_free();
+#endif
+#if defined(SUPPORT_IA32_WHPX)
 	pccore_mem_free();
 #endif
 	
@@ -599,6 +639,12 @@ void pccore_reset(void) {
 	if(np2hax.enable){
 		i386hax_createVM();
 		i386hax_resetVMCPU();
+	}
+#endif
+#if defined(SUPPORT_IA32_WHPX)
+	if(np2whpx.enable){
+		i386whpx_createVM();
+		i386whpx_resetVMCPU();
 	}
 #endif
 
@@ -809,6 +855,11 @@ void pccore_reset(void) {
 		i386hax_vm_allocmemory();
 	}
 #endif
+#if defined(SUPPORT_IA32_WHPX)
+	if(np2whpx.created){
+		i386whpx_vm_allocmemory();
+	}
+#endif
 
 	// HDDセット
 	diskdrv_hddbind();
@@ -890,6 +941,26 @@ void pccore_reset(void) {
 			np2haxstat.update_regs = np2haxstat.update_fpu = 0;
 		}else{
 			np2hax.enable = 1;
+		}
+	}
+#endif
+#if defined(SUPPORT_IA32_WHPX)
+	if(np2whpx.enable){
+		if(np2whpx.created){
+			i386whpx_vm_setmemory();
+			i386whpx_vm_setbankmemory();
+			i386whpx_vm_setextmemory();
+		
+			i386whpx_resetVMMem();
+
+			np2whpxcore.clockpersec = GetTickCounter_ClockPerSec();
+			np2whpxcore.lastclock = GetTickCounter_Clock();
+			np2whpxcore.clockcount = GetTickCounter_Clock();
+			np2whpxcore.I_ratio = 0;
+
+			np2whpxstat.update_regs = np2whpxstat.update_fpu = 0;
+		}else{
+			np2whpx.enable = 1;
 		}
 	}
 #endif
@@ -1083,7 +1154,7 @@ void screendisp(NEVENTITEM item) {
 	gdc_work(GDCWORK_SLAVE);
 	gdc.vsync = 0;
 	pcstat.screendispflag = 0;
-#if !defined(SUPPORT_IA32_HAXM)
+#if !defined(SUPPORT_IA32_HAXM) && !defined(SUPPORT_IA32_WHPX)
 	if (!np2cfg.DISPSYNC) {
 		drawscreen();
 	}
@@ -1342,6 +1413,12 @@ void pccore_exec(BOOL draw) {
 		drawscreen();
 	}
 #endif
+#if defined(SUPPORT_IA32_WHPX)
+	// WHPXの場合、先に描画
+	if (!np2cfg.DISPSYNC) {
+		drawscreen();
+	}
+#endif
 
 	gdc.vsync = 0;
 	pcstat.screendispflag = 1;
@@ -1365,7 +1442,11 @@ void pccore_exec(BOOL draw) {
 		pic_irq();
 #if defined(SUPPORT_IA32_HAXM)
 		if (CPU_RESETREQ && (np2hax.emumode || !np2hax.enable || np2haxcore.ready_for_reset)) {
-#else
+#endif
+#if defined(SUPPORT_IA32_WHPX)
+		if (CPU_RESETREQ && (np2whpx.emumode || !np2whpx.enable || np2whpxcore.ready_for_reset)) {
+#endif
+#if !defined(SUPPORT_IA32_HAXM) && !defined(SUPPORT_IA32_WHPX)
 		if (CPU_RESETREQ) {
 #endif
 			CPU_RESETREQ = 0;
@@ -1410,11 +1491,30 @@ void pccore_exec(BOOL draw) {
 				np2haxcore.hltflag = 0;
 			}
 #endif
+#if defined(SUPPORT_IA32_WHPX)
+			if (!np2whpx.emumode && np2whpx.enable) {
+				i386whpx_resetVMCPU();
+				i386whpxfunc_set_registers(&np2whpxstat.state);
+				i386whpxfunc_set_fpu(&np2whpxstat.fpustate);
+				ia32whpx_copyregWHPXtoNP2();
+				i386whpx_resetVMMem();
+				np2whpxstat.update_regs = np2whpxstat.update_fpu = 1;
+				np2whpxstat.update_segment_regs = 1;
+				np2whpxstat.irq_reqidx_cur = np2whpxstat.irq_reqidx_end = 0;
+				pic_reset(&np2cfg);
+				np2whpxcore.hltflag = 0;
+			}
+#endif
 			CPU_SHUT();
 		}
 #if defined(SUPPORT_IA32_HAXM)
 		if (np2hax.enable) {
 			i386hax_vm_exec();
+		}else
+#endif
+#if defined(SUPPORT_IA32_WHPX)
+		if (np2whpx.enable) {
+			i386whpx_vm_exec();
 		}else
 #endif
 		{

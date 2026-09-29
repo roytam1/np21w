@@ -54,7 +54,12 @@ extern	UINT8	vramupdate[0x8000];
 #if defined(SUPPORT_IA32_HAXM)
 extern	UINT8	vramex_base[0x80000];
 extern	UINT8	*vramex; // PEGC VRAM  Alloc in pccore_mem_malloc()
-#else
+#endif
+#if defined(SUPPORT_IA32_WHPX)
+extern	UINT8	vramex_base[0x80000];
+extern	UINT8	*vramex; // PEGC VRAM  Alloc in pccore_mem_malloc()
+#endif
+#if !defined(SUPPORT_IA32_HAXM) && !defined(SUPPORT_IA32_WHPX)
 extern	UINT8	vramex[0x80000];
 #endif
 #endif

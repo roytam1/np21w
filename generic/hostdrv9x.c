@@ -46,6 +46,10 @@
 #include "i386hax/haxfunc.h"
 #include "i386hax/haxcore.h"
 #endif
+#if defined(SUPPORT_IA32_WHPX)
+#include "i386whpx/whpxfunc.h"
+#include "i386whpx/whpxcore.h"
+#endif
 #include "dosio.h"
 #include "statsave.h"
 #include "hostdrv9x.h"
@@ -2791,6 +2795,12 @@ static void h9x_invoke(void)
 	i386haxfunc_vcpu_getFPU(&np2haxstat.fpustate);
 	np2haxstat.update_regs = np2haxstat.update_fpu = 0;
 	ia32hax_copyregHAXtoNP2();
+#endif
+#if defined(SUPPORT_IA32_WHPX)
+	i386whpxfunc_get_registers(&np2whpxstat.state);
+	i386whpxfunc_get_fpu(&np2whpxstat.fpustate);
+	np2whpxstat.update_regs = np2whpxstat.update_fpu = 0;
+	ia32whpx_copyregWHPXtoNP2();
 #endif
 	h9x_memread(callAddr, &call, sizeof(call));
 	if (call.signature != NP2HOSTDRV9X_CALL_SIGNATURE ||

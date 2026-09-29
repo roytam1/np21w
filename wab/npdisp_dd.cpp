@@ -20,6 +20,9 @@
 #include	"npdisp_mem.h"
 #include	"npdisp_dd.h"
 #include	"npdisp_ddbridge.h"
+#if defined(SUPPORT_NPDISP_W2K)
+#include	"npdisp_w2k.h"
+#endif
 #if defined(SUPPORT_NPDISP_D3D)
 #include	"npdisp_d3d.h"
 #endif
@@ -42,16 +45,129 @@ static void npdisp_dd_trace(const char* fmt, ...)
 #define TRACEOUT11(s) (void)s
 #endif
 
+// DirectDraw performance counters.  Output is intentionally sparse so the trace itself does not dominate benchmarks.
+typedef struct {
+	UINT32 bridgeCalls;
+	UINT32 handledCalls;
+	UINT32 notHandledCalls;
+	UINT32 bltCalls;
+	UINT32 bltHandled;
+	UINT32 bltNotHandled;
+	UINT32 bltColorFill;
+	UINT32 bltSrcKey;
+	UINT32 bltDstKey;
+	UINT32 bltStretch;
+	UINT32 bltRop;
+	UINT32 bltPixels;
+	UINT32 bltSmall;
+	UINT32 bltMedium;
+	UINT32 bltLarge;
+	UINT32 lockCalls;
+	UINT32 unlockCalls;
+	UINT32 flipCalls;
+	UINT32 getBltStatusCalls;
+	UINT32 getFlipStatusCalls;
+	UINT32 bltTimingSamples;
+	UINT64 bltTimingRead;
+	UINT64 bltTimingDst;
+	UINT64 bltTimingSrcKey;
+	UINT64 bltTimingPrepare;
+	UINT64 bltTimingPixels;
+	UINT64 bltTimingWrite;
+} NPDISP_DD_PERFCOUNTERS;
+
+static NPDISP_DD_PERFCOUNTERS npdisp_dd_perf;
+static UINT32 npdisp_dd_perfBltSequence = 0;
+
+static UINT64 npdisp_dd_perfCounter(void)
+{
+	LARGE_INTEGER value;
+	QueryPerformanceCounter(&value);
+	return (UINT64)value.QuadPart;
+}
+
+static UINT32 npdisp_dd_perfTicksToNs(UINT64 ticks)
+{
+	static UINT64 frequency = 0;
+	LARGE_INTEGER value;
+	UINT64 ns;
+
+	if (!frequency) {
+		if (!QueryPerformanceFrequency(&value) || value.QuadPart <= 0) return 0;
+		frequency = (UINT64)value.QuadPart;
+	}
+	if (!ticks) return 0;
+	ns = ticks > (~(UINT64)0 / 1000000000ULL) ? 0xffffffffULL : (ticks * 1000000000ULL) / frequency;
+	if (ns > 0xffffffffULL) ns = 0xffffffffULL;
+	return (UINT32)ns;
+}
+
+static void npdisp_dd_perftrace(const char* fmt, ...)
+{
+	//char stmp[1024];
+	//va_list ap;
+	//va_start(ap, fmt);
+	//vsprintf(stmp, fmt, ap);
+	//strcat(stmp, "\n");
+	//va_end(ap);
+	//OutputDebugStringA(stmp);
+}
+
+static void npdisp_dd_perfReport(void)
+{
+	UINT32 avgPixels = npdisp_dd_perf.bltCalls ? (npdisp_dd_perf.bltPixels / npdisp_dd_perf.bltCalls) : 0;
+	npdisp_dd_perftrace("NPDISP11 DD_PERF cb=%u handled=%u fallback=%u blt=%u/%u/%u pix=%u avg=%u size=%u/%u/%u fill=%u srckey=%u dstkey=%u stretch=%u rop=%u lock=%u unlock=%u flip=%u bltstat=%u flipstat=%u",
+		npdisp_dd_perf.bridgeCalls, npdisp_dd_perf.handledCalls, npdisp_dd_perf.notHandledCalls,
+		npdisp_dd_perf.bltCalls, npdisp_dd_perf.bltHandled, npdisp_dd_perf.bltNotHandled,
+		npdisp_dd_perf.bltPixels, avgPixels, npdisp_dd_perf.bltSmall, npdisp_dd_perf.bltMedium, npdisp_dd_perf.bltLarge,
+		npdisp_dd_perf.bltColorFill, npdisp_dd_perf.bltSrcKey, npdisp_dd_perf.bltDstKey, npdisp_dd_perf.bltStretch, npdisp_dd_perf.bltRop,
+		npdisp_dd_perf.lockCalls, npdisp_dd_perf.unlockCalls, npdisp_dd_perf.flipCalls,
+		npdisp_dd_perf.getBltStatusCalls, npdisp_dd_perf.getFlipStatusCalls);
+	if (npdisp_dd_perf.bltTimingSamples) {
+		UINT32 samples = npdisp_dd_perf.bltTimingSamples;
+		npdisp_dd_perftrace("NPDISP11 DD_STAGE n=%u ns read=%u dst=%u srckey=%u prep=%u pixels=%u write=%u",
+			samples,
+			npdisp_dd_perfTicksToNs(npdisp_dd_perf.bltTimingRead / samples),
+			npdisp_dd_perfTicksToNs(npdisp_dd_perf.bltTimingDst / samples),
+			npdisp_dd_perfTicksToNs(npdisp_dd_perf.bltTimingSrcKey / samples),
+			npdisp_dd_perfTicksToNs(npdisp_dd_perf.bltTimingPrepare / samples),
+			npdisp_dd_perfTicksToNs(npdisp_dd_perf.bltTimingPixels / samples),
+			npdisp_dd_perfTicksToNs(npdisp_dd_perf.bltTimingWrite / samples));
+	}
+}
+
 bool npdisp_dd_ensureOffscreenBacking(void)
 {
-	if (npdisp.mm_ddOffscreenPtr && npdisp.mm_ddOffscreenSize == NPDISP_DD_OFFSCREEN_SIZE) {
+#if defined(SUPPORT_NPDISP_W2K)
+	if (npdisp.w2kLfb) {
+		UINT8 *frameBuffer = npdisp_w2k_getFrameBufferHost();
+		if (!frameBuffer) return false;
+		if (npdisp.mm_ddOffscreenPtr && !npdisp_w2k_isFrameBufferAddress(npdisp.mm_ddOffscreenPtr)) {
+#if defined(SUPPORT_NPDISP_D3D)
+			npdisp_d3d_flush();
+#endif
+			VirtualFree(npdisp.mm_ddOffscreenPtr, 0, MEM_RELEASE);
+		}
+		npdisp.mm_ddOffscreenPtr = frameBuffer + NPDISP_DD_OFFSCREEN_OFFSET;
+		npdisp.mm_ddOffscreenSize = NPDISP_DD_OFFSCREEN_SIZE;
 		return true;
+	}
+#endif
+	if (npdisp.mm_ddOffscreenPtr && npdisp.mm_ddOffscreenSize == NPDISP_DD_OFFSCREEN_SIZE) {
+#if defined(SUPPORT_NPDISP_W2K)
+		if (!npdisp_w2k_isFrameBufferAddress(npdisp.mm_ddOffscreenPtr)) return true;
+#else
+		return true;
+#endif
 	}
 	if (npdisp.mm_ddOffscreenPtr) {
 #if defined(SUPPORT_NPDISP_D3D)
 		npdisp_d3d_flush();
 #endif
-		VirtualFree(npdisp.mm_ddOffscreenPtr, 0, MEM_RELEASE);
+#if defined(SUPPORT_NPDISP_W2K)
+		if (!npdisp_w2k_isFrameBufferAddress(npdisp.mm_ddOffscreenPtr))
+#endif
+			VirtualFree(npdisp.mm_ddOffscreenPtr, 0, MEM_RELEASE);
 		npdisp.mm_ddOffscreenPtr = NULL;
 		npdisp.mm_ddOffscreenSize = 0;
 	}
@@ -72,7 +188,10 @@ void npdisp_dd_releaseOffscreenBacking(void)
 	npdisp_d3d_flush();
 #endif
 	if (npdisp.mm_ddOffscreenPtr) {
-		VirtualFree(npdisp.mm_ddOffscreenPtr, 0, MEM_RELEASE);
+#if defined(SUPPORT_NPDISP_W2K)
+		if (!npdisp_w2k_isFrameBufferAddress(npdisp.mm_ddOffscreenPtr))
+#endif
+			VirtualFree(npdisp.mm_ddOffscreenPtr, 0, MEM_RELEASE);
 	}
 	npdisp.mm_ddOffscreenPtr = NULL;
 	npdisp.mm_ddOffscreenSize = 0;
@@ -241,7 +360,7 @@ static bool npdisp_dd_configureVideoMemory(NPDISP_DDHALINFO* halInfo)
 	halInfo->ddCaps.dwZBufferBitDepths = 0;
 	halInfo->ddCaps.ddsCaps.dwCaps &= ~(NPDISP_DDSCAPS_ALPHA | NPDISP_DDSCAPS_ZBUFFER | NPDISP_DDSCAPS_OFFSCREENPLAIN | NPDISP_DDSCAPS_FLIP |
 		NPDISP_DDSCAPS_COMPLEX | NPDISP_DDSCAPS_MIPMAP | NPDISP_DDSCAPS_FRONTBUFFER | NPDISP_DDSCAPS_BACKBUFFER |
-		NPDISP_DDSCAPS_OVERLAY | NPDISP_DDSCAPS_TEXTURE | NPDISP_DDSCAPS_VIDEOMEMORY);
+		NPDISP_DDSCAPS_OVERLAY | NPDISP_DDSCAPS_TEXTURE | NPDISP_DDSCAPS_VIDEOMEMORY | NPDISP_DDSCAPS_LOCALVIDMEM);
 
 	if (npdisp.version < 12 || !npdisp.mm_ddVidMemAddr || !npdisp.mm_vramLinearAddr ||
 		!npdisp.mm_ddOffscreenPtr || npdisp.mm_ddOffscreenSize != NPDISP_DD_OFFSCREEN_SIZE) {
@@ -278,7 +397,7 @@ static bool npdisp_dd_configureVideoMemory(NPDISP_DDHALINFO* halInfo)
 	halInfo->vmiData.pvmList = npdisp.mm_ddVidMemAddr;
 	halInfo->ddCaps.dwVidMemTotal = NPDISP_DD_OFFSCREEN_SIZE;
 	halInfo->ddCaps.dwVidMemFree = NPDISP_DD_OFFSCREEN_SIZE;
-	halInfo->ddCaps.ddsCaps.dwCaps |= NPDISP_DDSCAPS_OFFSCREENPLAIN | NPDISP_DDSCAPS_OVERLAY | NPDISP_DDSCAPS_VIDEOMEMORY;
+	halInfo->ddCaps.ddsCaps.dwCaps |= NPDISP_DDSCAPS_OFFSCREENPLAIN | NPDISP_DDSCAPS_OVERLAY | NPDISP_DDSCAPS_VIDEOMEMORY | NPDISP_DDSCAPS_LOCALVIDMEM;
 	if (npdisp.bpp >= 15) halInfo->ddCaps.ddsCaps.dwCaps |= NPDISP_DDSCAPS_ALPHA;
 #if defined(SUPPORT_NPDISP_D3D)
 	if (npdisp.bpp >= 15 && halInfo->GetDriverInfoAddr && halInfo->lpD3DGlobalDriverData && halInfo->lpD3DHALCallbacks) {
@@ -395,10 +514,12 @@ bool npdisp_dd_rebuildModeDependentHalInfo(UINT32 lpPDeviceAddr)
 	}
 	halInfo.lpPDevice = lpPDeviceAddr;
 	halInfo.ddCaps.dwCaps &= ~NPDISP_DDCAPS_3D;
+	halInfo.ddCaps.dwCaps2 &= ~NPDISP_DDCAPS2_CANRENDERWINDOWED;
 	halInfo.ddCaps.ddsCaps.dwCaps &= ~NPDISP_DDSCAPS_3DDEVICE;
 #if defined(SUPPORT_NPDISP_D3D)
 	if (npdisp.bpp >= 15 && halInfo.GetDriverInfoAddr && halInfo.lpD3DGlobalDriverData && halInfo.lpD3DHALCallbacks) {
 		halInfo.ddCaps.dwCaps |= NPDISP_DDCAPS_3D;
+		halInfo.ddCaps.dwCaps2 |= NPDISP_DDCAPS2_CANRENDERWINDOWED;
 		halInfo.ddCaps.ddsCaps.dwCaps |= NPDISP_DDSCAPS_3DDEVICE;
 	}
 #endif
@@ -447,6 +568,23 @@ static UINT32 npdisp_ddraw_readGuest32(UINT32 addr, bool flatAddress)
 	return value;
 }
 
+#if defined(SUPPORT_IA32_HAXM)
+static bool npdisp_ddraw_isSystemMemorySurface(UINT32 lpSurfaceAddr, bool flatAddress)
+{
+	NPDISP_DDRAWI_DDRAWSURFACE_LCL_HEAD lcl = { 0 };
+	if (!lpSurfaceAddr || !npdisp_ddraw_readGuest(&lcl, lpSurfaceAddr, sizeof(lcl), flatAddress)) return false;
+	return (lcl.ddsCaps.dwCaps & NPDISP_DDSCAPS_SYSTEMMEMORY) != 0;
+}
+#endif
+#if defined(SUPPORT_IA32_WHPX)
+static bool npdisp_ddraw_isSystemMemorySurface(UINT32 lpSurfaceAddr, bool flatAddress)
+{
+	NPDISP_DDRAWI_DDRAWSURFACE_LCL_HEAD lcl = { 0 };
+	if (!lpSurfaceAddr || !npdisp_ddraw_readGuest(&lcl, lpSurfaceAddr, sizeof(lcl), flatAddress)) return false;
+	return (lcl.ddsCaps.dwCaps & NPDISP_DDSCAPS_SYSTEMMEMORY) != 0;
+}
+#endif
+
 typedef struct {
 	NPDISP_DDRAWI_DDRAWSURFACE_LCL_HEAD lcl;
 	NPDISP_DDRAWI_DDRAWSURFACE_GBL_HEAD gbl;
@@ -477,6 +615,26 @@ static bool npdisp_ddraw_resolveVideoAddress(UINT32 fpVidMem, SINT32 pitch, UINT
 
 	if (!hostBase || !linearBase || !apertureOffset || !npdisp.mm_vramLinearAddr || pitch <= 0 || !height) {
 		return false;
+	}
+
+	if (npdisp.w2kLfb) {
+		bytes = (UINT64)(UINT32)pitch * (UINT64)height;
+		if (fpVidMem == 0) {
+			if (!npdisp.mm_screenPtr || bytes > NPDISP_DD_PRIMARY_REGION_SIZE) return false;
+			*hostBase = npdisp.mm_screenPtr;
+			*linearBase = 0;
+			*apertureOffset = 0;
+			return true;
+		}
+		offset = fpVidMem;
+		if (offset < NPDISP_DD_OFFSCREEN_OFFSET || offset >= NPDISP_DD_APERTURE_SIZE ||
+			!npdisp.mm_ddOffscreenPtr || npdisp.mm_ddOffscreenSize != NPDISP_DD_OFFSCREEN_SIZE ||
+			bytes > NPDISP_DD_OFFSCREEN_SIZE ||
+			(UINT64)(offset - NPDISP_DD_OFFSCREEN_OFFSET) + bytes > NPDISP_DD_OFFSCREEN_SIZE) return false;
+		*hostBase = npdisp.mm_ddOffscreenPtr + (offset - NPDISP_DD_OFFSCREEN_OFFSET);
+		*linearBase = fpVidMem;
+		*apertureOffset = offset;
+		return true;
 	}
 
 	// fpVidMem==0‚ÍŒÅ’èprimary—Ìˆæ‚ð•\‚·BFlipŒã‚ÍfpVidMem‚ª“ü‚ê‘Ö‚í‚é‚½‚ßA
@@ -578,6 +736,8 @@ static bool npdisp_ddraw_pixelFormatIsRGB32(const NPDISP_DDPIXELFORMAT* pf)
 
 static UINT32 npdisp_ddraw_textureBytesPerPixel(const NPDISP_DDPIXELFORMAT* pf)
 {
+	if (pf && pf->dwSize >= sizeof(*pf) && (pf->dwFlags & NPDISP_DDPF_PALETTEINDEXED8) &&
+		!(pf->dwFlags & NPDISP_DDPF_FOURCC) && pf->dwRGBBitCount == 8U) return 1U;
 	if (npdisp_ddraw_pixelFormatIsTexture16(pf)) return 2U;
 	if (npdisp_ddraw_pixelFormatIsRGB32(pf)) return 4U;
 	return 0U;
@@ -1585,6 +1745,7 @@ static UINT32 npdisp_func_DD_CreateSurface(UINT32 lpDataAddr, bool flatAddress)
 	for (UINT32 i = 0; i < data.dwSCnt; ++i) {
 		NPDISP_DDRAWI_DDRAWSURFACE_LCL_HEAD lcl = { 0 };
 		NPDISP_DDRAWI_DDRAWSURFACE_GBL_HEAD gbl = { 0 };
+		bool wrotePixelFormat = false;
 		UINT32 lpSurfaceAddr = npdisp_ddraw_readGuest32(data.lplpSList + i * sizeof(UINT32), flatAddress);
 		UINT32 caps;
 
@@ -1720,6 +1881,7 @@ static UINT32 npdisp_func_DD_CreateSurface(UINT32 lpDataAddr, bool flatAddress)
 				zPf.dwZBitMask = 0x0000ffffUL;
 			}
 			if (!npdisp_ddraw_writeGuest(&zPf, pfAddr, sizeof(zPf), flatAddress)) return NPDISP_DDHAL_DRIVER_NOTHANDLED;
+			wrotePixelFormat = true;
 		}
 		else if (alphaSurface) {
 			NPDISP_DDPIXELFORMAT alphaPf = { 0 };
@@ -1728,12 +1890,18 @@ static UINT32 npdisp_func_DD_CreateSurface(UINT32 lpDataAddr, bool flatAddress)
 			alphaPf.dwFlags = NPDISP_DDPF_ALPHA;
 			alphaPf.dwAlphaBitDepth = 8;
 			if (!npdisp_ddraw_writeGuest(&alphaPf, pfAddr, sizeof(alphaPf), flatAddress)) return NPDISP_DDHAL_DRIVER_NOTHANDLED;
+			wrotePixelFormat = true;
 		}
 		else if (overlaySurface && haveDesc && npdisp_ddraw_pixelFormatIsYUY2(&desc.ddpfPixelFormat)) {
 			const UINT32 pfAddr = lcl.lpGbl + (UINT32)offsetof(NPDISP_DDRAWI_DDRAWSURFACE_GBL_BLT, ddpfSurface);
 			if (!npdisp_ddraw_writeGuest(&desc.ddpfPixelFormat, pfAddr, sizeof(desc.ddpfPixelFormat), flatAddress)) {
 				return NPDISP_DDHAL_DRIVER_NOTHANDLED;
 			}
+			wrotePixelFormat = true;
+		}
+		if (wrotePixelFormat && !(lcl.dwFlags & NPDISP_DDRAWISURF_HASPIXELFORMAT)) {
+			lcl.dwFlags |= NPDISP_DDRAWISURF_HASPIXELFORMAT;
+			if (!npdisp_ddraw_writeGuest(&lcl, lpSurfaceAddr, sizeof(lcl), flatAddress)) return NPDISP_DDHAL_DRIVER_NOTHANDLED;
 		}
 	}
 
@@ -1769,6 +1937,31 @@ static UINT32 npdisp_func_DD_CreateSurface(UINT32 lpDataAddr, bool flatAddress)
 	if (overlayRequest || textureRequest) return NPDISP_DDHAL_DRIVER_NOTHANDLED;
 	return NPDISP_DDHAL_DRIVER_HANDLED;
 }
+// DirectDraw selects the video heap address after CreateSurface returns. Fresh
+// backing is zero-filled; clear released allocations before the heap reuses them.
+static void npdisp_ddraw_clearReleasedSurface(UINT32 lpSurfaceAddr, bool flatAddress)
+{
+	NPDISP_DDRAWI_DDRAWSURFACE_LCL_HEAD lcl = { 0 };
+	NPDISP_DDRAWI_DDRAWSURFACE_GBL_HEAD gbl = { 0 };
+	UINT8* hostBase = NULL;
+	UINT32 linearBase = 0;
+	UINT32 apertureOffset = 0;
+	UINT64 bytes;
+
+	if (!lpSurfaceAddr ||
+		!npdisp_ddraw_readGuest(&lcl, lpSurfaceAddr, sizeof(lcl), flatAddress) || !lcl.lpGbl ||
+		(lcl.ddsCaps.dwCaps & NPDISP_DDSCAPS_SYSTEMMEMORY) ||
+		!npdisp_ddraw_readGuest(&gbl, lcl.lpGbl, sizeof(gbl), flatAddress) ||
+		!gbl.fpVidMem || gbl.lPitch <= 0 || !gbl.wHeight ||
+		!npdisp_ddraw_resolveVideoAddress(gbl.fpVidMem, gbl.lPitch, gbl.wHeight,
+			&hostBase, &linearBase, &apertureOffset) || !apertureOffset) return;
+
+	bytes = (UINT64)(UINT32)gbl.lPitch * gbl.wHeight;
+	// A corrupt pitch must not erase the next live heap allocation.
+	if (gbl.dwBlockSizeX && bytes > gbl.dwBlockSizeX) return;
+	memset(hostBase, 0, (size_t)bytes);
+}
+
 static UINT32 npdisp_func_DD_DestroySurface(UINT32 lpDataAddr, bool flatAddress)
 {
 	NPDISP_DDHAL_DESTROYSURFACEDATA data = { 0 };
@@ -1780,6 +1973,7 @@ static UINT32 npdisp_func_DD_DestroySurface(UINT32 lpDataAddr, bool flatAddress)
 	{
 		NPDISP_DDRAWI_DDRAWSURFACE_LCL_HEAD lcl = { 0 };
 		if (npdisp_ddraw_readGuest(&lcl, data.lpDDSurface, sizeof(lcl), flatAddress) && (lcl.ddsCaps.dwCaps & NPDISP_DDSCAPS_ZBUFFER)) {
+			npdisp_ddraw_clearReleasedSurface(data.lpDDSurface, flatAddress);
 			data.ddRVal = 0;
 			if (!npdisp_ddraw_writeGuest(&data, lpDataAddr, sizeof(data), flatAddress)) return NPDISP_DDHAL_DRIVER_NOTHANDLED;
 			return NPDISP_DDHAL_DRIVER_HANDLED;
@@ -1788,7 +1982,12 @@ static UINT32 npdisp_func_DD_DestroySurface(UINT32 lpDataAddr, bool flatAddress)
 #endif
 	if (!npdisp_ddraw_getSurface(data.lpDDSurface, &view, flatAddress)) {
 		NPDISP_DDALPHA_VIEW alphaView = { 0 };
-		if (!npdisp_ddraw_getAlphaSurfaceEx(data.lpDDSurface, &alphaView, flatAddress, false)) return NPDISP_DDHAL_DRIVER_NOTHANDLED;
+		if (!npdisp_ddraw_getAlphaSurfaceEx(data.lpDDSurface, &alphaView, flatAddress, false)) {
+			// The DirectDraw runtime finishes destroying texture surfaces.
+			npdisp_ddraw_clearReleasedSurface(data.lpDDSurface, flatAddress);
+			return NPDISP_DDHAL_DRIVER_NOTHANDLED;
+		}
+		npdisp_ddraw_clearReleasedSurface(data.lpDDSurface, flatAddress);
 		data.ddRVal = 0;
 		if (!npdisp_ddraw_writeGuest(&data, lpDataAddr, sizeof(data), flatAddress)) return NPDISP_DDHAL_DRIVER_NOTHANDLED;
 		return NPDISP_DDHAL_DRIVER_HANDLED;
@@ -1831,6 +2030,7 @@ static UINT32 npdisp_func_DD_DestroySurface(UINT32 lpDataAddr, bool flatAddress)
 		npdisp_setDirtyAll();
 		npdisp.updated = 1;
 	}
+	npdisp_ddraw_clearReleasedSurface(data.lpDDSurface, flatAddress);
 	return NPDISP_DDHAL_DRIVER_HANDLED;
 }
 
@@ -1981,9 +2181,6 @@ static UINT32 npdisp_func_DD_AddAttachedSurface(UINT32 lpDataAddr, bool flatAddr
 
 static UINT32 npdisp_func_DD_Lock(UINT32 lpDataAddr, bool flatAddress)
 {
-#if defined(SUPPORT_NPDISP_D3D)
-	npdisp_d3d_flush();
-#endif
 	NPDISP_DDHAL_LOCKDATA data = { 0 };
 	NPDISP_DDSURFACE_VIEW view = { 0 };
 	NPDISP_DDALPHA_VIEW alphaView = { 0 };
@@ -1994,6 +2191,34 @@ static UINT32 npdisp_func_DD_Lock(UINT32 lpDataAddr, bool flatAddress)
 
 	if (!lpDataAddr || !npdisp.mm_vramLinearAddr ||
 		!npdisp_ddraw_readGuest(&data, lpDataAddr, sizeof(data), flatAddress)) return NPDISP_DDHAL_DRIVER_NOTHANDLED;
+#if defined(SUPPORT_NPDISP_D3D)
+	if (npdisp_d3d_busy()) {
+		bool guestBusyRetry = false;
+		if (npdisp.version >= 15 && npdisp.mm_ddBridgeInfoAddr) {
+			NPDISP_DDBRIDGEINFO32 bridge = { 0 };
+			const UINT32 bridgeAddr = npdisp_dd_currentDataPtr(npdisp.mm_ddBridgeInfoAddr);
+			if (bridgeAddr && npdisp_readMemory(&bridge, bridgeAddr, sizeof(bridge)) &&
+				bridge.dwStatus == NPDISP_DDBRIDGE_STATUS_DRIVER_READY &&
+				(bridge.dwNegotiatedFeatures & NPDISP_DDBRIDGE_FEATURE_D3D_BUSY_RETRY)) {
+				guestBusyRetry = true;
+			}
+		}
+		if ((data.dwFlags & NPDISP_DDLOCK_WAIT) && !guestBusyRetry) {
+			npdisp_d3d_flush();
+		}
+		else {
+			data.ddRVal = NPDISP_DDERR_WASSTILLDRAWING;
+			if (!npdisp_ddraw_writeGuest(&data, lpDataAddr, sizeof(data), flatAddress)) return NPDISP_DDHAL_DRIVER_NOTHANDLED;
+			{
+				static UINT32 busyLogCount = 0;
+				++busyLogCount;
+				if (busyLogCount <= 8U || !(busyLogCount & 0xffU)) TRACEOUT11(("NPDISP11 DD_D3D_LOCK_BUSY n=%u surf=%08x flags=%08x clocks=1", busyLogCount, data.lpDDSurface, data.dwFlags));
+			}
+			CPU_REMCLOCK -= 1;
+			return NPDISP_DDHAL_DRIVER_HANDLED;
+		}
+	}
+#endif
 	if (!npdisp_ddraw_getSurface(data.lpDDSurface, &view, flatAddress)) {
 		if (npdisp_ddraw_getAlphaSurfaceEx(data.lpDDSurface, &alphaView, flatAddress, false)) {
 			alphaSurface = true;
@@ -2384,17 +2609,49 @@ static void npdisp_ddraw_copyRowSrcColorKey(UINT8* dst, const UINT8* src, SINT32
 
 	switch (bytesPerPixel) {
 	case 1:
-		for (SINT32 x = 0; x < width; ++x) {
-			const UINT32 pixel = src[x];
-			if (pixel < low || pixel > high) dst[x] = src[x];
+		if (low > 0xffU) {
+			memcpy(dst, src, (size_t)width);
+		}
+		else if (low == 0 && high >= 0xffU) {
+			return;
+		}
+		else if (low == high) {
+			const UINT8 key = (UINT8)low;
+			for (SINT32 x = 0; x < width; ++x) {
+				const UINT8 pixel = src[x];
+				if (pixel != key) dst[x] = pixel;
+			}
+		}
+		else {
+			for (SINT32 x = 0; x < width; ++x) {
+				const UINT32 pixel = src[x];
+				if (pixel < low || pixel > high) dst[x] = (UINT8)pixel;
+			}
 		}
 		break;
 	case 2:
-		for (SINT32 x = 0; x < width; ++x) {
-			const UINT8* s = src + (size_t)x * 2;
-			UINT8* d = dst + (size_t)x * 2;
-			const UINT32 pixel = (UINT32)s[0] | ((UINT32)s[1] << 8);
-			if (pixel < low || pixel > high) { d[0] = s[0]; d[1] = s[1]; }
+		if (low > 0xffffU) {
+			memcpy(dst, src, (size_t)width * 2U);
+		}
+		else if (low == 0 && high >= 0xffffU) {
+			return;
+		}
+		else {
+			const UINT16* s = (const UINT16*)src;
+			UINT16* d = (UINT16*)dst;
+			if (low == high) {
+				const UINT16 key = (UINT16)low;
+				for (SINT32 x = 0; x < width; ++x) {
+					const UINT16 pixel = s[x];
+					if (pixel != key) d[x] = pixel;
+				}
+			}
+			else {
+				for (SINT32 x = 0; x < width; ++x) {
+					const UINT32 pixel = s[x];
+					if (pixel < low || pixel > high) d[x] = (UINT16)pixel;
+				}
+			}
 		}
 		break;
 	case 3:
@@ -2406,13 +2663,27 @@ static void npdisp_ddraw_copyRowSrcColorKey(UINT8* dst, const UINT8* src, SINT32
 		}
 		break;
 	case 4:
-		for (SINT32 x = 0; x < width; ++x) {
-			const UINT8* s = src + (size_t)x * 4;
-			UINT8* d = dst + (size_t)x * 4;
-			const UINT32 pixel = (UINT32)s[0] | ((UINT32)s[1] << 8) | ((UINT32)s[2] << 16) | ((UINT32)s[3] << 24);
-			if (pixel < low || pixel > high) { d[0] = s[0]; d[1] = s[1]; d[2] = s[2]; d[3] = s[3]; }
+	{
+		const UINT32* s = (const UINT32*)src;
+		UINT32* d = (UINT32*)dst;
+		if (low == high) {
+			const UINT32 key = low;
+			for (SINT32 x = 0; x < width; ++x) {
+				const UINT32 pixel = s[x];
+				if (pixel != key) d[x] = pixel;
+			}
+		}
+		else if (low == 0 && high == 0xffffffffUL) {
+			return;
+		}
+		else {
+			for (SINT32 x = 0; x < width; ++x) {
+				const UINT32 pixel = s[x];
+				if (pixel < low || pixel > high) d[x] = pixel;
+			}
 		}
 		break;
+	}
 	}
 }
 
@@ -3022,6 +3293,110 @@ static bool npdisp_ddraw_setupAlphaChannel(const NPDISP_DDHAL_BLTDATA* data, boo
 }
 
 #if defined(SUPPORT_NPDISP_D3D)
+static bool npdisp_ddraw_textureFormatsEqual(const NPDISP_DDPIXELFORMAT* first, const NPDISP_DDPIXELFORMAT* second)
+{
+	if (!first || !second) return false;
+	return first->dwFlags == second->dwFlags && first->dwFourCC == second->dwFourCC &&
+		first->dwRGBBitCount == second->dwRGBBitCount && first->dwRBitMask == second->dwRBitMask &&
+		first->dwGBitMask == second->dwGBitMask && first->dwBBitMask == second->dwBBitMask &&
+		first->dwRGBAlphaBitMask == second->dwRGBAlphaBitMask;
+}
+
+static UINT32 npdisp_ddraw_bltSystemTextureCopy(UINT32 lpDataAddr, NPDISP_DDHAL_BLTDATA* data, bool flatAddress)
+{
+	NPDISP_DDSURFACE_VIEW dstView = { 0 };
+	NPDISP_DDSURFACE_VIEW srcView = { 0 };
+	NPDISP_DDPIXELFORMAT dstFormat = { 0 };
+	NPDISP_DDPIXELFORMAT srcFormat = { 0 };
+	NPDISP_DDRAWI_DDRAWSURFACE_GBL_BLT srcGbl = { 0 };
+	UINT32 bytesPerPixel;
+	UINT32 srcBytesPerPixel = 0;
+	SINT32 width;
+	SINT32 height;
+	UINT8* row = NULL;
+
+	if (!data || !flatAddress || !data->lpDDSrcSurface ||
+		!npdisp_ddraw_getSystemTextureSurface(data->lpDDDestSurface, &dstView, &dstFormat, true)) return NPDISP_DDHAL_DRIVER_NOTHANDLED;
+	if (!npdisp_ddraw_getSystemTextureSurface(data->lpDDSrcSurface, &srcView, &srcFormat, true)) {
+		if (npdisp_ddraw_getTextureSurface(data->lpDDSrcSurface, &srcView, &srcBytesPerPixel, true)) {
+			if (!npdisp_ddraw_readGuest(&srcGbl, srcView.lcl.lpGbl, sizeof(srcGbl), true)) return NPDISP_DDHAL_DRIVER_NOTHANDLED;
+			if (srcView.lcl.dwFlags & NPDISP_DDRAWISURF_HASPIXELFORMAT) srcFormat = srcGbl.ddpfSurface;
+			else {
+				srcFormat.dwSize = sizeof(srcFormat);
+				srcFormat.dwFlags = NPDISP_DDPF_RGB;
+				srcFormat.dwRGBBitCount = 16U;
+				srcFormat.dwRBitMask = 0x0000f800UL;
+				srcFormat.dwGBitMask = 0x000007e0UL;
+				srcFormat.dwBBitMask = 0x0000001fUL;
+			}
+		}
+		else {
+			if (!npdisp_ddraw_getSurfaceEx(data->lpDDSrcSurface, &srcView, true, true) || srcView.fourCC ||
+				!npdisp_ddraw_pixelFormatMatchesDisplay(&dstFormat) ||
+				npdisp_ddraw_bytesPerPixel() != npdisp_ddraw_textureBytesPerPixel(&dstFormat)) return NPDISP_DDHAL_DRIVER_NOTHANDLED;
+			if (srcView.lcl.dwFlags & NPDISP_DDRAWISURF_HASPIXELFORMAT) {
+				if (!npdisp_ddraw_readGuest(&srcGbl, srcView.lcl.lpGbl, sizeof(srcGbl), true)) return NPDISP_DDHAL_DRIVER_NOTHANDLED;
+				srcFormat = srcGbl.ddpfSurface;
+				if (!npdisp_ddraw_pixelFormatMatchesDisplay(&srcFormat)) return NPDISP_DDHAL_DRIVER_NOTHANDLED;
+			}
+			else srcFormat = dstFormat;
+		}
+	}
+	if (!npdisp_ddraw_textureFormatsEqual(&dstFormat, &srcFormat)) return NPDISP_DDHAL_DRIVER_NOTHANDLED;
+
+	bytesPerPixel = npdisp_ddraw_textureBytesPerPixel(&dstFormat);
+	if (!bytesPerPixel || (srcBytesPerPixel && bytesPerPixel != srcBytesPerPixel) || data->IsClipped ||
+		(data->dwFlags & ~(NPDISP_DDBLT_ASYNC | NPDISP_DDBLT_WAIT | NPDISP_DDBLT_ROP))) return NPDISP_DDHAL_DRIVER_NOTHANDLED;
+	if ((data->dwFlags & NPDISP_DDBLT_ROP) && npdisp_ddraw_getRop3(data->bltFX.dwROP) != 0xcc) return NPDISP_DDHAL_DRIVER_NOTHANDLED;
+	if (data->rSrc.left < 0 || data->rSrc.top < 0 || data->rSrc.right > (SINT32)srcView.width || data->rSrc.bottom > (SINT32)srcView.height ||
+		data->rDest.left < 0 || data->rDest.top < 0 || data->rDest.right > (SINT32)dstView.width || data->rDest.bottom > (SINT32)dstView.height ||
+		data->rSrc.left >= data->rSrc.right || data->rSrc.top >= data->rSrc.bottom ||
+		data->rDest.left >= data->rDest.right || data->rDest.top >= data->rDest.bottom) return NPDISP_DDHAL_DRIVER_NOTHANDLED;
+
+	width = data->rSrc.right - data->rSrc.left;
+	height = data->rSrc.bottom - data->rSrc.top;
+	if (data->rDest.right - data->rDest.left != width || data->rDest.bottom - data->rDest.top != height ||
+		(UINT64)(UINT32)width * bytesPerPixel > 0x7fffffffULL) return NPDISP_DDHAL_DRIVER_NOTHANDLED;
+
+	row = (UINT8*)malloc((size_t)(UINT32)width * bytesPerPixel);
+	if (!row) return NPDISP_DDHAL_DRIVER_NOTHANDLED;
+	for (SINT32 y = 0; y < height; ++y) {
+		UINT32 srcAddr;
+		UINT32 dstAddr;
+		UINT64 srcOffset = (UINT64)(UINT32)(data->rSrc.top + y) * (UINT32)srcView.pitch +
+			(UINT64)(UINT32)data->rSrc.left * bytesPerPixel;
+		UINT64 dstOffset = (UINT64)(UINT32)(data->rDest.top + y) * (UINT32)dstView.pitch +
+			(UINT64)(UINT32)data->rDest.left * bytesPerPixel;
+		if (srcOffset > 0xffffffffULL || dstOffset > 0xffffffffULL ||
+			(UINT64)srcView.linearBase + srcOffset > 0xffffffffULL ||
+			(UINT64)dstView.linearBase + dstOffset > 0xffffffffULL) {
+			free(row);
+			return NPDISP_DDHAL_DRIVER_NOTHANDLED;
+		}
+		srcAddr = srcView.linearBase + (UINT32)srcOffset;
+		dstAddr = dstView.linearBase + (UINT32)dstOffset;
+		if (srcView.systemMemory) {
+			if (!npdisp_ddraw_readGuest(row, srcAddr, (int)((UINT32)width * bytesPerPixel), true)) {
+				free(row);
+				return NPDISP_DDHAL_DRIVER_NOTHANDLED;
+			}
+		}
+		else memcpy(row, srcView.hostBase + (size_t)srcOffset, (size_t)(UINT32)width * bytesPerPixel);
+		if (!npdisp_ddraw_writeGuest(row, dstAddr, (int)((UINT32)width * bytesPerPixel), true)) {
+			free(row);
+			return NPDISP_DDHAL_DRIVER_NOTHANDLED;
+		}
+	}
+	free(row);
+
+	data->ddRVal = 0;
+	if (!npdisp_ddraw_writeGuest(data, lpDataAddr, sizeof(*data), true)) return NPDISP_DDHAL_DRIVER_NOTHANDLED;
+	TRACEOUT11(("NPDISP11 DD_TEXTURE_SYSMEM_COPY src=%08x dst=%08x size=%dx%d srcpitch=%d dstpitch=%d pfflags=%08x masks=%08x/%08x/%08x/%08x flags=%08x",
+		srcView.linearBase, dstView.linearBase, width, height, srcView.pitch, dstView.pitch, dstFormat.dwFlags,
+		dstFormat.dwRBitMask, dstFormat.dwGBitMask, dstFormat.dwBBitMask, dstFormat.dwRGBAlphaBitMask, data->dwFlags));
+	return NPDISP_DDHAL_DRIVER_HANDLED;
+}
+
 static UINT32 npdisp_ddraw_bltTextureUpload(UINT32 lpDataAddr, NPDISP_DDHAL_BLTDATA* data, bool flatAddress)
 {
 	NPDISP_DDSURFACE_VIEW dstView = { 0 };
@@ -3124,19 +3499,65 @@ static UINT32 npdisp_func_DD_Blt(UINT32 lpDataAddr, bool flatAddress)
 	bool mirrorX = false;
 	bool mirrorY = false;
 	bool drewAny = false;
+	const bool perfTiming = ((++npdisp_dd_perfBltSequence & 0x7fU) == 0);
+	UINT64 perfT0 = perfTiming ? npdisp_dd_perfCounter() : 0;
+	UINT64 perfT1 = 0;
+	UINT64 perfT2 = 0;
+	UINT64 perfT3 = 0;
+	UINT64 perfT4 = 0;
+	UINT64 perfT5 = 0;
 
 	if (!lpDataAddr || !bytesPerPixel ||
 		!npdisp_ddraw_readGuest(&data, lpDataAddr, sizeof(data), flatAddress)) return NPDISP_DDHAL_DRIVER_NOTHANDLED;
+	if (perfTiming) perfT1 = npdisp_dd_perfCounter();
+	{
+		SINT32 dw = data.rDest.right - data.rDest.left;
+		SINT32 dh = data.rDest.bottom - data.rDest.top;
+		SINT32 sw = data.rSrc.right - data.rSrc.left;
+		SINT32 sh = data.rSrc.bottom - data.rSrc.top;
+		UINT32 pixels = (dw > 0 && dh > 0) ? (UINT32)dw * (UINT32)dh : 0;
+		npdisp_dd_perf.bltCalls++;
+		npdisp_dd_perf.bltPixels += pixels;
+		if (pixels <= 256U) npdisp_dd_perf.bltSmall++;
+		else if (pixels <= 16384U) npdisp_dd_perf.bltMedium++;
+		else npdisp_dd_perf.bltLarge++;
+		if (data.dwFlags & NPDISP_DDBLT_COLORFILL) npdisp_dd_perf.bltColorFill++;
+		if (data.dwFlags & (NPDISP_DDBLT_KEYSRC | NPDISP_DDBLT_KEYSRCOVERRIDE)) npdisp_dd_perf.bltSrcKey++;
+		if (data.dwFlags & (NPDISP_DDBLT_KEYDEST | NPDISP_DDBLT_KEYDESTOVERRIDE)) npdisp_dd_perf.bltDstKey++;
+		if (dw > 0 && dh > 0 && sw > 0 && sh > 0 && (dw != sw || dh != sh)) npdisp_dd_perf.bltStretch++;
+		if ((data.dwFlags & NPDISP_DDBLT_ROP) && npdisp_ddraw_getRop3(data.bltFX.dwROP) != 0xcc) npdisp_dd_perf.bltRop++;
+	}
+#if defined(SUPPORT_IA32_HAXM)
+	if (npdisp_ddraw_isSystemMemorySurface(data.lpDDDestSurface, flatAddress) ||
+		(data.lpDDSrcSurface && npdisp_ddraw_isSystemMemorySurface(data.lpDDSrcSurface, flatAddress))) {
+		TRACEOUT11(("NPDISP11 DD_BLT_HAXM_HEL_SYSMEM dst=%08x src=%08x flags=%08x",
+			data.lpDDDestSurface, data.lpDDSrcSurface, data.dwFlags));
+		return NPDISP_DDHAL_DRIVER_NOTHANDLED;
+	}
+#endif
+#if defined(SUPPORT_IA32_WHPX)
+	if (npdisp_ddraw_isSystemMemorySurface(data.lpDDDestSurface, flatAddress) ||
+		(data.lpDDSrcSurface && npdisp_ddraw_isSystemMemorySurface(data.lpDDSrcSurface, flatAddress))) {
+		TRACEOUT11(("NPDISP11 DD_BLT_WHPX_HEL_SYSMEM dst=%08x src=%08x flags=%08x",
+			data.lpDDDestSurface, data.lpDDSrcSurface, data.dwFlags));
+		return NPDISP_DDHAL_DRIVER_NOTHANDLED;
+	}
+#endif
 #if defined(SUPPORT_NPDISP_D3D)
 	if (flatAddress) {
+		const UINT32 systemTextureResult = npdisp_ddraw_bltSystemTextureCopy(lpDataAddr, &data, true);
+		if (systemTextureResult == NPDISP_DDHAL_DRIVER_HANDLED) return systemTextureResult;
 		const UINT32 textureUploadResult = npdisp_ddraw_bltTextureUpload(lpDataAddr, &data, true);
 		if (textureUploadResult == NPDISP_DDHAL_DRIVER_HANDLED) return textureUploadResult;
 	}
 #endif
 	if (!npdisp_ddraw_getSurfaceEx(data.lpDDDestSurface, &dstView, flatAddress, true)) {
-		TRACEOUT11(("NPDISP11 DD_BLT_REJECT stage=dst-surface dst=%08x flags=%08x", data.lpDDDestSurface, data.dwFlags));
+		TRACEOUT11(("NPDISP11 DD_BLT_REJECT stage=dst-surface dst=%08x src=%08x flags=%08x rop=%08x rect=%d,%d-%d,%d",
+			data.lpDDDestSurface, data.lpDDSrcSurface, data.dwFlags, data.bltFX.dwROP,
+			data.rDest.left, data.rDest.top, data.rDest.right, data.rDest.bottom));
 		return NPDISP_DDHAL_DRIVER_NOTHANDLED;
 	}
+	if (perfTiming) perfT2 = npdisp_dd_perfCounter();
 
 	const UINT32 commonFlags = NPDISP_DDBLT_ASYNC | NPDISP_DDBLT_WAIT;
 	if (data.dwFlags & NPDISP_DDBLT_COLORFILL) {
@@ -3174,6 +3595,12 @@ static UINT32 npdisp_func_DD_Blt(UINT32 lpDataAddr, bool flatAddress)
 					rop3, patternSurfaceAddr, data.dwROPFlags, flatAddress ? 1U : 0U));
 				return NPDISP_DDHAL_DRIVER_NOTHANDLED;
 			}
+#if defined(SUPPORT_IA32_HAXM)
+			if (patternView.systemMemory) return NPDISP_DDHAL_DRIVER_NOTHANDLED;
+#endif
+#if defined(SUPPORT_IA32_WHPX)
+			if (patternView.systemMemory) return NPDISP_DDHAL_DRIVER_NOTHANDLED;
+#endif
 			if (!npdisp_ddraw_snapshotPattern(&patternView, bytesPerPixel, flatAddress, patternPixels,
 				(size_t)NPDISP_DD_PATTERN_SIZE * bytesPerPixel)) {
 				TRACEOUT11(("NPDISP11 DD_BLT_PATTERN_SNAPSHOT_FAIL rop=%02x pattern=%08x caps=%08x fp=%08x size=%ux%u pitch=%d sysmem=%u",
@@ -3234,8 +3661,17 @@ static UINT32 npdisp_func_DD_Blt(UINT32 lpDataAddr, bool flatAddress)
 			if (!npdisp_ddraw_setupAlphaChannel(&data, true, data.lpDDSrcSurface, &srcView, flatAddress, &srcAlpha) ||
 				!npdisp_ddraw_setupAlphaChannel(&data, false, data.lpDDDestSurface, &dstView, flatAddress, &dstAlpha) ||
 				(!srcAlpha.enabled && !dstAlpha.enabled)) return NPDISP_DDHAL_DRIVER_NOTHANDLED;
+#if defined(SUPPORT_IA32_HAXM)
+			if ((srcAlpha.enabled && !srcAlpha.constant && srcAlpha.surface.systemMemory) ||
+				(dstAlpha.enabled && !dstAlpha.constant && dstAlpha.surface.systemMemory)) return NPDISP_DDHAL_DRIVER_NOTHANDLED;
+#endif
+#if defined(SUPPORT_IA32_WHPX)
+			if ((srcAlpha.enabled && !srcAlpha.constant && srcAlpha.surface.systemMemory) ||
+				(dstAlpha.enabled && !dstAlpha.constant && dstAlpha.surface.systemMemory)) return NPDISP_DDHAL_DRIVER_NOTHANDLED;
+#endif
 		}
 	}
+	if (perfTiming) perfT3 = npdisp_dd_perfCounter();
 
 	if (dstView.fourCC || (sourceRequired && srcView.fourCC)) {
 		TRACEOUT11(("NPDISP11 DD_BLT_REJECT stage=fourcc dst=%08x src=%08x", dstView.fourCC, sourceRequired ? srcView.fourCC : 0));
@@ -3369,6 +3805,7 @@ static UINT32 npdisp_func_DD_Blt(UINT32 lpDataAddr, bool flatAddress)
 		}
 	}
 
+	if (perfTiming) perfT4 = npdisp_dd_perfCounter();
 	for (UINT32 i = 0; i < execRectCount; ++i) {
 		NPDISP_DDSURFACE_VIEW dstExecView = dstView;
 		const NPDISP_DDSURFACE_VIEW* srcRectView = (sourceRequired && srcView.systemMemory) ? &srcSystemViews[i] : &srcExecView;
@@ -3464,6 +3901,7 @@ static UINT32 npdisp_func_DD_Blt(UINT32 lpDataAddr, bool flatAddress)
 		if (dstView.apertureOffset != 0 && dstView.apertureOffset == npdisp.mm_ddOverlayOffset && npdisp.mm_ddOverlayVisible) npdisp_dd_overlayDirty();
 	}
 
+	if (perfTiming) perfT5 = npdisp_dd_perfCounter();
 	if (sourceSnapshot) free(sourceSnapshot);
 	npdisp_ddraw_freeSystemSourceMirrors(srcNeedRects, srcSystemViews, srcSystemBuffers, execRectCount);
 	if (execRects) free(execRects);
@@ -3494,6 +3932,16 @@ static UINT32 npdisp_func_DD_Blt(UINT32 lpDataAddr, bool flatAddress)
 	}
 	data.ddRVal = 0;
 	if (!npdisp_ddraw_writeGuest(&data, lpDataAddr, sizeof(data), flatAddress)) return NPDISP_DDHAL_DRIVER_NOTHANDLED;
+	if (perfTiming) {
+		UINT64 perfT6 = npdisp_dd_perfCounter();
+		npdisp_dd_perf.bltTimingSamples++;
+		npdisp_dd_perf.bltTimingRead += perfT1 - perfT0;
+		npdisp_dd_perf.bltTimingDst += perfT2 - perfT1;
+		npdisp_dd_perf.bltTimingSrcKey += perfT3 - perfT2;
+		npdisp_dd_perf.bltTimingPrepare += perfT4 - perfT3;
+		npdisp_dd_perf.bltTimingPixels += perfT5 - perfT4;
+		npdisp_dd_perf.bltTimingWrite += perfT6 - perfT5;
+	}
 	return NPDISP_DDHAL_DRIVER_HANDLED;
 }
 
@@ -3506,7 +3954,7 @@ static UINT32 npdisp_func_DD_Flip(UINT32 lpDataAddr, bool flatAddress)
 	NPDISP_DDSURFACE_VIEW currentView = { 0 };
 	NPDISP_DDSURFACE_VIEW targetView = { 0 };
 
-	if (!lpDataAddr || npdisp.version < 13 ||
+	if (!lpDataAddr || (!npdisp.w2kLfb && npdisp.version < 13) ||
 		!npdisp_ddraw_readGuest(&data, lpDataAddr, sizeof(data), flatAddress) ||
 		!npdisp_ddraw_getSurface(data.lpSurfCurr, &currentView, flatAddress) ||
 		!npdisp_ddraw_getSurface(data.lpSurfTarg, &targetView, flatAddress)) {
@@ -3594,7 +4042,7 @@ static UINT32 npdisp_func_DD_GetFlipStatus(UINT32 lpDataAddr, bool flatAddress)
 {
 	NPDISP_DDHAL_GETFLIPSTATUSDATA data = { 0 };
 
-	if (!lpDataAddr || npdisp.version < 13 ||
+	if (!lpDataAddr || (!npdisp.w2kLfb && npdisp.version < 13) ||
 		!npdisp_ddraw_readGuest(&data, lpDataAddr, sizeof(data), flatAddress)) {
 		return NPDISP_DDHAL_DRIVER_NOTHANDLED;
 	}
@@ -3856,6 +4304,10 @@ static UINT16 npdisp_dd_controlCreateDriverObject(UINT32 lpDestDevAddr, const NP
 				NPDISP_DDFXCAPS_OVERLAYSTRETCHX | NPDISP_DDFXCAPS_OVERLAYSTRETCHXN |
 				NPDISP_DDFXCAPS_OVERLAYSTRETCHY | NPDISP_DDFXCAPS_OVERLAYSTRETCHYN |
 				NPDISP_DDFXCAPS_OVERLAYMIRRORLEFTRIGHT | NPDISP_DDFXCAPS_OVERLAYMIRRORUPDOWN;
+			halInfo.ddCaps.dwCaps2 |= NPDISP_DDCAPS2_WIDESURFACES;
+#if defined(NPDISP_GAMMA_CAPS_PROBE)
+			if (npdisp.bpp >= 15) halInfo.ddCaps.dwCaps2 |= NPDISP_DDCAPS2_PRIMARYGAMMA;
+#endif
 			if (npdisp.bpp >= 15) {
 				halInfo.ddCaps.dwFXCaps |= NPDISP_DDFXCAPS_BLTALPHA;
 				halInfo.ddCaps.dwFXAlphaCaps = NPDISP_DDFXALPHACAPS_BLTALPHASURFACES | NPDISP_DDFXALPHACAPS_BLTALPHASURFACESNEG;
@@ -3865,10 +4317,21 @@ static UINT16 npdisp_dd_controlCreateDriverObject(UINT32 lpDestDevAddr, const NP
 			halInfo.ddCaps.ddsCaps.dwCaps = NPDISP_DDSCAPS_PRIMARYSURFACE;
 #if defined(SUPPORT_NPDISP_D3D)
 			if ((negotiatedFeatures & NPDISP_DDBRIDGE_FEATURE_D3D_HAL) && halInfo.GetDriverInfoAddr && npdisp.bpp >= 15) {
-				halInfo.ddCaps.dwCaps |= NPDISP_DDCAPS_3D | NPDISP_DDCAPS_CANBLTSYSMEM;
+				halInfo.ddCaps.dwCaps |= NPDISP_DDCAPS_3D;
+				halInfo.ddCaps.dwCaps2 |= NPDISP_DDCAPS2_CANRENDERWINDOWED;
 				halInfo.ddCaps.ddsCaps.dwCaps |= NPDISP_DDSCAPS_3DDEVICE;
-				halInfo.ddCaps.dwSVBCaps = NPDISP_DDCAPS_BLT;
-				halInfo.ddCaps.dwSVBRops[0xcc >> 5] = 1UL << (0xcc & 31);
+#if !defined(SUPPORT_IA32_HAXM) && !defined(SUPPORT_IA32_WHPX)
+				halInfo.ddCaps.dwCaps |= NPDISP_DDCAPS_CANBLTSYSMEM;
+				halInfo.ddCaps.dwCaps2 |= NPDISP_DDCAPS2_NOPAGELOCKREQUIRED;
+				halInfo.ddCaps.dwSVBCaps = NPDISP_DDCAPS_BLT | NPDISP_DDCAPS_BLTSTRETCH | NPDISP_DDCAPS_CANCLIP | NPDISP_DDCAPS_CANCLIPSTRETCHED;
+				halInfo.ddCaps.dwVSBCaps = halInfo.ddCaps.dwSVBCaps;
+				halInfo.ddCaps.dwSSBCaps = halInfo.ddCaps.dwSVBCaps;
+				for (UINT32 rop = 0; rop < 256; ++rop) {
+					halInfo.ddCaps.dwSVBRops[rop >> 5] |= 1UL << (rop & 31);
+					halInfo.ddCaps.dwVSBRops[rop >> 5] |= 1UL << (rop & 31);
+					halInfo.ddCaps.dwSSBRops[rop >> 5] |= 1UL << (rop & 31);
+				}
+#endif
 			}
 #endif
 			halInfo.ddCaps.dwMaxVisibleOverlays = 1;
@@ -4033,6 +4496,7 @@ UINT32 npdisp_dd_dispatchBridge(UINT32 callbackId, UINT32 lpDataAddr)
 {
 	UINT32 retValue = NPDISP_DDHAL_DRIVER_NOTHANDLED;
 	if (npdisp.acceleration < NPDISP_ACCEL_DIRECTDRAW) return retValue;
+	npdisp_dd_perf.bridgeCalls++;
 	switch (callbackId) {
 	case NPDISP_DDBRIDGE_CB_DD_GETDRIVERINFO:
 #if defined(SUPPORT_NPDISP_D3D)
@@ -4047,27 +4511,18 @@ UINT32 npdisp_dd_dispatchBridge(UINT32 callbackId, UINT32 lpDataAddr)
 	case NPDISP_DDBRIDGE_CB_DD_GETSCANLINE: retValue = npdisp_func_DD_GetScanLine(lpDataAddr, true); break;
 	case NPDISP_DDBRIDGE_CB_DD_FLIPTOGDI: retValue = npdisp_func_DD_FlipToGDISurface(lpDataAddr, true); break;
 	case NPDISP_DDBRIDGE_CB_SURF_DESTROY: retValue = npdisp_func_DD_DestroySurface(lpDataAddr, true); break;
-	case NPDISP_DDBRIDGE_CB_SURF_FLIP: retValue = npdisp_func_DD_Flip(lpDataAddr, true); break;
+	case NPDISP_DDBRIDGE_CB_SURF_FLIP: npdisp_dd_perf.flipCalls++; retValue = npdisp_func_DD_Flip(lpDataAddr, true); break;
 	case NPDISP_DDBRIDGE_CB_SURF_SETCLIPLIST: retValue = npdisp_func_DD_SetClipList(lpDataAddr, true); break;
-	case NPDISP_DDBRIDGE_CB_SURF_LOCK: retValue = npdisp_func_DD_Lock(lpDataAddr, true); break;
-	case NPDISP_DDBRIDGE_CB_SURF_UNLOCK: retValue = npdisp_func_DD_Unlock(lpDataAddr, true); break;
+	case NPDISP_DDBRIDGE_CB_SURF_LOCK: npdisp_dd_perf.lockCalls++; retValue = npdisp_func_DD_Lock(lpDataAddr, true); break;
+	case NPDISP_DDBRIDGE_CB_SURF_UNLOCK: npdisp_dd_perf.unlockCalls++; retValue = npdisp_func_DD_Unlock(lpDataAddr, true); break;
 	case NPDISP_DDBRIDGE_CB_SURF_BLT:
-	{
-		NPDISP_DDHAL_BLTDATA bltTrace = { 0 };
 		retValue = npdisp_func_DD_Blt(lpDataAddr, true);
-		if (npdisp_ddraw_readGuest(&bltTrace, lpDataAddr, sizeof(bltTrace), true)) {
-			TRACEOUT11(("NPDISP11 DD_BLT_TRACE ret=%u flags=%08x src=%08x dst=%08x srect=%d,%d-%d,%d drect=%d,%d-%d,%d rop=%08x ddfx=%08x ropflags=%08x clip=%u count=%u",
-				retValue, bltTrace.dwFlags, bltTrace.lpDDSrcSurface, bltTrace.lpDDDestSurface,
-				bltTrace.rSrc.left, bltTrace.rSrc.top, bltTrace.rSrc.right, bltTrace.rSrc.bottom,
-				bltTrace.rDest.left, bltTrace.rDest.top, bltTrace.rDest.right, bltTrace.rDest.bottom,
-				bltTrace.bltFX.dwROP, bltTrace.bltFX.dwDDFX, bltTrace.dwROPFlags, bltTrace.IsClipped, bltTrace.dwRectCnt));
-		}
+		if (retValue == NPDISP_DDHAL_DRIVER_HANDLED) npdisp_dd_perf.bltHandled++; else npdisp_dd_perf.bltNotHandled++;
 		break;
-	}
 	case NPDISP_DDBRIDGE_CB_SURF_SETCOLORKEY: retValue = npdisp_func_DD_SetColorKey(lpDataAddr, true); break;
 	case NPDISP_DDBRIDGE_CB_SURF_ADDATTACHED: retValue = npdisp_func_DD_AddAttachedSurface(lpDataAddr, true); break;
-	case NPDISP_DDBRIDGE_CB_SURF_GETBLTSTATUS: retValue = npdisp_func_DD_GetBltStatus(lpDataAddr, true); break;
-	case NPDISP_DDBRIDGE_CB_SURF_GETFLIPSTATUS: retValue = npdisp_func_DD_GetFlipStatus(lpDataAddr, true); break;
+	case NPDISP_DDBRIDGE_CB_SURF_GETBLTSTATUS: npdisp_dd_perf.getBltStatusCalls++; retValue = npdisp_func_DD_GetBltStatus(lpDataAddr, true); break;
+	case NPDISP_DDBRIDGE_CB_SURF_GETFLIPSTATUS: npdisp_dd_perf.getFlipStatusCalls++; retValue = npdisp_func_DD_GetFlipStatus(lpDataAddr, true); break;
 	case NPDISP_DDBRIDGE_CB_SURF_UPDATEOVERLAY: retValue = npdisp_func_DD_UpdateOverlay(lpDataAddr, true); break;
 	case NPDISP_DDBRIDGE_CB_SURF_SETOVERLAYPOS: retValue = npdisp_func_DD_SetOverlayPosition(lpDataAddr, true); break;
 	default:
@@ -4076,6 +4531,9 @@ UINT32 npdisp_dd_dispatchBridge(UINT32 callbackId, UINT32 lpDataAddr)
 #endif
 		break;
 	}
+	if (retValue == NPDISP_DDHAL_DRIVER_HANDLED) npdisp_dd_perf.handledCalls++;
+	else npdisp_dd_perf.notHandledCalls++;
+	if ((npdisp_dd_perf.bridgeCalls & 0x03ffU) == 0) npdisp_dd_perfReport();
 	TRACEOUT11(("NPDISP11 DD32_BRIDGE id=%04x data=%08x ret=%08x", callbackId, lpDataAddr, retValue));
 	return retValue;
 }

@@ -368,7 +368,7 @@ void bios0x1a_pci(void) {
 	oldDX = CPU_DX;
 	
 	if(pcidev.enable){
-#if !defined(SUPPORT_IA32_HAXM)
+#if !defined(SUPPORT_IA32_HAXM) && !defined(SUPPORT_IA32_WHPX)
 		// XXX: np2 BIOSがDXレジスタをPUSH/POPしてしまうので、DXレジスタの内容をスタックから強引に拾ってくる
 		CPU_DX = cpu_vmemoryread_w(CPU_SS_INDEX, CPU_SP + 2);
 #endif
@@ -376,7 +376,7 @@ void bios0x1a_pci(void) {
 		// 16bit PCI BIOS処理
 		bios0x1a_pci_part(0);
 		
-#if !defined(SUPPORT_IA32_HAXM)
+#if !defined(SUPPORT_IA32_HAXM) && !defined(SUPPORT_IA32_WHPX)
 		// XXX: np2 BIOSがDXレジスタをPUSH/POPしてしまうので、DXレジスタの内容をスタックに強引に書き込む
 		cpu_vmemorywrite_w(CPU_SS_INDEX, CPU_SP + 2, (UINT16)CPU_DX);
 	
@@ -391,7 +391,7 @@ void bios0x1a_pcipnp(void) {
 	oldDX = CPU_DX;
 	
 	if(pcidev.enable){
-#if !defined(SUPPORT_IA32_HAXM)
+#if !defined(SUPPORT_IA32_HAXM) && !defined(SUPPORT_IA32_WHPX)
 		// XXX: np2 BIOSがDXレジスタをPUSH/POPしてしまうので、DXレジスタの内容をスタックから強引に拾ってくる
 		CPU_DX = cpu_vmemoryread_w(CPU_SS_INDEX, CPU_SP + 2);
 #endif
@@ -459,7 +459,7 @@ void bios0x1a_pcipnp(void) {
 				break;
 		}
 		
-#if !defined(SUPPORT_IA32_HAXM)
+#if !defined(SUPPORT_IA32_HAXM) && !defined(SUPPORT_IA32_WHPX)
 		// XXX: np2 BIOSがDXレジスタをPUSH/POPしてしまうので、DXレジスタの内容をスタックに強引に書き込む
 		cpu_vmemorywrite_w(CPU_SS_INDEX, CPU_SP + 2, (UINT16)CPU_DX);
 	

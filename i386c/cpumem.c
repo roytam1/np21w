@@ -42,6 +42,9 @@ static void trace_fmt_ex(const char *fmt, ...)
 #endif
 #if defined(SUPPORT_WAB_NPDISP)
 #include	"wab/npdisp.h"
+#if defined(SUPPORT_NPDISP_W2K)
+#include	"wab/npdisp_w2k.h"
+#endif
 #endif
 #if defined(SUPPORT_WAB_GA1280A)
 #include	"wab/ga1280a.h"
@@ -53,11 +56,19 @@ static void trace_fmt_ex(const char *fmt, ...)
 #include	"i386hax/haxfunc.h"
 #include	"i386hax/haxcore.h"
 #endif
+#if defined(SUPPORT_IA32_WHPX)
+#include	"i386whpx/whpxfunc.h"
+#include	"i386whpx/whpxcore.h"
+#endif
 
 
 #if defined(SUPPORT_IA32_HAXM)
 	UINT8	*mem = NULL; // Alloc in pccore_mem_malloc()
-#else
+#endif
+#if defined(SUPPORT_IA32_WHPX)
+	UINT8	*mem = NULL; // Alloc in pccore_mem_malloc()
+#endif
+#if !defined(SUPPORT_IA32_HAXM) && !defined(SUPPORT_IA32_WHPX)
 	UINT8	mem[0x200000];
 #endif
 
@@ -551,6 +562,23 @@ const VACCTBL	*vacc;
 			}
 		}
 #endif
+#if defined(SUPPORT_IA32_WHPX)
+		if (np2whpx.enable) {
+			if ((func & 0x0f) < 8) {
+				if(np2whpxcore.lastVRAMMMIO){
+					i386whpx_vm_setmemoryarea(mem+0xA8000, 0xA8000, 0x8000);
+					i386whpx_vm_setmemoryarea(mem+0xB0000, 0xB0000, 0x10000);
+					np2whpxcore.lastVRAMMMIO = 0;
+				}
+			}else{
+				if(!np2whpxcore.lastVRAMMMIO){
+					i386whpx_vm_removememoryarea(mem+0xA8000, 0xA8000, 0x8000);
+					i386whpx_vm_removememoryarea(mem+0xB0000, 0xB0000, 0x10000);
+					np2whpxcore.lastVRAMMMIO = 1;
+				}
+			}
+		}
+#endif
 
 		memfn0.rd8[0xa8000 >> 15] = vacc->rd8;
 		memfn0.rd8[0xb0000 >> 15] = vacc->rd8;
@@ -599,6 +627,15 @@ const VACCTBL	*vacc;
 				i386hax_vm_removememoryarea(mem+0xA8000, 0xA8000, 0x8000);
 				i386hax_vm_removememoryarea(mem+0xB0000, 0xB0000, 0x10000);
 				np2haxcore.lastVRAMMMIO = 1;
+			}
+		}
+#endif
+#if defined(SUPPORT_IA32_WHPX)
+		if (np2whpx.enable) {
+			if(!np2whpxcore.lastVRAMMMIO){
+				i386whpx_vm_removememoryarea(mem+0xA8000, 0xA8000, 0x8000);
+				i386whpx_vm_removememoryarea(mem+0xB0000, 0xB0000, 0x10000);
+				np2whpxcore.lastVRAMMMIO = 1;
 			}
 		}
 #endif
@@ -722,6 +759,9 @@ static const MEMFNF memfnf = {
 // ----- slowî≈ fastÇ≈èàóùÇ≥ÇÍÇÈïîï™ÇÕè»ó™Ç≥ÇÍÇƒÇ¢ÇÈÇÃÇ≈ÅAfastî≈Ç©ÇÁÇÃåƒÇ—èoÇµÇÃÇ›â¬î\
 
 static REG8 MEMCALL memp_read8_slow(UINT32 address) {
+#if defined(SUPPORT_WAB_NPDISP) && defined(SUPPORT_NPDISP_W2K)
+	REG8 npdisp_w2k_value;
+#endif
 #if defined(SUPPORT_WAB_GA1280A)
 	{
 		REG8 retValue;
@@ -810,6 +850,11 @@ static REG8 MEMCALL memp_read8_slow(UINT32 address) {
 	else if (npdisp.mm_vramPhysicalAddr && npdisp.mm_screenPtr && npdisp.mm_vramPhysicalAddr <= address && address < npdisp.mm_vramPhysicalAddr + npdisp.mm_screenSize) {
 		return(npdisp.mm_screenPtr[address - npdisp.mm_vramPhysicalAddr]);
 	}
+#if defined(SUPPORT_NPDISP_W2K)
+	else if (npdisp_w2k_memp_try_read8(address, &npdisp_w2k_value)) {
+		return npdisp_w2k_value;
+	}
+#endif
 	else if (npdisp.mm_vramPhysicalAddr && npdisp.mm_ddOffscreenPtr &&
 		npdisp.mm_vramPhysicalAddr + NPDISP_DD_OFFSCREEN_OFFSET <= address &&
 		address < npdisp.mm_vramPhysicalAddr + NPDISP_DD_APERTURE_SIZE) {
@@ -824,6 +869,9 @@ static REG8 MEMCALL memp_read8_slow(UINT32 address) {
 }
 
 static REG16 MEMCALL memp_read16_slow(UINT32 address) {
+#if defined(SUPPORT_WAB_NPDISP) && defined(SUPPORT_NPDISP_W2K)
+	REG16 npdisp_w2k_value;
+#endif
 	REG16 ret;
 
 	if ((address + 1) & 0x7fff) {			// non 32kb boundary
@@ -915,6 +963,11 @@ static REG16 MEMCALL memp_read16_slow(UINT32 address) {
 		else if (npdisp.mm_vramPhysicalAddr && npdisp.mm_screenPtr && npdisp.mm_vramPhysicalAddr <= address && address < npdisp.mm_vramPhysicalAddr + npdisp.mm_screenSize) {
 			return(LOADINTELWORD(npdisp.mm_screenPtr + (address - npdisp.mm_vramPhysicalAddr)));
 		}
+	#if defined(SUPPORT_NPDISP_W2K)
+		else if (npdisp_w2k_memp_try_read16(address, &npdisp_w2k_value)) {
+			return npdisp_w2k_value;
+		}
+	#endif
 		else if (npdisp.mm_vramPhysicalAddr && npdisp.mm_ddOffscreenPtr &&
 			npdisp.mm_vramPhysicalAddr + NPDISP_DD_OFFSCREEN_OFFSET <= address &&
 			address <= npdisp.mm_vramPhysicalAddr + NPDISP_DD_APERTURE_SIZE - 2) {
@@ -935,6 +988,9 @@ static REG16 MEMCALL memp_read16_slow(UINT32 address) {
 }
 
 static UINT32 MEMCALL memp_read32_slow(UINT32 address) {
+#if defined(SUPPORT_WAB_NPDISP) && defined(SUPPORT_NPDISP_W2K)
+	UINT32 npdisp_w2k_value;
+#endif
 	UINT32 ret;
 
 	if ((address & 0x7fff) <= 0x8000 - 4) {			// non 32kb boundary
@@ -1026,6 +1082,11 @@ static UINT32 MEMCALL memp_read32_slow(UINT32 address) {
 		else if (npdisp.mm_vramPhysicalAddr && npdisp.mm_screenPtr && npdisp.mm_vramPhysicalAddr <= address && address < npdisp.mm_vramPhysicalAddr + npdisp.mm_screenSize) {
 			return(LOADINTELDWORD(npdisp.mm_screenPtr + (address - npdisp.mm_vramPhysicalAddr)));
 		}
+	#if defined(SUPPORT_NPDISP_W2K)
+		else if (npdisp_w2k_memp_try_read32(address, &npdisp_w2k_value)) {
+			return npdisp_w2k_value;
+		}
+	#endif
 		else if (npdisp.mm_vramPhysicalAddr && npdisp.mm_ddOffscreenPtr &&
 			npdisp.mm_vramPhysicalAddr + NPDISP_DD_OFFSCREEN_OFFSET <= address &&
 			address <= npdisp.mm_vramPhysicalAddr + NPDISP_DD_APERTURE_SIZE - 4) {
@@ -1277,7 +1338,15 @@ static void MEMCALL memp_write8_slow(UINT32 address, REG8 value) {
 #if defined(SUPPORT_WAB_NPDISP)
 	else if (npdisp.mm_vramPhysicalAddr && npdisp.mm_screenPtr && npdisp.mm_vramPhysicalAddr <= address && address < npdisp.mm_vramPhysicalAddr + npdisp.mm_screenSize) {
 		npdisp.mm_screenPtr[address - npdisp.mm_vramPhysicalAddr] = value;
+		#if defined(SUPPORT_NPDISP_W2K)
+		if (npdisp_w2k_isActive()) npdisp.updated = 1;
+		#endif
 	}
+	#if defined(SUPPORT_NPDISP_W2K)
+	else if (npdisp_w2k_memp_try_write8(address, value)) {
+		return;
+	}
+	#endif
 	else if (npdisp.mm_vramPhysicalAddr && npdisp.mm_ddOffscreenPtr &&
 		npdisp.mm_vramPhysicalAddr + NPDISP_DD_OFFSCREEN_OFFSET <= address &&
 		address < npdisp.mm_vramPhysicalAddr + NPDISP_DD_APERTURE_SIZE) {
@@ -1395,7 +1464,15 @@ static void MEMCALL memp_write16_slow(UINT32 address, REG16 value) {
 #if defined(SUPPORT_WAB_NPDISP)
 		else if (npdisp.mm_vramPhysicalAddr && npdisp.mm_screenPtr && npdisp.mm_vramPhysicalAddr <= address && address < npdisp.mm_vramPhysicalAddr + npdisp.mm_screenSize) {
 			STOREINTELWORD(npdisp.mm_screenPtr + (address - npdisp.mm_vramPhysicalAddr), value);
+			#if defined(SUPPORT_NPDISP_W2K)
+			if (npdisp_w2k_isActive()) npdisp.updated = 1;
+			#endif
 		}
+		#if defined(SUPPORT_NPDISP_W2K)
+		else if (npdisp_w2k_memp_try_write16(address, value)) {
+			return;
+		}
+		#endif
 		else if (npdisp.mm_vramPhysicalAddr && npdisp.mm_ddOffscreenPtr &&
 			npdisp.mm_vramPhysicalAddr + NPDISP_DD_OFFSCREEN_OFFSET <= address &&
 			address <= npdisp.mm_vramPhysicalAddr + NPDISP_DD_APERTURE_SIZE - 2) {
@@ -1518,7 +1595,15 @@ static void MEMCALL memp_write32_slow(UINT32 address, UINT32 value) {
 #if defined(SUPPORT_WAB_NPDISP)
 		else if (npdisp.mm_vramPhysicalAddr && npdisp.mm_screenPtr && npdisp.mm_vramPhysicalAddr <= address && address < npdisp.mm_vramPhysicalAddr + npdisp.mm_screenSize) {
 			STOREINTELDWORD(npdisp.mm_screenPtr + (address - npdisp.mm_vramPhysicalAddr), value);
+			#if defined(SUPPORT_NPDISP_W2K)
+			if (npdisp_w2k_isActive()) npdisp.updated = 1;
+			#endif
 		}
+		#if defined(SUPPORT_NPDISP_W2K)
+		else if (npdisp_w2k_memp_try_write32(address, value)) {
+			return;
+		}
+		#endif
 		else if (npdisp.mm_vramPhysicalAddr && npdisp.mm_ddOffscreenPtr &&
 			npdisp.mm_vramPhysicalAddr + NPDISP_DD_OFFSCREEN_OFFSET <= address &&
 			address <= npdisp.mm_vramPhysicalAddr + NPDISP_DD_APERTURE_SIZE - 4) {
@@ -1651,6 +1736,9 @@ static void MEMCALL memp_write32_paging_slow(UINT32 address, UINT32 value) {
 
 // ---- í èÌÉÅÉÇÉäì«Ç›çûÇ›ä÷êî
 REG8 MEMCALL memp_read8(UINT32 address) {
+#if defined(SUPPORT_WAB_NPDISP) && defined(SUPPORT_NPDISP_W2K)
+	REG8 npdisp_w2k_value;
+#endif
 	
 #ifdef MEM_BDA_TRACEOUT
 	if(0x400 <= address && address < 0x600){
@@ -1765,6 +1853,11 @@ REG8 MEMCALL memp_read8(UINT32 address) {
 		else if (npdisp.mm_vramPhysicalAddr && npdisp.mm_screenPtr && npdisp.mm_vramPhysicalAddr <= address && address < npdisp.mm_vramPhysicalAddr + npdisp.mm_screenSize) {
 			return(npdisp.mm_screenPtr[address - npdisp.mm_vramPhysicalAddr]);
 		}
+	#if defined(SUPPORT_NPDISP_W2K)
+		else if (npdisp_w2k_memp_try_read8(address, &npdisp_w2k_value)) {
+			return npdisp_w2k_value;
+		}
+	#endif
 		else if (npdisp.mm_vramPhysicalAddr && npdisp.mm_ddOffscreenPtr &&
 			npdisp.mm_vramPhysicalAddr + NPDISP_DD_OFFSCREEN_OFFSET <= address &&
 			address < npdisp.mm_vramPhysicalAddr + NPDISP_DD_APERTURE_SIZE) {
@@ -1779,6 +1872,9 @@ REG8 MEMCALL memp_read8(UINT32 address) {
 }
 
 REG16 MEMCALL memp_read16(UINT32 address) {
+#if defined(SUPPORT_WAB_NPDISP) && defined(SUPPORT_NPDISP_W2K)
+	REG16 npdisp_w2k_value;
+#endif
 
 	REG16	ret;
 	
@@ -1893,6 +1989,11 @@ REG16 MEMCALL memp_read16(UINT32 address) {
 			else if (npdisp.mm_vramPhysicalAddr && npdisp.mm_screenPtr && npdisp.mm_vramPhysicalAddr <= address && address < npdisp.mm_vramPhysicalAddr + npdisp.mm_screenSize) {
 				return(LOADINTELWORD(npdisp.mm_screenPtr + (address - npdisp.mm_vramPhysicalAddr)));
 			}
+		#if defined(SUPPORT_NPDISP_W2K)
+			else if (npdisp_w2k_memp_try_read16(address, &npdisp_w2k_value)) {
+				return npdisp_w2k_value;
+			}
+		#endif
 			else if (npdisp.mm_vramPhysicalAddr && npdisp.mm_ddOffscreenPtr &&
 				npdisp.mm_vramPhysicalAddr + NPDISP_DD_OFFSCREEN_OFFSET <= address &&
 				address <= npdisp.mm_vramPhysicalAddr + NPDISP_DD_APERTURE_SIZE - 2) {
@@ -1913,6 +2014,9 @@ REG16 MEMCALL memp_read16(UINT32 address) {
 }
 
 UINT32 MEMCALL memp_read32(UINT32 address) {
+#if defined(SUPPORT_WAB_NPDISP) && defined(SUPPORT_NPDISP_W2K)
+	UINT32 npdisp_w2k_value;
+#endif
 
 	//UINT32	pos;
 	UINT32	ret;
@@ -2028,6 +2132,11 @@ UINT32 MEMCALL memp_read32(UINT32 address) {
 			else if (npdisp.mm_vramPhysicalAddr && npdisp.mm_screenPtr && npdisp.mm_vramPhysicalAddr <= address && address < npdisp.mm_vramPhysicalAddr + npdisp.mm_screenSize) {
 				return(LOADINTELDWORD(npdisp.mm_screenPtr + (address - npdisp.mm_vramPhysicalAddr)));
 			}
+		#if defined(SUPPORT_NPDISP_W2K)
+			else if (npdisp_w2k_memp_try_read32(address, &npdisp_w2k_value)) {
+				return npdisp_w2k_value;
+			}
+		#endif
 			else if (npdisp.mm_vramPhysicalAddr && npdisp.mm_ddOffscreenPtr &&
 				npdisp.mm_vramPhysicalAddr + NPDISP_DD_OFFSCREEN_OFFSET <= address &&
 				address <= npdisp.mm_vramPhysicalAddr + NPDISP_DD_APERTURE_SIZE - 4) {
@@ -2420,7 +2529,15 @@ void MEMCALL memp_write8(UINT32 address, REG8 value) {
 #if defined(SUPPORT_WAB_NPDISP)
 		else if (npdisp.mm_vramPhysicalAddr && npdisp.mm_screenPtr && npdisp.mm_vramPhysicalAddr <= address && address < npdisp.mm_vramPhysicalAddr + npdisp.mm_screenSize) {
 			npdisp.mm_screenPtr[address - npdisp.mm_vramPhysicalAddr] = value;
+			#if defined(SUPPORT_NPDISP_W2K)
+			if (npdisp_w2k_isActive()) npdisp.updated = 1;
+			#endif
 		}
+		#if defined(SUPPORT_NPDISP_W2K)
+		else if (npdisp_w2k_memp_try_write8(address, value)) {
+			return;
+		}
+		#endif
 		else if (npdisp.mm_vramPhysicalAddr && npdisp.mm_ddOffscreenPtr &&
 			npdisp.mm_vramPhysicalAddr + NPDISP_DD_OFFSCREEN_OFFSET <= address &&
 			address < npdisp.mm_vramPhysicalAddr + NPDISP_DD_APERTURE_SIZE) {
@@ -2559,7 +2676,15 @@ void MEMCALL memp_write16(UINT32 address, REG16 value) {
 #if defined(SUPPORT_WAB_NPDISP)
 			else if (npdisp.mm_vramPhysicalAddr && npdisp.mm_screenPtr && npdisp.mm_vramPhysicalAddr <= address && address < npdisp.mm_vramPhysicalAddr + npdisp.mm_screenSize) {
 				STOREINTELWORD(npdisp.mm_screenPtr + (address - npdisp.mm_vramPhysicalAddr), value);
+				#if defined(SUPPORT_NPDISP_W2K)
+				if (npdisp_w2k_isActive()) npdisp.updated = 1;
+				#endif
 			}
+			#if defined(SUPPORT_NPDISP_W2K)
+			else if (npdisp_w2k_memp_try_write16(address, value)) {
+				return;
+			}
+			#endif
 			else if (npdisp.mm_vramPhysicalAddr && npdisp.mm_ddOffscreenPtr &&
 				npdisp.mm_vramPhysicalAddr + NPDISP_DD_OFFSCREEN_OFFSET <= address &&
 				address <= npdisp.mm_vramPhysicalAddr + NPDISP_DD_APERTURE_SIZE - 2) {
@@ -2705,7 +2830,15 @@ void MEMCALL memp_write32(UINT32 address, UINT32 value) {
 #if defined(SUPPORT_WAB_NPDISP)
 			else if (npdisp.mm_vramPhysicalAddr && npdisp.mm_screenPtr && npdisp.mm_vramPhysicalAddr <= address && address < npdisp.mm_vramPhysicalAddr + npdisp.mm_screenSize) {
 				STOREINTELDWORD(npdisp.mm_screenPtr + (address - npdisp.mm_vramPhysicalAddr), value);
+				#if defined(SUPPORT_NPDISP_W2K)
+				if (npdisp_w2k_isActive()) npdisp.updated = 1;
+				#endif
 			}
+			#if defined(SUPPORT_NPDISP_W2K)
+			else if (npdisp_w2k_memp_try_write32(address, value)) {
+				return;
+			}
+			#endif
 			else if (npdisp.mm_vramPhysicalAddr && npdisp.mm_ddOffscreenPtr &&
 				npdisp.mm_vramPhysicalAddr + NPDISP_DD_OFFSCREEN_OFFSET <= address &&
 				address <= npdisp.mm_vramPhysicalAddr + NPDISP_DD_APERTURE_SIZE - 4) {

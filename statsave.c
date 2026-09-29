@@ -90,6 +90,10 @@ int ga1280a_sfload(STFLAGH sfh, const SFENTRY* tbl);
 #include	"i386hax/haxfunc.h"
 #include	"i386hax/haxcore.h"
 #endif
+#if defined(SUPPORT_IA32_WHPX)
+#include	"i386whpx/whpxfunc.h"
+#include	"i386whpx/whpxcore.h"
+#endif
 
 #ifdef USE_MAME
 #ifdef USE_MAME_BSD
@@ -1563,6 +1567,9 @@ const SFENTRY	*tblterm;
 	memcpy(vramex_base, vramex, sizeof(vramex_base));
 	i386haxfunc_vcpu_getMSRs(&np2haxstat.msrstate);
 #endif
+#if defined(SUPPORT_IA32_WHPX)
+	memcpy(vramex_base, vramex, sizeof(vramex_base));
+#endif
 
 	ret = STATFLAG_SUCCESS;
 	tbl = np2tbl;
@@ -1927,6 +1934,18 @@ const SFENTRY	*tblterm;
 	np2haxcore.lastclock = GetTickCounter_Clock();
 	np2haxcore.clockcount = GetTickCounter_Clock();
 	np2haxcore.I_ratio = 0;
+#endif
+#if defined(SUPPORT_IA32_WHPX)
+	memcpy(vramex, vramex_base, sizeof(vramex_base));
+	i386whpxfunc_set_registers(&np2whpxstat.state);
+	i386whpxfunc_set_fpu(&np2whpxstat.fpustate);
+	i386whpx_vm_sethmemory(CPU_ADRSMASK != 0x000fffff);
+	i386whpx_vm_setitfmemory(CPU_ITFBANK);
+	i386whpx_vm_setvga256linearmemory();
+	np2whpxcore.clockpersec = GetTickCounter_ClockPerSec();
+	np2whpxcore.lastclock = GetTickCounter_Clock();
+	np2whpxcore.clockcount = GetTickCounter_Clock();
+	np2whpxcore.I_ratio = 0;
 #endif
 
 	// I/OçÏÇËíºÇµ

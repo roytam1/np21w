@@ -1176,7 +1176,18 @@ RDTSC(void)
 	}
 	CPU_EDX = li.HighPart;
 	CPU_EAX = li.LowPart;
-#else
+#endif
+#if defined(SUPPORT_IA32_WHPX)&&defined(_WIN32)
+	LARGE_INTEGER li = {0};
+	LARGE_INTEGER qpf;
+	QueryPerformanceCounter(&li);
+	if (QueryPerformanceFrequency(&qpf)) {
+		li.QuadPart = li.QuadPart * pccore.realclock / qpf.QuadPart;
+	}
+	CPU_EDX = li.HighPart;
+	CPU_EAX = li.LowPart;
+#endif
+#if !defined(SUPPORT_IA32_HAXM) && !defined(SUPPORT_IA32_WHPX)
 	if(np2cfg.consttsc){
 		// CPUクロックに依存しないカウンタ値にする
 		UINT64 tsc_tmp;

@@ -7,6 +7,10 @@
 
 #if defined(SUPPORT_WAB_NPDISP) && defined(SUPPORT_NPDISP_D3D)
 
+#if defined(SUPPORT_NPDISP_W2K)
+#include "npdisp_w2k.h"
+#endif
+
 typedef struct {
 	float x;
 	float y;
@@ -20,6 +24,8 @@ typedef struct {
 	float tv2;
 	float tw;
 	float tw2;
+	float stageTex[3][4];
+	UINT32 stageTexValid;
 } NPDISP_D3D_VERTEX;
 
 #define NPDISP_D3D_TEXTURE_FORMAT_RGB16		0U
@@ -28,6 +34,7 @@ typedef struct {
 #define NPDISP_D3D_TEXTURE_FORMAT_RGB32		3U
 #define NPDISP_D3D_TEXTURE_FORMAT_P8		4U
 #define NPDISP_D3D_RASTER_TEXTURE_STAGES	3U
+#define NPDISP_D3D_TEXTURE_COORD_SETS		8U
 #define NPDISP_D3D_CUBE_FACES			6U
 #define NPDISP_D3D_MAX_MIP_LEVELS		16U
 
@@ -53,6 +60,7 @@ typedef struct {
 	UINT32 luminanceMask;
 	UINT32 format;
 	UINT32 texCoordIndex;
+	UINT32 textureTransformFlags;
 	UINT32 colorOp;
 	UINT32 colorArg1;
 	UINT32 colorArg2;
@@ -83,6 +91,8 @@ typedef struct {
 	UINT32 fillMode;
 	UINT32 shadeMode;
 	UINT32 cullMode;
+	UINT32 ditherEnable;
+	UINT32 lastPixel;
 	UINT32 specularEnable;
 	UINT32 alphaTestEnable;
 	UINT32 alphaRef;
@@ -95,6 +105,8 @@ typedef struct {
 	UINT32 zEnable;
 	UINT32 zWriteEnable;
 	UINT32 zFunc;
+	float wNear;
+	float wFar;
 	UINT32 depthMask;
 	UINT32 stencilBits;
 	UINT32 stencilEnable;
@@ -105,7 +117,7 @@ typedef struct {
 	UINT32 stencilFail;
 	UINT32 stencilZFail;
 	UINT32 stencilPass;
-	UINT32 coordWrap[2];
+	UINT32 coordWrap[NPDISP_D3D_TEXTURE_COORD_SETS];
 	UINT32 polygonStippleEnable;
 	const UINT8* polygonStipplePattern;
 	SINT32 polygonStippleOriginX;
@@ -114,16 +126,24 @@ typedef struct {
 	const NPDISP_D3D_TEXTURE* textures[NPDISP_D3D_RASTER_TEXTURE_STAGES];
 } NPDISP_D3D_RASTERSTATE;
 
+#if defined(SUPPORT_NPDISP_W2K)
+bool npdisp_d3d_getW2kCaps(NPDISP_W2K_D3D_CAPS* caps);
+#endif
 bool npdisp_d3d_initializeHalMetadata(UINT32 globalAddr, UINT32 callbacksAddr, UINT32 bridgeInfoAddr);
 bool npdisp_d3d_validateHalPointers(UINT32 globalAddr, UINT32 callbacksAddr);
 UINT32 npdisp_d3d_getDriverInfo(UINT32 lpDataAddr);
 void npdisp_d3d_reset(void);
 void npdisp_d3d_flush(void);
+bool npdisp_d3d_busy(void);
 void npdisp_d3d_poll(void);
 UINT32 npdisp_d3d_stateSize(void);
 bool npdisp_d3d_saveState(UINT8* dst, UINT32 size);
 bool npdisp_d3d_loadState(const UINT8* src, UINT32 size);
 void npdisp_d3d_destroySurface(UINT32 lpSurfaceAddr);
 UINT32 npdisp_d3d_dispatch(UINT32 callbackId, UINT32 lpDataAddr);
+
+#if defined(SUPPORT_NPDISP_W2K)
+UINT32 npdisp_d3d_dispatchW2k(UINT32 callbackId, UINT32 lpDataAddr, UINT32 dataSize);
+#endif
 
 #endif

@@ -20,6 +20,12 @@
 #define NPDISP_D3DTOP_BLENDTEXTUREALPHA 13U
 #endif
 
+static UINT32 npdisp_d3d_sw_quality(void)
+{
+	UINT32 quality = np2cfg.npdispd3dquality;
+	return quality <= NPDISP_D3D_QUALITY_MAX ? quality : NPDISP_D3D_QUALITY_ACCURATE;
+}
+
 static UINT32 npdisp_d3d_sw_bytesPerPixel(UINT32 bpp)
 {
 	if (bpp == 15 || bpp == 16) return 2;
@@ -54,6 +60,38 @@ static void npdisp_d3d_sw_writePixel(UINT8* p, UINT32 bpp, UINT32 color)
 		p[2] = (UINT8)r;
 		p[3] = 0;
 	}
+}
+
+static UINT32 npdisp_d3d_sw_ditherComponent(UINT32 value, UINT32 levels, SINT32 x, SINT32 y)
+{
+	static const UINT8 matrix[16] = { 0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5 };
+	UINT32 threshold = (UINT32)matrix[((UINT32)y & 3U) * 4U + ((UINT32)x & 3U)] * 16U + 8U;
+	UINT32 result = (value * levels + threshold) / 255U;
+	return result > levels ? levels : result;
+}
+
+static void npdisp_d3d_sw_writeDitheredPixel(UINT8* p, UINT32 bpp, UINT32 color, SINT32 x, SINT32 y)
+{
+	UINT32 r = (color >> 16) & 0xffU;
+	UINT32 g = (color >> 8) & 0xffU;
+	UINT32 b = color & 0xffU;
+	UINT16 value;
+	if (bpp == 15U) {
+		value = (UINT16)((npdisp_d3d_sw_ditherComponent(r, 31U, x, y) << 10) |
+			(npdisp_d3d_sw_ditherComponent(g, 31U, x, y) << 5) |
+			npdisp_d3d_sw_ditherComponent(b, 31U, x, y));
+	}
+	else if (bpp == 16U) {
+		value = (UINT16)((npdisp_d3d_sw_ditherComponent(r, 31U, x, y) << 11) |
+			(npdisp_d3d_sw_ditherComponent(g, 63U, x, y) << 5) |
+			npdisp_d3d_sw_ditherComponent(b, 31U, x, y));
+	}
+	else {
+		npdisp_d3d_sw_writePixel(p, bpp, color);
+		return;
+	}
+	p[0] = (UINT8)value;
+	p[1] = (UINT8)(value >> 8);
 }
 
 static UINT32 npdisp_d3d_sw_readPixel(const UINT8* p, UINT32 bpp)
@@ -195,16 +233,17 @@ static bool npdisp_d3d_sw_blend16(UINT8* p, UINT32 bpp, UINT32 src, UINT32 srcBl
 	return true;
 }
 
-static bool npdisp_d3d_sw_outputPixel(NPDISP_D3D_SW_TARGET* target, UINT8* p, const NPDISP_D3D_RASTERSTATE* state, UINT32 color)
+static bool npdisp_d3d_sw_outputPixel(NPDISP_D3D_SW_TARGET* target, UINT8* p, const NPDISP_D3D_RASTERSTATE* state, UINT32 color, SINT32 x, SINT32 y)
 {
 	if (!target || !p || !state) return false;
 	if (state->alphaBlendEnable) {
 		UINT32 blended;
-		if ((target->bpp == 15U || target->bpp == 16U) && npdisp_d3d_sw_blend16(p, target->bpp, color, state->srcBlend, state->destBlend)) return true;
+		if (!state->ditherEnable && (target->bpp == 15U || target->bpp == 16U) && npdisp_d3d_sw_blend16(p, target->bpp, color, state->srcBlend, state->destBlend)) return true;
 		if (!npdisp_d3d_sw_blend(color, npdisp_d3d_sw_readPixel(p, target->bpp), state->srcBlend, state->destBlend, &blended)) return false;
 		color = blended;
 	}
-	npdisp_d3d_sw_writePixel(p, target->bpp, color);
+	if (state->ditherEnable) npdisp_d3d_sw_writeDitheredPixel(p, target->bpp, color, x, y);
+	else npdisp_d3d_sw_writePixel(p, target->bpp, color);
 	return true;
 }
 
@@ -340,11 +379,34 @@ static float npdisp_d3d_sw_abs(float value)
 	return value < 0.0f ? -value : value;
 }
 
+static UINT32 npdisp_d3d_sw_fastMipLevel(const NPDISP_D3D_TEXTURE* texture, const NPDISP_D3D_SW_TEXGRAD* grad)
+{
+	UINT32 level = 0;
+	float rho;
+	if (!texture || !grad || texture->mipCount <= 1U) return 0;
+	rho = npdisp_d3d_sw_abs(grad->dudx) * (float)texture->width;
+	{
+		float value = npdisp_d3d_sw_abs(grad->dvdx) * (float)texture->height;
+		if (value > rho) rho = value;
+		value = npdisp_d3d_sw_abs(grad->dudy) * (float)texture->width;
+		if (value > rho) rho = value;
+		value = npdisp_d3d_sw_abs(grad->dvdy) * (float)texture->height;
+		if (value > rho) rho = value;
+	}
+	while (rho >= 2.0f && level + 1U < texture->mipCount) {
+		rho *= 0.5f;
+		++level;
+	}
+	if (rho - 1.0f >= 0.5f && level + 1U < texture->mipCount) ++level;
+	return level;
+}
+
 static bool npdisp_d3d_sw_sampleTextureLevel(const NPDISP_D3D_TEXTURE* texture, float u, float v, float w, UINT32* color, bool* transparent)
 {
 	float x, y;
 	SINT32 x0, y0, x1, y1;
 	UINT32 bytesPerPixel;
+	UINT32 quality = npdisp_d3d_sw_quality();
 	if (transparent) *transparent = false;
 	if (!texture || !color || !texture->pixels || !texture->width || !texture->height || texture->pitch <= 0 ||
 		!((texture->format == NPDISP_D3D_TEXTURE_FORMAT_P8 && texture->bpp == 8U) ||
@@ -387,7 +449,8 @@ static bool npdisp_d3d_sw_sampleTextureLevel(const NPDISP_D3D_TEXTURE* texture, 
 		faceTexture.addressV = NPDISP_D3DTADDRESS_CLAMP;
 		return faceTexture.pixels && npdisp_d3d_sw_sampleTextureLevel(&faceTexture, cu * 0.5f + 0.5f, cv * 0.5f + 0.5f, 0.0f, color, transparent);
 	}
-	if (texture->magFilter == NPDISP_D3DTFG_LINEAR || texture->minFilter == NPDISP_D3DTFN_LINEAR) {
+	if (quality < NPDISP_D3D_QUALITY_POINT &&
+		(texture->magFilter == NPDISP_D3DTFG_LINEAR || texture->minFilter == NPDISP_D3DTFN_LINEAR)) {
 		if (texture->addressU == NPDISP_D3DTADDRESS_WRAP || texture->addressU == NPDISP_D3DTADDRESS_MIRROR) x = u * (float)texture->width - 0.5f;
 		else {
 			if (u < 0.0f) u = 0.0f; else if (u > 1.0f) u = 1.0f;
@@ -432,6 +495,7 @@ static bool npdisp_d3d_sw_sampleTexture(const NPDISP_D3D_TEXTURE* texture, float
 {
 	NPDISP_D3D_TEXTURE levelTexture;
 	UINT32 level;
+	UINT32 quality = npdisp_d3d_sw_quality();
 	float rho;
 	float frac;
 	if (!texture || !color) return false;
@@ -455,7 +519,8 @@ static bool npdisp_d3d_sw_sampleTexture(const NPDISP_D3D_TEXTURE* texture, float
 	}
 	frac = rho - 1.0f;
 	if (frac < 0.0f) frac = 0.0f; else if (frac > 1.0f) frac = 1.0f;
-	if (texture->mipFilter == NPDISP_D3DTFP_POINT && frac >= 0.5f && level + 1U < texture->mipCount) ++level;
+	if ((texture->mipFilter == NPDISP_D3DTFP_POINT || quality >= NPDISP_D3D_QUALITY_POINT) &&
+		frac >= 0.5f && level + 1U < texture->mipCount) ++level;
 	levelTexture = *texture;
 	levelTexture.pixels = texture->mipPixels[level];
 	levelTexture.width = texture->mipWidth[level];
@@ -464,7 +529,7 @@ static bool npdisp_d3d_sw_sampleTexture(const NPDISP_D3D_TEXTURE* texture, float
 	levelTexture.mipCount = 1U;
 	levelTexture.mipFilter = NPDISP_D3DTFP_NONE;
 	if (!levelTexture.pixels || !levelTexture.width || !levelTexture.height || levelTexture.pitch <= 0) return false;
-	if (texture->mipFilter != NPDISP_D3DTFP_LINEAR || level + 1U >= texture->mipCount)
+	if (quality >= NPDISP_D3D_QUALITY_POINT || texture->mipFilter != NPDISP_D3DTFP_LINEAR || level + 1U >= texture->mipCount)
 		return npdisp_d3d_sw_sampleTextureLevel(&levelTexture, u, v, w, color, transparent);
 	{
 		UINT32 c0;
@@ -598,9 +663,11 @@ static bool npdisp_d3d_sw_sampleBump(const NPDISP_D3D_TEXTURE* texture, float u,
 {
 	float x, y;
 	SINT32 x0, y0, x1, y1;
+	UINT32 quality = npdisp_d3d_sw_quality();
 	if (!texture || !du || !dv || !luminance || !texture->pixels || !texture->width || !texture->height ||
 		texture->pitch <= 0 || texture->bpp != 16U || (UINT64)texture->width * 2U > (UINT32)texture->pitch) return false;
-	if (texture->magFilter == NPDISP_D3DTFG_LINEAR || texture->minFilter == NPDISP_D3DTFN_LINEAR) {
+	if (quality < NPDISP_D3D_QUALITY_POINT &&
+		(texture->magFilter == NPDISP_D3DTFG_LINEAR || texture->minFilter == NPDISP_D3DTFN_LINEAR)) {
 		x = u * (float)texture->width - 0.5f;
 		y = v * (float)texture->height - 0.5f;
 		x0 = npdisp_d3d_sw_floorToInt(x);
@@ -643,7 +710,45 @@ static void npdisp_d3d_sw_textureCoords(UINT32 index, float tu, float tv, float 
 	}
 }
 
-static bool npdisp_d3d_sw_applyTextureStages(const NPDISP_D3D_RASTERSTATE* state, UINT32 diffuse, float tu, float tv, float tw, float tu2, float tv2, float tw2, const NPDISP_D3D_SW_TEXGRAD* grad0, const NPDISP_D3D_SW_TEXGRAD* grad1, UINT32* color, bool* discard)
+// Derivatives of perspective-correct stage coordinates, including projected division.
+static void npdisp_d3d_sw_stageGradient(const NPDISP_D3D_VERTEX* v0, const NPDISP_D3D_VERTEX* v1,
+	const NPDISP_D3D_VERTEX* v2, UINT32 stage, UINT32 flags, float w0, float w1, float w2,
+	float dw0dx, float dw1dx, float dw2dx, float dw0dy, float dw1dy, float dw2dy,
+	NPDISP_D3D_SW_TEXGRAD* grad)
+{
+	float numerator[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+	float dx[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+	float dy[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+	const NPDISP_D3D_VERTEX* vertices[3] = { v0, v1, v2 };
+	const float weights[3] = { w0, w1, w2 };
+	const float x[3] = { dw0dx, dw1dx, dw2dx };
+	const float y[3] = { dw0dy, dw1dy, dw2dy };
+	UINT32 count = flags & 7U;
+	UINT32 divisor = (flags & 0x100U) ? count - 1U : 3U;
+	if (!grad) return;
+	memset(grad, 0, sizeof(*grad));
+	for (UINT32 i = 0; i < 3U; ++i) {
+		float rhw = vertices[i]->rhw;
+		for (UINT32 c = 0; c < 4U; ++c) {
+			float coordinate = c == 3U && !(flags & 0x100U) ? 1.0f : vertices[i]->stageTex[stage][c];
+			numerator[c] += coordinate * weights[i] * rhw;
+			dx[c] += coordinate * x[i] * rhw;
+			dy[c] += coordinate * y[i] * rhw;
+		}
+	}
+	if (numerator[divisor] > 0.0000001f || numerator[divisor] < -0.0000001f) {
+		float inverse = 1.0f / (numerator[divisor] * numerator[divisor]);
+		grad->dudx = (dx[0] * numerator[divisor] - numerator[0] * dx[divisor]) * inverse;
+		grad->dudy = (dy[0] * numerator[divisor] - numerator[0] * dy[divisor]) * inverse;
+		if (!(flags & 0x100U) || count >= 3U) {
+			grad->dvdx = (dx[1] * numerator[divisor] - numerator[1] * dx[divisor]) * inverse;
+			grad->dvdy = (dy[1] * numerator[divisor] - numerator[1] * dy[divisor]) * inverse;
+		}
+	}
+}
+
+static bool npdisp_d3d_sw_applyTextureStages(const NPDISP_D3D_RASTERSTATE* state, UINT32 diffuse, float tu, float tv, float tw, float tu2, float tv2, float tw2, const NPDISP_D3D_SW_TEXGRAD* grad0, const NPDISP_D3D_SW_TEXGRAD* grad1, const float stageTex[3][4],
+	const NPDISP_D3D_SW_TEXGRAD* stageGrads, UINT32* color, bool* discard)
 {
 	UINT32 current = diffuse;
 	float bumpDu = 0.0f;
@@ -659,11 +764,30 @@ static bool npdisp_d3d_sw_applyTextureStages(const NPDISP_D3D_RASTERSTATE* state
 		if (!texture) continue;
 		if (texture->colorOp == NPDISP_D3DTOP_DISABLE) break;
 		npdisp_d3d_sw_textureCoords(texture->texCoordIndex, tu, tv, tw, tu2, tv2, tw2, &u, &v, &w);
+		if (stageTex) {
+			UINT32 count = texture->textureTransformFlags & 7U;
+			u = stageTex[stage][0];
+			v = (count == 1U) ? 0.0f : stageTex[stage][1];
+			w = (count == 0U || count >= 3U) ? stageTex[stage][2] : 0.0f;
+			if (texture->textureTransformFlags & 0x100U) {
+				float divisor = stageTex[stage][count - 1U];
+				if ((divisor <= 0.000001f && divisor >= -0.000001f)) {
+					if (discard) *discard = true;
+					*color = current;
+					return true;
+				}
+				u /= divisor;
+				if (count >= 3U) v /= divisor;
+				else v = 0.0f;
+				if (count == 4U) w /= divisor;
+				else w = 0.0f;
+			}
+		}
 		if (texture->colorOp == NPDISP_D3DTOP_BUMPENVMAP || texture->colorOp == NPDISP_D3DTOP_BUMPENVMAPLUMINANCE) {
 			float du, dv, luminance;
 			if (!npdisp_d3d_sw_sampleBump(texture, u, v, &du, &dv, &luminance)) return false;
-			bumpDu = du * texture->bumpMat00 + dv * texture->bumpMat01;
-			bumpDv = du * texture->bumpMat10 + dv * texture->bumpMat11;
+			bumpDu = du * texture->bumpMat00 + dv * texture->bumpMat10;
+			bumpDv = du * texture->bumpMat01 + dv * texture->bumpMat11;
 			bumpLuminance = texture->colorOp == NPDISP_D3DTOP_BUMPENVMAPLUMINANCE ?
 				luminance * texture->bumpLScale + texture->bumpLOffset : 1.0f;
 			bumpPending = true;
@@ -675,7 +799,8 @@ static bool npdisp_d3d_sw_applyTextureStages(const NPDISP_D3D_RASTERSTATE* state
 		}
 		{
 			bool transparent = false;
-			if (!npdisp_d3d_sw_sampleTexture(texture, u, v, w, texture->texCoordIndex ? grad1 : grad0, &texel, &transparent)) return false;
+			if (!npdisp_d3d_sw_sampleTexture(texture, u, v, w, stageTex ? (stageGrads ? &stageGrads[stage] : NULL) :
+				(texture->texCoordIndex ? grad1 : grad0), &texel, &transparent)) return false;
 			if (transparent) {
 				if (discard) *discard = true;
 				*color = current;
@@ -704,6 +829,7 @@ static bool npdisp_d3d_sw_applyTextureStages(const NPDISP_D3D_RASTERSTATE* state
 			case NPDISP_D3DTOP_SELECTARG1: alphaResult = alphaArg1; break;
 			case NPDISP_D3DTOP_SELECTARG2: alphaResult = alphaArg2; break;
 			case NPDISP_D3DTOP_MODULATE: alphaResult = npdisp_d3d_sw_modulate(alphaArg1, alphaArg2); break;
+			case NPDISP_D3DTOP_BLENDTEXTUREALPHA: alphaResult = npdisp_d3d_sw_blendTextureAlpha(alphaArg1, alphaArg2, texel); break;
 			default: return false;
 			}
 		}
@@ -784,6 +910,17 @@ static bool npdisp_d3d_sw_topLeftEdge(float ax, float ay, float bx, float by)
 	return dy > 0.0f || (dy == 0.0f && dx < 0.0f);
 }
 
+static bool npdisp_d3d_sw_insideTriangle(float e0, float e1, float e2, float area,
+    bool topLeft0, bool topLeft1, bool topLeft2)
+{
+    if (area > 0.0f) {
+        return e0 >= 0.0f && e1 >= 0.0f && e2 >= 0.0f &&
+            (e0 != 0.0f || topLeft0) && (e1 != 0.0f || topLeft1) && (e2 != 0.0f || topLeft2);
+    }
+    return e0 <= 0.0f && e1 <= 0.0f && e2 <= 0.0f &&
+        (e0 != 0.0f || topLeft0) && (e1 != 0.0f || topLeft1) && (e2 != 0.0f || topLeft2);
+}
+
 static bool npdisp_d3d_sw_validCoord(float value)
 {
 	return value == value && value >= -1.0e30f && value <= 1.0e30f;
@@ -862,6 +999,14 @@ static UINT16 npdisp_d3d_sw_depthValue(float z, UINT32 depthMask)
 	if (z < 0.0f) z = 0.0f; else if (z > 1.0f) z = 1.0f;
 	if (!depthMask || depthMask > 0xffffU) depthMask = 0xffffU;
 	return (UINT16)(z * (float)depthMask + 0.5f);
+}
+
+static UINT16 npdisp_d3d_sw_fragmentDepth(float z, float rhw, const NPDISP_D3D_RASTERSTATE* state)
+{
+	if (state->zEnable == 2U && state->wFar > state->wNear && rhw > 0.0f) {
+		z = (1.0f / rhw - state->wNear) / (state->wFar - state->wNear);
+	}
+	return npdisp_d3d_sw_depthValue(z, state->depthMask);
 }
 
 static UINT16 npdisp_d3d_sw_readDepthStencil(const UINT8* p)
@@ -1004,14 +1149,14 @@ bool npdisp_d3d_sw_point(NPDISP_D3D_SW_TARGET* target, NPDISP_D3D_SW_DEPTH_TARGE
 		if (!depthTarget || !depthTarget->pixels || depthTarget->pitch <= 0 ||
 			depthTarget->width < target->width || depthTarget->height < target->height ||
 			(UINT64)depthTarget->width * 2U > (UINT32)depthTarget->pitch) return false;
-		if (state->zEnable) zValue = npdisp_d3d_sw_depthValue(vertex->z, state->depthMask);
+		if (state->zEnable) zValue = npdisp_d3d_sw_fragmentDepth(vertex->z, vertex->rhw, state);
 		zp = depthTarget->pixels + (size_t)y * (size_t)depthTarget->pitch + (size_t)x * 2U;
 		if (!npdisp_d3d_sw_depthStencilPass(zp, zValue, state)) return true;
 	}
 	color = vertex->diffuse;
 	{
 		bool discard = false;
-		if (!npdisp_d3d_sw_applyTextureStages(state, color, vertex->tu, vertex->tv, vertex->tw, vertex->tu2, vertex->tv2, vertex->tw2, NULL, NULL, &color, &discard)) return false;
+		if (!npdisp_d3d_sw_applyTextureStages(state, color, vertex->tu, vertex->tv, vertex->tw, vertex->tu2, vertex->tv2, vertex->tw2, NULL, NULL, vertex->stageTexValid ? vertex->stageTex : NULL, NULL, &color, &discard)) return false;
 		if (discard) return true;
 	}
 	if (state->specularEnable) color = npdisp_d3d_sw_addSpecular(color, vertex->specular);
@@ -1019,7 +1164,7 @@ bool npdisp_d3d_sw_point(NPDISP_D3D_SW_TARGET* target, NPDISP_D3D_SW_DEPTH_TARGE
 	if (state->fogEnable) color = npdisp_d3d_sw_applyFog(color, state->fogColor, (float)((vertex->specular >> 24) & 0xffU) / 255.0f);
 	if (state->zEnable && state->zWriteEnable) npdisp_d3d_sw_writeDepth(zp, zValue, state);
 	p = target->pixels + (size_t)y * (size_t)target->pitch + (size_t)x * bytesPerPixel;
-	return npdisp_d3d_sw_outputPixel(target, p, state, color);
+	return npdisp_d3d_sw_outputPixel(target, p, state, color, x, y);
 }
 
 bool npdisp_d3d_sw_line(NPDISP_D3D_SW_TARGET* target, NPDISP_D3D_SW_DEPTH_TARGET* depthTarget, const NPDISP_D3D_VERTEX* v0, const NPDISP_D3D_VERTEX* v1, const NPDISP_D3D_RASTERSTATE* state)
@@ -1067,7 +1212,7 @@ bool npdisp_d3d_sw_line(NPDISP_D3D_SW_TARGET* target, NPDISP_D3D_SW_DEPTH_TARGET
 	ady = clippedDy < 0.0f ? -clippedDy : clippedDy;
 	maxSteps = (target->width > target->height ? target->width : target->height) - 1U;
 	steps = (adx > ady ? adx : ady) >= (float)maxSteps ? maxSteps : (UINT32)((adx > ady ? adx : ady) + 0.5f);
-	sampleCount = steps + 1U;
+	sampleCount = steps + (state->lastPixel ? 1U : 0U);
 	for (UINT32 i = 0; i < sampleCount; ++i) {
 		float u = steps ? (float)i / (float)steps : 0.0f;
 		float t = t0 + (t1 - t0) * u;
@@ -1081,7 +1226,7 @@ bool npdisp_d3d_sw_line(NPDISP_D3D_SW_TARGET* target, NPDISP_D3D_SW_DEPTH_TARGET
 		UINT8* zp = NULL;
 		if (x < 0 || y < 0 || x >= (SINT32)target->width || y >= (SINT32)target->height) continue;
 		if (state->zEnable || state->stencilEnable) {
-			if (state->zEnable) zValue = npdisp_d3d_sw_depthValue(v0->z + (v1->z - v0->z) * t, state->depthMask);
+			if (state->zEnable) zValue = npdisp_d3d_sw_fragmentDepth(v0->z + (v1->z - v0->z) * t, v0->rhw + (v1->rhw - v0->rhw) * t, state);
 			zp = depthTarget->pixels + (size_t)y * (size_t)depthTarget->pitch + (size_t)x * 2U;
 			if (!npdisp_d3d_sw_depthStencilPass(zp, zValue, state)) continue;
 		}
@@ -1115,7 +1260,16 @@ bool npdisp_d3d_sw_line(NPDISP_D3D_SW_TARGET* target, NPDISP_D3D_SW_DEPTH_TARGET
 				tw2 = tw20 * (1.0f - t) + tw21 * t;
 			}
 			bool discard = false;
-			if (!npdisp_d3d_sw_applyTextureStages(state, color, tu, tv, tw, tu2, tv2, tw2, NULL, NULL, &color, &discard)) return false;
+			float stageTex[3][4];
+			if (v0->stageTexValid && v1->stageTexValid) {
+				float inv = (q > 0.0000001f || q < -0.0000001f) ? 1.0f / q : 0.0f;
+				for (UINT32 stage = 0; stage < 3U; ++stage)
+					for (UINT32 c = 0; c < 4U; ++c)
+						stageTex[stage][c] = inv ? (v0->stageTex[stage][c] * q0 + v1->stageTex[stage][c] * q1) * inv :
+							v0->stageTex[stage][c] * (1.0f - t) + v1->stageTex[stage][c] * t;
+			}
+			if (!npdisp_d3d_sw_applyTextureStages(state, color, tu, tv, tw, tu2, tv2, tw2, NULL, NULL,
+				v0->stageTexValid && v1->stageTexValid ? stageTex : NULL, NULL, &color, &discard)) return false;
 			if (discard) continue;
 		}
 		if (state->specularEnable) color = npdisp_d3d_sw_addSpecular(color, specular);
@@ -1126,7 +1280,7 @@ bool npdisp_d3d_sw_line(NPDISP_D3D_SW_TARGET* target, NPDISP_D3D_SW_DEPTH_TARGET
 		}
 		if (state->zEnable && state->zWriteEnable) npdisp_d3d_sw_writeDepth(zp, zValue, state);
 		UINT8* p = target->pixels + (size_t)y * (size_t)target->pitch + (size_t)x * bytesPerPixel;
-		if (!npdisp_d3d_sw_outputPixel(target, p, state, color)) return false;
+		if (!npdisp_d3d_sw_outputPixel(target, p, state, color, x, y)) return false;
 	}
 	return true;
 }
@@ -1163,7 +1317,18 @@ bool npdisp_d3d_sw_triangle(NPDISP_D3D_SW_TARGET* target, NPDISP_D3D_SW_DEPTH_TA
 	bool needGrad1 = false;
 	bool topLeft0, topLeft1, topLeft2;
 	SINT32 left, top, right, bottom;
+	UINT32 quality;
+	bool coarse2x2;
+	SINT32 pixelStep;
+	NPDISP_D3D_RASTERSTATE fastState;
+	NPDISP_D3D_TEXTURE fastTextures[NPDISP_D3D_RASTER_TEXTURE_STAGES];
+	NPDISP_D3D_SW_TEXGRAD affineGrad0, affineGrad1;
+	float tex0[6], tex1[6], tex2[6];
+	const bool stageCoordsValid = v0 && v1 && v2 && v0->stageTexValid && v1->stageTexValid && v2->stageTexValid;
 	if (!target || !v0 || !v1 || !v2 || !state || !target->pixels || target->pitch <= 0) return false;
+	quality = npdisp_d3d_sw_quality();
+	coarse2x2 = quality == NPDISP_D3D_QUALITY_COARSE2X2;
+	pixelStep = coarse2x2 ? 2 : 1;
 	bytesPerPixel = npdisp_d3d_sw_bytesPerPixel(target->bpp);
 	if (!bytesPerPixel || !target->width || !target->height || (UINT64)target->width * bytesPerPixel > (UINT32)target->pitch) return false;
 	if ((state->zEnable || state->stencilEnable) && (!depthTarget || !depthTarget->pixels || depthTarget->pitch <= 0 ||
@@ -1228,6 +1393,63 @@ bool npdisp_d3d_sw_triangle(NPDISP_D3D_SW_TARGET* target, NPDISP_D3D_SW_DEPTH_TA
 		dV1dx = dw0dx * sv0 * v0->rhw + dw1dx * sv1 * v1->rhw + dw2dx * sv2 * v2->rhw;
 		dV1dy = dw0dy * sv0 * v0->rhw + dw1dy * sv1 * v1->rhw + dw2dy * sv2 * v2->rhw;
 	}
+	if (quality >= NPDISP_D3D_QUALITY_AFFINE) {
+		tex0[0] = tu0; tex0[1] = tv0; tex0[2] = tw0;
+		tex0[3] = su0; tex0[4] = sv0; tex0[5] = sw0;
+		tex1[0] = tu1; tex1[1] = tv1; tex1[2] = tw1;
+		tex1[3] = su1; tex1[4] = sv1; tex1[5] = sw1;
+		tex2[0] = tu2; tex2[1] = tv2; tex2[2] = tw2;
+		tex2[3] = su2; tex2[4] = sv2; tex2[5] = sw2;
+	}
+	if (quality >= NPDISP_D3D_QUALITY_AFFINE) {
+		affineGrad0.dudx = tu0 * dw0dx + tu1 * dw1dx + tu2 * dw2dx;
+		affineGrad0.dvdx = tv0 * dw0dx + tv1 * dw1dx + tv2 * dw2dx;
+		affineGrad0.dudy = tu0 * dw0dy + tu1 * dw1dy + tu2 * dw2dy;
+		affineGrad0.dvdy = tv0 * dw0dy + tv1 * dw1dy + tv2 * dw2dy;
+		affineGrad1.dudx = su0 * dw0dx + su1 * dw1dx + su2 * dw2dx;
+		affineGrad1.dvdx = sv0 * dw0dx + sv1 * dw1dx + sv2 * dw2dx;
+		affineGrad1.dudy = su0 * dw0dy + su1 * dw1dy + su2 * dw2dy;
+		affineGrad1.dvdy = sv0 * dw0dy + sv1 * dw1dy + sv2 * dw2dy;
+		fastState = *state;
+		for (UINT32 stage = 0; stage < NPDISP_D3D_RASTER_TEXTURE_STAGES; ++stage) {
+			const NPDISP_D3D_TEXTURE* texture = state->textures[stage];
+			if (!texture) {
+				fastState.textures[stage] = NULL;
+				continue;
+			}
+			fastTextures[stage] = *texture;
+			if (!texture->cubeMap && texture->mipCount > 1U && texture->mipFilter != NPDISP_D3DTFP_NONE) {
+				NPDISP_D3D_SW_TEXGRAD stageGrad;
+				const NPDISP_D3D_SW_TEXGRAD* grad = texture->texCoordIndex ? &affineGrad1 : &affineGrad0;
+				if (v0->stageTexValid && v1->stageTexValid && v2->stageTexValid &&
+					(texture->textureTransformFlags & 7U) != 0U && (texture->textureTransformFlags & 7U) <= 4U) {
+					npdisp_d3d_sw_stageGradient(v0, v1, v2, stage, texture->textureTransformFlags,
+						1.0f / 3.0f, 1.0f / 3.0f, 1.0f / 3.0f,
+						dw0dx, dw1dx, dw2dx, dw0dy, dw1dy, dw2dy, &stageGrad);
+					grad = &stageGrad;
+				}
+				UINT32 level = npdisp_d3d_sw_fastMipLevel(texture, grad);
+				if (level < texture->mipCount && texture->mipPixels[level] && texture->mipWidth[level] && texture->mipHeight[level] && texture->mipPitch[level] > 0) {
+					fastTextures[stage].pixels = texture->mipPixels[level];
+					fastTextures[stage].width = texture->mipWidth[level];
+					fastTextures[stage].height = texture->mipHeight[level];
+					fastTextures[stage].pitch = texture->mipPitch[level];
+					fastTextures[stage].mipCount = 1U;
+					fastTextures[stage].mipFilter = NPDISP_D3DTFP_NONE;
+				}
+			}
+			fastState.textures[stage] = &fastTextures[stage];
+		}
+		if (quality >= NPDISP_D3D_QUALITY_FASTEST) {
+			fastState.shadeMode = NPDISP_D3DSHADE_FLAT;
+			fastState.specularEnable = 0;
+			fastState.fogEnable = 0;
+			fastState.ditherEnable = 0;
+		}
+		state = &fastState;
+		needGrad0 = false;
+		needGrad1 = false;
+	}
 	if (state->cullMode == NPDISP_D3DCULL_CW && area < 0.0f) return true;
 	if (state->cullMode == NPDISP_D3DCULL_CCW && area > 0.0f) return true;
 	if (state->cullMode != NPDISP_D3DCULL_NONE && state->cullMode != NPDISP_D3DCULL_CW && state->cullMode != NPDISP_D3DCULL_CCW) return false;
@@ -1247,31 +1469,91 @@ bool npdisp_d3d_sw_triangle(NPDISP_D3D_SW_TARGET* target, NPDISP_D3D_SW_DEPTH_TA
 	right = (maxxf >= (float)target->width) ? (SINT32)target->width : (SINT32)maxxf + 1;
 	bottom = (maxyf >= (float)target->height) ? (SINT32)target->height : (SINT32)maxyf + 1;
 
-	for (SINT32 y = top; y < bottom; ++y) {
+	for (SINT32 y = top; y < bottom; y += pixelStep) {
 		float e0 = npdisp_d3d_sw_edge(v1->x, v1->y, v2->x, v2->y, (float)left, (float)y);
 		float e1 = npdisp_d3d_sw_edge(v2->x, v2->y, v0->x, v0->y, (float)left, (float)y);
 		float e2 = npdisp_d3d_sw_edge(v0->x, v0->y, v1->x, v1->y, (float)left, (float)y);
 		const float e0dx = v2->y - v1->y;
 		const float e1dx = v0->y - v2->y;
 		const float e2dx = v1->y - v0->y;
-		for (SINT32 x = left; x < right; ++x, e0 += e0dx, e1 += e1dx, e2 += e2dx) {
-			if ((area > 0.0f && (e0 < 0.0f || e1 < 0.0f || e2 < 0.0f ||
-				(e0 == 0.0f && !topLeft0) || (e1 == 0.0f && !topLeft1) || (e2 == 0.0f && !topLeft2))) ||
-				(area < 0.0f && (e0 > 0.0f || e1 > 0.0f || e2 > 0.0f ||
-				(e0 == 0.0f && !topLeft0) || (e1 == 0.0f && !topLeft1) || (e2 == 0.0f && !topLeft2)))) continue;
+		SINT32 blockStart = left, blockEnd = left;
+		const bool useBlockPerspective = quality >= NPDISP_D3D_QUALITY_AFFINE &&
+			state->textures[0] && state->textures[0]->colorOp != NPDISP_D3DTOP_DISABLE;
+		bool blockPerspective = false;
+		float blockTex[6], blockStep[6];
+		float blockStage[NPDISP_D3D_RASTER_TEXTURE_STAGES][4];
+		float blockStageStep[NPDISP_D3D_RASTER_TEXTURE_STAGES][4];
+		for (SINT32 x = left; x < right; x += pixelStep,
+			e0 += e0dx * (float)pixelStep, e1 += e1dx * (float)pixelStep, e2 += e2dx * (float)pixelStep) {
+			if (useBlockPerspective && x == blockEnd) {
+				const SINT32 span = (right - x < 16) ? right - x : 16;
+				const float q0a = e0 * invArea * v0->rhw;
+				const float q1a = e1 * invArea * v1->rhw;
+				const float q2a = e2 * invArea * v2->rhw;
+				const float q0b = q0a + dw0dx * (float)span * v0->rhw;
+				const float q1b = q1a + dw1dx * (float)span * v1->rhw;
+				const float q2b = q2a + dw2dx * (float)span * v2->rhw;
+				const float qa = q0a + q1a + q2a;
+				const float qb = q0b + q1b + q2b;
+				blockStart = x;
+				blockEnd = x + span;
+				blockPerspective = (qa > 0.0000001f && qb > 0.0000001f) ||
+					(qa < -0.0000001f && qb < -0.0000001f);
+				if (blockPerspective) {
+					const float invQa = 1.0f / qa, invQb = 1.0f / qb;
+					const float invSpan = 1.0f / (float)span;
+					for (UINT32 c = 0; c < 6U; ++c) {
+						blockTex[c] = (tex0[c] * q0a + tex1[c] * q1a + tex2[c] * q2a) * invQa;
+						const float end = (tex0[c] * q0b + tex1[c] * q1b + tex2[c] * q2b) * invQb;
+						blockStep[c] = (end - blockTex[c]) * invSpan;
+					}
+					if (stageCoordsValid) {
+						for (UINT32 stage = 0; stage < NPDISP_D3D_RASTER_TEXTURE_STAGES; ++stage) {
+							for (UINT32 c = 0; c < 4U; ++c) {
+								blockStage[stage][c] = (v0->stageTex[stage][c] * q0a + v1->stageTex[stage][c] * q1a + v2->stageTex[stage][c] * q2a) * invQa;
+								const float end = (v0->stageTex[stage][c] * q0b + v1->stageTex[stage][c] * q1b + v2->stageTex[stage][c] * q2b) * invQb;
+								blockStageStep[stage][c] = (end - blockStage[stage][c]) * invSpan;
+							}
+						}
+					}
+				}
+			}
+			UINT32 coverageMask = 1U;
+			SINT32 sampleX = x, sampleY = y;
+			float sampleE0 = e0, sampleE1 = e1, sampleE2 = e2;
+			if (coarse2x2) {
+				coverageMask = 0U;
+				for (SINT32 by = 0; by < 2 && y + by < bottom; ++by) {
+					for (SINT32 bx = 0; bx < 2 && x + bx < right; ++bx) {
+						const float b0 = e0 + e0dx * (float)bx + (v1->x - v2->x) * (float)by;
+						const float b1 = e1 + e1dx * (float)bx + (v2->x - v0->x) * (float)by;
+						const float b2 = e2 + e2dx * (float)bx + (v0->x - v1->x) * (float)by;
+						if (!npdisp_d3d_sw_insideTriangle(b0, b1, b2, area, topLeft0, topLeft1, topLeft2)) continue;
+						if (!coverageMask) {
+							sampleX = x + bx; sampleY = y + by;
+							sampleE0 = b0; sampleE1 = b1; sampleE2 = b2;
+						}
+						coverageMask |= 1U << (by * 2 + bx);
+					}
+				}
+				if (!coverageMask) continue;
+			}
+			else if (!npdisp_d3d_sw_insideTriangle(e0, e1, e2, area, topLeft0, topLeft1, topLeft2)) continue;
 			UINT32 color;
 			UINT32 specular;
 			UINT16 zValue = 0;
 			UINT8* zp = NULL;
 			float fogFactor;
-			const float w0 = e0 * invArea;
-			const float w1 = e1 * invArea;
-			const float w2 = e2 * invArea;
-			if (!npdisp_d3d_sw_polygonStipplePass(x, y, state)) continue;
+			const float w0 = sampleE0 * invArea;
+			const float w1 = sampleE1 * invArea;
+			const float w2 = sampleE2 * invArea;
+			if (!npdisp_d3d_sw_polygonStipplePass(sampleX, sampleY, state)) continue;
 			if (state->zEnable || state->stencilEnable) {
-				if (state->zEnable) zValue = npdisp_d3d_sw_depthValue(v0->z * w0 + v1->z * w1 + v2->z * w2, state->depthMask);
-				zp = depthTarget->pixels + (size_t)y * (size_t)depthTarget->pitch + (size_t)x * 2U;
-				if (!npdisp_d3d_sw_depthStencilPass(zp, zValue, state)) continue;
+				if (state->zEnable && !coarse2x2) zValue = npdisp_d3d_sw_fragmentDepth(v0->z * w0 + v1->z * w1 + v2->z * w2, v0->rhw * w0 + v1->rhw * w1 + v2->rhw * w2, state);
+				if (!coarse2x2) {
+					zp = depthTarget->pixels + (size_t)y * (size_t)depthTarget->pitch + (size_t)x * 2U;
+					if (!npdisp_d3d_sw_depthStencilPass(zp, zValue, state)) continue;
+				}
 			}
 			if (state->shadeMode == NPDISP_D3DSHADE_FLAT) {
 				color = v0->diffuse;
@@ -1282,67 +1564,107 @@ bool npdisp_d3d_sw_triangle(NPDISP_D3D_SW_TARGET* target, NPDISP_D3D_SW_DEPTH_TA
 				specular = npdisp_d3d_sw_interpolateColor(v0->specular, v1->specular, v2->specular, w0, w1, w2);
 			}
 			{
-				float q0 = w0 * v0->rhw;
-				float q1 = w1 * v1->rhw;
-				float q2 = w2 * v2->rhw;
-				float q = q0 + q1 + q2;
-				float numeratorU0 = tu0 * q0 + tu1 * q1 + tu2 * q2;
-				float numeratorV0 = tv0 * q0 + tv1 * q1 + tv2 * q2;
-				float numeratorU1 = su0 * q0 + su1 * q1 + su2 * q2;
-				float numeratorV1 = sv0 * q0 + sv1 * q1 + sv2 * q2;
 				float tu, tv, tw, tuB, tvB, twB;
+				float q0 = 0.0f, q1 = 0.0f, q2 = 0.0f, q = 0.0f;
 				NPDISP_D3D_SW_TEXGRAD grad0;
 				NPDISP_D3D_SW_TEXGRAD grad1;
 				const NPDISP_D3D_SW_TEXGRAD* pGrad0 = NULL;
 				const NPDISP_D3D_SW_TEXGRAD* pGrad1 = NULL;
-				if (q > 0.0000001f || q < -0.0000001f) {
-					const float invQ = 1.0f / q;
-					const float invQ2 = invQ * invQ;
-					tu = numeratorU0 * invQ;
-					tv = numeratorV0 * invQ;
-					tw = (tw0 * q0 + tw1 * q1 + tw2 * q2) * invQ;
-					tuB = numeratorU1 * invQ;
-					tvB = numeratorV1 * invQ;
-					twB = (sw0 * q0 + sw1 * q1 + sw2 * q2) * invQ;
-					if (needGrad0) {
-						grad0.dudx = (dU0dx * q - numeratorU0 * dQdx) * invQ2;
-						grad0.dvdx = (dV0dx * q - numeratorV0 * dQdx) * invQ2;
-						grad0.dudy = (dU0dy * q - numeratorU0 * dQdy) * invQ2;
-						grad0.dvdy = (dV0dy * q - numeratorV0 * dQdy) * invQ2;
-						pGrad0 = &grad0;
-					}
-					if (needGrad1) {
-						grad1.dudx = (dU1dx * q - numeratorU1 * dQdx) * invQ2;
-						grad1.dvdx = (dV1dx * q - numeratorV1 * dQdx) * invQ2;
-						grad1.dudy = (dU1dy * q - numeratorU1 * dQdy) * invQ2;
-						grad1.dvdy = (dV1dy * q - numeratorV1 * dQdy) * invQ2;
-						pGrad1 = &grad1;
-					}
+				if (quality >= NPDISP_D3D_QUALITY_AFFINE && blockPerspective) {
+					const float offset = (float)(sampleX - blockStart);
+					tu = blockTex[0] + blockStep[0] * offset;
+					tv = blockTex[1] + blockStep[1] * offset;
+					tw = blockTex[2] + blockStep[2] * offset;
+					tuB = blockTex[3] + blockStep[3] * offset;
+					tvB = blockTex[4] + blockStep[4] * offset;
+					twB = blockTex[5] + blockStep[5] * offset;
 				}
-				else {
+				else if (quality >= NPDISP_D3D_QUALITY_AFFINE) {
 					tu = tu0 * w0 + tu1 * w1 + tu2 * w2;
 					tv = tv0 * w0 + tv1 * w1 + tv2 * w2;
 					tw = tw0 * w0 + tw1 * w1 + tw2 * w2;
 					tuB = su0 * w0 + su1 * w1 + su2 * w2;
 					tvB = sv0 * w0 + sv1 * w1 + sv2 * w2;
 					twB = sw0 * w0 + sw1 * w1 + sw2 * w2;
-					if (needGrad0) {
-						grad0.dudx = tu0 * dw0dx + tu1 * dw1dx + tu2 * dw2dx;
-						grad0.dvdx = tv0 * dw0dx + tv1 * dw1dx + tv2 * dw2dx;
-						grad0.dudy = tu0 * dw0dy + tu1 * dw1dy + tu2 * dw2dy;
-						grad0.dvdy = tv0 * dw0dy + tv1 * dw1dy + tv2 * dw2dy;
-						pGrad0 = &grad0;
+					if (needGrad0) pGrad0 = &affineGrad0;
+					if (needGrad1) pGrad1 = &affineGrad1;
+				}
+				else {
+					q0 = w0 * v0->rhw;
+					q1 = w1 * v1->rhw;
+					q2 = w2 * v2->rhw;
+					q = q0 + q1 + q2;
+					float numeratorU0 = tu0 * q0 + tu1 * q1 + tu2 * q2;
+					float numeratorV0 = tv0 * q0 + tv1 * q1 + tv2 * q2;
+					float numeratorU1 = su0 * q0 + su1 * q1 + su2 * q2;
+					float numeratorV1 = sv0 * q0 + sv1 * q1 + sv2 * q2;
+					if (q > 0.0000001f || q < -0.0000001f) {
+						const float invQ = 1.0f / q;
+						const float invQ2 = invQ * invQ;
+						tu = numeratorU0 * invQ;
+						tv = numeratorV0 * invQ;
+						tw = (tw0 * q0 + tw1 * q1 + tw2 * q2) * invQ;
+						tuB = numeratorU1 * invQ;
+						tvB = numeratorV1 * invQ;
+						twB = (sw0 * q0 + sw1 * q1 + sw2 * q2) * invQ;
+						if (needGrad0) {
+							grad0.dudx = (dU0dx * q - numeratorU0 * dQdx) * invQ2;
+							grad0.dvdx = (dV0dx * q - numeratorV0 * dQdx) * invQ2;
+							grad0.dudy = (dU0dy * q - numeratorU0 * dQdy) * invQ2;
+							grad0.dvdy = (dV0dy * q - numeratorV0 * dQdy) * invQ2;
+							pGrad0 = &grad0;
+						}
+						if (needGrad1) {
+							grad1.dudx = (dU1dx * q - numeratorU1 * dQdx) * invQ2;
+							grad1.dvdx = (dV1dx * q - numeratorV1 * dQdx) * invQ2;
+							grad1.dudy = (dU1dy * q - numeratorU1 * dQdy) * invQ2;
+							grad1.dvdy = (dV1dy * q - numeratorV1 * dQdy) * invQ2;
+							pGrad1 = &grad1;
+						}
 					}
-					if (needGrad1) {
-						grad1.dudx = su0 * dw0dx + su1 * dw1dx + su2 * dw2dx;
-						grad1.dvdx = sv0 * dw0dx + sv1 * dw1dx + sv2 * dw2dx;
-						grad1.dudy = su0 * dw0dy + su1 * dw1dy + su2 * dw2dy;
-						grad1.dvdy = sv0 * dw0dy + sv1 * dw1dy + sv2 * dw2dy;
-						pGrad1 = &grad1;
+					else {
+						tu = tu0 * w0 + tu1 * w1 + tu2 * w2;
+						tv = tv0 * w0 + tv1 * w1 + tv2 * w2;
+						tw = tw0 * w0 + tw1 * w1 + tw2 * w2;
+						tuB = su0 * w0 + su1 * w1 + su2 * w2;
+						tvB = sv0 * w0 + sv1 * w1 + sv2 * w2;
+						twB = sw0 * w0 + sw1 * w1 + sw2 * w2;
+						if (needGrad0) {
+							grad0.dudx = tu0 * dw0dx + tu1 * dw1dx + tu2 * dw2dx;
+							grad0.dvdx = tv0 * dw0dx + tv1 * dw1dx + tv2 * dw2dx;
+							grad0.dudy = tu0 * dw0dy + tu1 * dw1dy + tu2 * dw2dy;
+							grad0.dvdy = tv0 * dw0dy + tv1 * dw1dy + tv2 * dw2dy;
+							pGrad0 = &grad0;
+						}
+						if (needGrad1) {
+							grad1.dudx = su0 * dw0dx + su1 * dw1dx + su2 * dw2dx;
+							grad1.dvdx = sv0 * dw0dx + sv1 * dw1dx + sv2 * dw2dx;
+							grad1.dudy = su0 * dw0dy + su1 * dw1dy + su2 * dw2dy;
+							grad1.dvdy = sv0 * dw0dy + sv1 * dw1dy + sv2 * dw2dy;
+							pGrad1 = &grad1;
+						}
 					}
 				}
 				bool discard = false;
-				if (!npdisp_d3d_sw_applyTextureStages(state, color, tu, tv, tw, tuB, tvB, twB, pGrad0, pGrad1, &color, &discard)) return false;
+				float stageTex[3][4];
+				NPDISP_D3D_SW_TEXGRAD stageGrad[NPDISP_D3D_RASTER_TEXTURE_STAGES];
+				memset(stageGrad, 0, sizeof(stageGrad));
+				if (v0->stageTexValid && v1->stageTexValid && v2->stageTexValid) {
+					for (UINT32 stage = 0; stage < NPDISP_D3D_RASTER_TEXTURE_STAGES; ++stage) {
+						for (UINT32 c = 0; c < 4U; ++c)
+							stageTex[stage][c] = (quality >= NPDISP_D3D_QUALITY_AFFINE && blockPerspective) ?
+								(blockStage[stage][c] + blockStageStep[stage][c] * (float)(sampleX - blockStart)) :
+								(quality < NPDISP_D3D_QUALITY_AFFINE && (q > 0.0000001f || q < -0.0000001f)) ?
+								(v0->stageTex[stage][c] * q0 + v1->stageTex[stage][c] * q1 + v2->stageTex[stage][c] * q2) / q :
+								v0->stageTex[stage][c] * w0 + v1->stageTex[stage][c] * w1 + v2->stageTex[stage][c] * w2;
+						const NPDISP_D3D_TEXTURE* texture = state->textures[stage];
+						if (texture && texture->mipCount > 1U && texture->mipFilter != NPDISP_D3DTFP_NONE)
+							npdisp_d3d_sw_stageGradient(v0, v1, v2, stage, texture->textureTransformFlags,
+								w0, w1, w2, dw0dx, dw1dx, dw2dx, dw0dy, dw1dy, dw2dy, &stageGrad[stage]);
+					}
+				}
+				if (!npdisp_d3d_sw_applyTextureStages(state, color, tu, tv, tw, tuB, tvB, twB, pGrad0, pGrad1,
+					v0->stageTexValid && v1->stageTexValid && v2->stageTexValid ? stageTex : NULL, stageGrad, &color, &discard)) return false;
 				if (discard) continue;
 			}
 			if (state->specularEnable) color = npdisp_d3d_sw_addSpecular(color, specular);
@@ -1351,9 +1673,39 @@ bool npdisp_d3d_sw_triangle(NPDISP_D3D_SW_TARGET* target, NPDISP_D3D_SW_DEPTH_TA
 				fogFactor = (((float)((v0->specular >> 24) & 0xffU) * w0) + ((float)((v1->specular >> 24) & 0xffU) * w1) + ((float)((v2->specular >> 24) & 0xffU) * w2)) / 255.0f;
 				color = npdisp_d3d_sw_applyFog(color, state->fogColor, fogFactor);
 			}
-			if (state->zEnable && state->zWriteEnable) npdisp_d3d_sw_writeDepth(zp, zValue, state);
-			UINT8* p = target->pixels + (size_t)y * (size_t)target->pitch + (size_t)x * bytesPerPixel;
-			if (!npdisp_d3d_sw_outputPixel(target, p, state, color)) return false;
+			if (coarse2x2) {
+				for (SINT32 by = 0; by < 2 && y + by < bottom; ++by) {
+					for (SINT32 bx = 0; bx < 2 && x + bx < right; ++bx) {
+						if (!(coverageMask & (1U << (by * 2 + bx)))) continue;
+						const SINT32 px = x + bx;
+						const SINT32 py = y + by;
+						UINT8* blockZp = NULL;
+						UINT16 blockZValue = 0;
+						if (state->zEnable) {
+							const float dx = (float)(px - sampleX), dy = (float)(py - sampleY);
+							const float z = v0->z * (w0 + dw0dx * dx + dw0dy * dy) +
+								v1->z * (w1 + dw1dx * dx + dw1dy * dy) +
+								v2->z * (w2 + dw2dx * dx + dw2dy * dy);
+							const float rhw = v0->rhw * (w0 + dw0dx * dx + dw0dy * dy) +
+								v1->rhw * (w1 + dw1dx * dx + dw1dy * dy) +
+								v2->rhw * (w2 + dw2dx * dx + dw2dy * dy);
+							blockZValue = npdisp_d3d_sw_fragmentDepth(z, rhw, state);
+						}
+						if (state->zEnable || state->stencilEnable) {
+							blockZp = depthTarget->pixels + (size_t)py * (size_t)depthTarget->pitch + (size_t)px * 2U;
+							if (!npdisp_d3d_sw_depthStencilPass(blockZp, blockZValue, state)) continue;
+						}
+						if (state->zEnable && state->zWriteEnable) npdisp_d3d_sw_writeDepth(blockZp, blockZValue, state);
+						UINT8* p = target->pixels + (size_t)py * (size_t)target->pitch + (size_t)px * bytesPerPixel;
+						if (!npdisp_d3d_sw_outputPixel(target, p, state, color, px, py)) return false;
+					}
+				}
+			}
+			else {
+				if (state->zEnable && state->zWriteEnable) npdisp_d3d_sw_writeDepth(zp, zValue, state);
+				UINT8* p = target->pixels + (size_t)y * (size_t)target->pitch + (size_t)x * bytesPerPixel;
+				if (!npdisp_d3d_sw_outputPixel(target, p, state, color, x, y)) return false;
+			}
 		}
 	}
 	return true;

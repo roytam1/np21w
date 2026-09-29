@@ -16,6 +16,10 @@
 #include	"i386hax/haxfunc.h"
 #include	"i386hax/haxcore.h"
 #endif
+#if defined(SUPPORT_IA32_WHPX)
+#include	"i386whpx/whpxfunc.h"
+#include	"i386whpx/whpxcore.h"
+#endif
 
 #if 0
 #undef  TRACEOUT
@@ -326,6 +330,10 @@ void MEMCALL memvgaio_wr8(UINT32 address, REG8 value) {
 #if defined(SUPPORT_IA32_HAXM)
 		i386hax_vm_setmemoryarea(vramex + ((vramop.mio1[0] & 15) << 15), 0xA8000, 0x8000);
 		i386hax_vm_setmemoryarea(vramex + ((vramop.mio1[2] & 15) << 15), 0xB0000, 0x8000);
+#endif
+#if defined(SUPPORT_IA32_WHPX)
+		i386whpx_vm_setmemoryarea(vramex + ((vramop.mio1[0] & 15) << 15), 0xA8000, 0x8000);
+		i386whpx_vm_setmemoryarea(vramex + ((vramop.mio1[2] & 15) << 15), 0xB0000, 0x8000);
 #endif
 		return;
 	}

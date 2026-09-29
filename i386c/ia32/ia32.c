@@ -31,6 +31,10 @@
 #include "i386hax/haxfunc.h"
 #include "i386hax/haxcore.h"
 #endif
+#if defined(SUPPORT_IA32_WHPX)
+#include "i386whpx/whpxfunc.h"
+#include "i386whpx/whpxcore.h"
+#endif
 
 #if defined(USE_CPU_EIPMASK)
 UINT32		cpu_eipMask;
@@ -118,7 +122,11 @@ ia32_setextsize(UINT32 size)
 			{
 #if defined(SUPPORT_IA32_HAXM)
 				_aligned_free(extmem);
-#else
+#endif
+#if defined(SUPPORT_IA32_WHPX)
+				_aligned_free(extmem);
+#endif
+#if !defined(SUPPORT_IA32_HAXM) && !defined(SUPPORT_IA32_WHPX)
 				_MFREE(extmem);
 #endif
 			}
@@ -143,7 +151,11 @@ ia32_setextsize(UINT32 size)
 			{
 #if defined(SUPPORT_IA32_HAXM)
 				extmem = (UINT8*)_aligned_malloc(size + 4096, 4096);
-#else
+#endif
+#if defined(SUPPORT_IA32_WHPX)
+				extmem = (UINT8*)_aligned_malloc(size + 4096, 4096);
+#endif
+#if !defined(SUPPORT_IA32_HAXM) && !defined(SUPPORT_IA32_WHPX)
 				extmem = (UINT8 *)_MALLOC(size + 16, "EXTMEM");
 #endif
 			}

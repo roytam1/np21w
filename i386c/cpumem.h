@@ -51,7 +51,12 @@ extern "C" {
 #if defined(SUPPORT_IA32_HAXM)
 extern	UINT8	membase[0x200000];
 extern	UINT8	*mem;
-#else
+#endif
+#if defined(SUPPORT_IA32_WHPX)
+extern	UINT8	membase[0x200000];
+extern	UINT8	*mem;
+#endif
+#if !defined(SUPPORT_IA32_HAXM) && !defined(SUPPORT_IA32_WHPX)
 extern	UINT8	mem[0x200000];
 #endif
 

@@ -15,6 +15,10 @@
 #include	"i386hax/haxfunc.h"
 #include	"i386hax/haxcore.h"
 #endif
+#if defined(SUPPORT_IA32_WHPX)
+#include	"i386whpx/whpxfunc.h"
+#include	"i386whpx/whpxcore.h"
+#endif
 
 #if !defined(CPUCORE_IA32)
 #define	SEARCH_SYNC
@@ -163,6 +167,10 @@ void gdc_analogext(BOOL extend) {
 		i386hax_vm_setmemoryarea(vramex + ((vramop.mio1[0] & 15) << 15), 0xA8000, 0x8000);
 		i386hax_vm_setmemoryarea(vramex + ((vramop.mio1[2] & 15) << 15), 0xB0000, 0x8000);
 #endif
+#if defined(SUPPORT_IA32_WHPX)
+		i386whpx_vm_setmemoryarea(vramex + ((vramop.mio1[0] & 15) << 15), 0xA8000, 0x8000);
+		i386whpx_vm_setmemoryarea(vramex + ((vramop.mio1[2] & 15) << 15), 0xB0000, 0x8000);
+#endif
 	}
 	else {
 		gdc.analog &= ~(1 << (GDCANALOG_256));
@@ -170,6 +178,10 @@ void gdc_analogext(BOOL extend) {
 #if defined(SUPPORT_IA32_HAXM)
 		i386hax_vm_removememoryarea(vramex + ((vramop.mio1[0] & 15) << 15), 0xA8000, 0x8000);
 		i386hax_vm_removememoryarea(vramex + ((vramop.mio1[2] & 15) << 15), 0xB0000, 0x8000);
+#endif
+#if defined(SUPPORT_IA32_WHPX)
+		i386whpx_vm_removememoryarea(vramex + ((vramop.mio1[0] & 15) << 15), 0xA8000, 0x8000);
+		i386whpx_vm_removememoryarea(vramex + ((vramop.mio1[2] & 15) << 15), 0xB0000, 0x8000);
 #endif
 	}
 	gdcs.palchange = GDCSCRN_REDRAW;

@@ -378,10 +378,24 @@ protected:
 private:
 	UINT8 m_enabled;			//!< —LŒøƒtƒ‰ƒO
 	UINT8 m_acceleration;
+	UINT8 m_tnlenable;
+	UINT8 m_d3dquality;
+	CWndProc m_chkTnlEnable;
+	CComboData m_cmbd3dquality;
 	CWndProc m_chkenabled;		//!< ENABLED
 	CWndProc m_radlegacy;
 	CWndProc m_raddirectdraw;
 	CWndProc m_raddirect3d;
+};
+
+//! D3D Quality
+static const CComboData::Entry s_d3dquality[] =
+{
+	{MAKEINTRESOURCE(IDS_NPDISP_D3DQUALITY_0),		0x0},
+	{MAKEINTRESOURCE(IDS_NPDISP_D3DQUALITY_1),		0x1},
+	{MAKEINTRESOURCE(IDS_NPDISP_D3DQUALITY_2),		0x2},
+	{MAKEINTRESOURCE(IDS_NPDISP_D3DQUALITY_3),		0x3},
+	{MAKEINTRESOURCE(IDS_NPDISP_D3DQUALITY_4),		0x4},
 };
 
 /**
@@ -407,6 +421,9 @@ BOOL CNPDISPPage::OnInitDialog()
 {
 	m_enabled = np2cfg.usenpdisp;
 	m_acceleration = np2cfg.npdispaccel;
+	m_tnlenable = np2cfg.npdisptnlenable ? 1 : 0;
+	m_d3dquality = np2cfg.npdispd3dquality;
+	if (m_d3dquality > NPDISP_D3D_QUALITY_MAX) m_d3dquality = NPDISP_D3D_QUALITY_ACCURATE;
 	if (m_acceleration > NPDISP_ACCEL_DIRECT3D)
 		m_acceleration = NPDISP_ACCEL_DIRECT3D;
 #if !defined(SUPPORT_NPDISP_D3D)
@@ -429,6 +446,15 @@ BOOL CNPDISPPage::OnInitDialog()
 	m_radlegacy.SendMessage(BM_SETCHECK, (m_acceleration == NPDISP_ACCEL_LEGACY) ? BST_CHECKED : BST_UNCHECKED, 0);
 	m_raddirectdraw.SendMessage(BM_SETCHECK, (m_acceleration == NPDISP_ACCEL_DIRECTDRAW) ? BST_CHECKED : BST_UNCHECKED, 0);
 	m_raddirect3d.SendMessage(BM_SETCHECK, (m_acceleration == NPDISP_ACCEL_DIRECT3D) ? BST_CHECKED : BST_UNCHECKED, 0);
+	m_chkTnlEnable.SubclassDlgItem(IDC_NPDISPTNLENABLE, this);
+	m_chkTnlEnable.SendMessage(BM_SETCHECK, m_tnlenable ? BST_CHECKED : BST_UNCHECKED, 0);
+	m_cmbd3dquality.SubclassDlgItem(IDC_NPDISPD3DQUALITY, this);
+	m_cmbd3dquality.Add(s_d3dquality, _countof(s_d3dquality));
+	m_cmbd3dquality.SetCurSel(m_d3dquality);
+#if !defined(SUPPORT_NPDISP_D3D)
+	m_chkTnlEnable.EnableWindow(FALSE);
+	m_cmbd3dquality.EnableWindow(FALSE);
+#endif
 
 	m_chkenabled.SetFocus();
 
@@ -441,11 +467,16 @@ BOOL CNPDISPPage::OnInitDialog()
 void CNPDISPPage::OnOK()
 {
 	UINT update = 0;
+	const bool qualityChanged = np2cfg.npdispd3dquality != m_d3dquality;
 
-	if (np2cfg.usenpdisp != m_enabled || np2cfg.npdispaccel != m_acceleration)
+	if (np2cfg.usenpdisp != m_enabled || np2cfg.npdispaccel != m_acceleration ||
+		np2cfg.npdisptnlenable != m_tnlenable || qualityChanged)
 	{
 		np2cfg.usenpdisp = m_enabled;
 		np2cfg.npdispaccel = m_acceleration;
+		np2cfg.npdisptnlenable = m_tnlenable;
+		if (qualityChanged) np2cfg.npdisptnlfast = 0;	// explicit preset selection supersedes the legacy flag
+		np2cfg.npdispd3dquality = m_d3dquality;
 		update |= SYS_UPDATECFG;
 	}
 	::sysmng_update(update);
@@ -472,6 +503,15 @@ BOOL CNPDISPPage::OnCommand(WPARAM wParam, LPARAM lParam)
 		return TRUE;
 	case IDC_NPDISPDIRECT3D:
 		m_acceleration = NPDISP_ACCEL_DIRECT3D;
+		return TRUE;
+	case IDC_NPDISPTNLENABLE:
+		m_tnlenable = m_chkTnlEnable.SendMessage(BM_GETCHECK, 0, 0) ? 1 : 0;
+		return TRUE;
+	case IDC_NPDISPD3DQUALITY:
+		if (HIWORD(wParam) == CBN_SELCHANGE) {
+			int sel = m_cmbd3dquality.GetCurSel();
+			if (sel >= NPDISP_D3D_QUALITY_ACCURATE && sel <= NPDISP_D3D_QUALITY_MAX) m_d3dquality = (UINT8)sel;
+		}
 		return TRUE;
 	}
 	return FALSE;

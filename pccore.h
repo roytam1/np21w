@@ -88,6 +88,16 @@ enum {
 	NPDISP_ACCEL_DIRECTDRAW	= 1,
 	NPDISP_ACCEL_DIRECT3D		= 2
 };
+
+enum {
+	NPDISP_D3D_QUALITY_ACCURATE = 0,
+	NPDISP_D3D_QUALITY_POINT = 1,
+	NPDISP_D3D_QUALITY_AFFINE = 2,
+	NPDISP_D3D_QUALITY_FASTEST = 3,
+	NPDISP_D3D_QUALITY_COARSE2X2 = 4,
+	NPDISP_D3D_QUALITY_MAX = NPDISP_D3D_QUALITY_COARSE2X2,
+	NPDISP_D3D_QUALITY_FAST_TNL = NPDISP_D3D_QUALITY_FASTEST
+};
 #endif
 
 /**
@@ -279,6 +289,9 @@ struct tagNP2Config
 #if defined(SUPPORT_WAB_NPDISP)
 	UINT8	usenpdisp;
 	UINT8	npdispaccel;
+	UINT8	npdisptnlenable;
+	UINT8	npdisptnlfast;		// legacy INI compatibility; use npdispd3dquality for new settings
+	UINT8	npdispd3dquality;
 #endif
 #if defined(SUPPORT_WAB_GA1280A)
 	UINT8	usega1280a;
@@ -436,6 +449,10 @@ void screenvsync(NEVENTITEM item);
 void pccore_cfgupdate(void);
 
 #if defined(SUPPORT_IA32_HAXM)
+void pccore_mem_malloc(void);
+void pccore_mem_free(void);
+#endif
+#if defined(SUPPORT_IA32_WHPX)
 void pccore_mem_malloc(void);
 void pccore_mem_free(void);
 #endif

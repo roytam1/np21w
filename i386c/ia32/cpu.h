@@ -1167,7 +1167,24 @@ do { \
 	np2haxstat.update_regs = 1; \
 } while (/*CONSTCOND*/0)
 
-#else
+#endif
+#if defined(SUPPORT_IA32_WHPX)
+#define CPU_CLI \
+do { \
+	CPU_FLAG &= ~I_FLAG; \
+	CPU_TRAP = (CPU_FLAG & (T_FLAG)) == (T_FLAG); \
+	np2whpxstat.update_regs = 1; \
+} while (/*CONSTCOND*/0)
+
+#define CPU_STI \
+do { \
+	CPU_FLAG |= I_FLAG; \
+	CPU_TRAP = (CPU_FLAG & (T_FLAG)) == (T_FLAG) ; \
+	np2whpxstat.update_regs = 1; \
+} while (/*CONSTCOND*/0)
+
+#endif
+#if !defined(SUPPORT_IA32_HAXM) && !defined(SUPPORT_IA32_WHPX)
 #define CPU_CLI \
 do { \
 	CPU_FLAG &= ~I_FLAG; \

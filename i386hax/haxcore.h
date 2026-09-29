@@ -68,10 +68,6 @@ extern	NP2_HAX_CORE	np2haxcore;
 
 #endif
 
-#ifdef __cplusplus
-}
-#endif
-
 UINT8 i386hax_check(void); // HAXM使用可能チェック
 void i386hax_initialize(void); // HAXM初期化
 void i386hax_createVM(void); // HAXM仮想マシン作成
@@ -100,6 +96,10 @@ void i386hax_vm_removememoryarea(UINT8 *vramptr, UINT32 addr, UINT32 size);
 
 void ia32hax_copyregHAXtoNP2(void);
 void ia32hax_copyregNP2toHAX(void);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif
 

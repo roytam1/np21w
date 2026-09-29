@@ -23,7 +23,11 @@
 #include "startup.res"
 #if defined(SUPPORT_IA32_HAXM)
 #include "biosfd80_hax.res"
-#else
+#endif
+#if defined(SUPPORT_IA32_WHPX)
+#include "biosfd80_whpx.res"
+#endif
+#if !defined(SUPPORT_IA32_HAXM) && !defined(SUPPORT_IA32_WHPX)
 #include "biosfd80.res"
 #endif
 #if defined(SUPPORT_IDEIO)
@@ -52,6 +56,11 @@
 #if defined(SUPPORT_IA32_HAXM)
 #include	"i386hax/haxfunc.h"
 #include	"i386hax/haxcore.h"
+#define USE_CUSTOM_HOOKINST
+#endif
+#if defined(SUPPORT_IA32_WHPX)
+#include	"i386whpx/whpxfunc.h"
+#include	"i386whpx/whpxcore.h"
 #define USE_CUSTOM_HOOKINST
 #endif
 
@@ -441,6 +450,11 @@ void bios_initialize(void) {
 		bioshookinfo.hookinst = 0xF4;//;0xCC;//HOOKINST_DEFAULT; // BIOSフックに使う命令（デフォルトはNOP命令をフック）
 	}else
 #endif
+#if defined(SUPPORT_IA32_WHPX)
+	if (np2whpx.enable) {
+		bioshookinfo.hookinst = 0xF4;//;0xCC;//HOOKINST_DEFAULT; // BIOSフックに使う命令（デフォルトはNOP命令をフック）
+	}else
+#endif
 	{
 		bioshookinfo.hookinst = HOOKINST_DEFAULT; // BIOSフックに使う命令（デフォルトはNOP命令をフック）
 	}
@@ -577,6 +591,11 @@ void bios_initialize(void) {
 		}
 #if defined(SUPPORT_IA32_HAXM)
 		if (np2hax.enable && np2cfg.sbeepadj) {
+			mem[ITF_ADRS + 5553] = 255;
+		}else
+#endif
+#if defined(SUPPORT_IA32_WHPX)
+		if (np2whpx.enable && np2cfg.sbeepadj) {
 			mem[ITF_ADRS + 5553] = 255;
 		}else
 #endif

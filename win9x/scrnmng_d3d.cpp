@@ -534,10 +534,12 @@ void scrnmngD3D_restoresurfaces() {
 	HRESULT r;
 
 	d3d_enter_criticalsection();
-	r = d3d.d3ddev->TestCooperativeLevel();
-	if (r == D3DERR_DRIVERINTERNALERROR)
-	{
-		devicelostflag = 2;
+	if (d3d.d3ddev) {
+		r = d3d.d3ddev->TestCooperativeLevel();
+		if (r == D3DERR_DRIVERINTERNALERROR)
+		{
+			devicelostflag = 2;
+		}
 	}
 	if(d3d.d3ddev==NULL || r==D3DERR_DEVICENOTRESET || r==D3DERR_DRIVERINTERNALERROR){
 		static UINT  bufwidth, bufheight;

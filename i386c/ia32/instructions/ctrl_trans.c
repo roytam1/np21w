@@ -38,6 +38,10 @@
 #include "bios/bios.h"
 #include "sound/soundrom.h"
 #endif
+#ifdef SUPPORT_IA32_WHPX
+#include "bios/bios.h"
+#include "sound/soundrom.h"
+#endif
 
 static void
 current_stack_push16(UINT32 *sp, UINT16 value)
@@ -1487,6 +1491,24 @@ void
 INT3(void)
 {
 #if defined(SUPPORT_IA32_HAXM)
+#if defined(USE_CUSTOM_HOOKINST)
+	if(bioshookinfo.hookinst == 0xCC){
+		if (!CPU_STAT_PM || CPU_STAT_VM86) {
+			UINT32 adrs;
+			adrs = CPU_PREV_EIP + (CPU_CS << 4);
+			if (
+#if defined(SUPPORT_EMU_SOUNDBIOS)
+				soundrom_isbiosaddr(adrs) ||
+#endif
+				((adrs >= 0xf8000) && (adrs < 0x100000))) {
+				ia32_bioscall();
+				return;
+			}
+		}
+	}
+#endif
+#endif
+#if defined(SUPPORT_IA32_WHPX)
 #if defined(USE_CUSTOM_HOOKINST)
 	if(bioshookinfo.hookinst == 0xCC){
 		if (!CPU_STAT_PM || CPU_STAT_VM86) {

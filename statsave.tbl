@@ -106,12 +106,19 @@ static const SFENTRY np2tbl[] = {
 #if defined(SUPPORT_IA32_HAXM)
 	{"CPUHAXM",		0,	STATFLAG_BIN,	&np2haxstat,	sizeof(np2haxstat)},
 #endif
+#if defined(SUPPORT_IA32_WHPX)
+	{"CPUWHPX",		0,	STATFLAG_BIN,	&np2whpxstat,	sizeof(np2whpxstat)},
+#endif
 	{"MEMORY",		0,	STATFLAG_MEM,	NULL,			0x130000},
 	{"EXTMEM",		0,	STATFLAG_EXT,	NULL,			0},
 #if defined(SUPPORT_PC9821)
 #if defined(SUPPORT_IA32_HAXM)
 	{"VRAMEX",		0,	STATFLAG_BIN,	vramex_base,	sizeof(vramex_base)},
-#else
+#endif
+#if defined(SUPPORT_IA32_WHPX)
+	{"VRAMEX",		0,	STATFLAG_BIN,	vramex_base,	sizeof(vramex_base)},
+#endif
+#if !defined(SUPPORT_IA32_HAXM) && !defined(SUPPORT_IA32_WHPX)
 	{"VRAMEX",		0,	STATFLAG_BIN,	vramex,			sizeof(vramex)},
 #endif
 #endif

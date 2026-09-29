@@ -39,6 +39,10 @@
 #include "i386hax/haxfunc.h"
 #include "i386hax/haxcore.h"
 #endif
+#if defined(SUPPORT_IA32_WHPX)
+#include "i386whpx/whpxfunc.h"
+#include "i386whpx/whpxcore.h"
+#endif
 
 void
 ia32_initreg(void)
@@ -115,6 +119,17 @@ ia32reset(void)
 		ia32hax_copyregHAXtoNP2();
 	}
 #endif
+#if defined(SUPPORT_IA32_WHPX)
+	i386whpx_resetVMCPU();
+	i386whpxfunc_get_registers(&np2whpxstat.state);
+	i386whpxfunc_get_fpu(&np2whpxstat.fpustate);
+	if (!np2whpx.emumode)
+	{
+		np2whpxstat.update_regs = np2whpxstat.update_fpu = 0;
+		// WHPXレジスタ→猫レジスタにコピー
+		ia32whpx_copyregWHPXtoNP2();
+	}
+#endif
 	// MMIOマップリセット
 	memp_mmio_map_reset();
 }
@@ -133,6 +148,17 @@ ia32shut(void)
 		np2haxstat.update_regs = np2haxstat.update_fpu = 0;
 		// HAXMレジスタ→猫レジスタにコピー
 		ia32hax_copyregHAXtoNP2();
+	}
+#endif
+#if defined(SUPPORT_IA32_WHPX)
+	i386whpx_resetVMCPU();
+	i386whpxfunc_get_registers(&np2whpxstat.state);
+	i386whpxfunc_get_fpu(&np2whpxstat.fpustate);
+	if (!np2whpx.emumode)
+	{
+		np2whpxstat.update_regs = np2whpxstat.update_fpu = 0;
+		// WHPXレジスタ→猫レジスタにコピー
+		ia32whpx_copyregWHPXtoNP2();
 	}
 #endif
 }
@@ -236,6 +262,17 @@ ia32_interrupt(int vect, int soft)
 				np2haxstat.irq_reqidx_end++;
 			}
 			//i386haxfunc_vcpu_interrupt(vect);
+		}
+	}else
+#endif
+#if defined(SUPPORT_IA32_WHPX)
+	if(np2whpx.enable && !np2whpx.emumode && np2whpx.created){
+		np2whpxcore.hltflag = 0;
+		if(!soft){
+			if(np2whpxstat.irq_reqidx_end - np2whpxstat.irq_reqidx_cur < 250){
+				np2whpxstat.irq_req[np2whpxstat.irq_reqidx_end] = vect;
+				np2whpxstat.irq_reqidx_end++;
+			}
 		}
 	}else
 #endif

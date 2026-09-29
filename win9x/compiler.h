@@ -209,7 +209,14 @@ typedef	signed __int64		SINT64;
 #define SUPPORT_WIN2000HOST
 #endif
 
+#if defined(SUPPORT_IA32_HAXM) && defined(SUPPORT_IA32_WHPX)
+#error SUPPORT_IA32_WHPX and SUPPORT_IA32_WHPX cannot be enabled together.
+#endif
+
 #if defined(SUPPORT_IA32_HAXM)
+#define USE_CUSTOM_HOOKINST
+#endif
+#if defined(SUPPORT_IA32_WHPX)
 #define USE_CUSTOM_HOOKINST
 #endif
 

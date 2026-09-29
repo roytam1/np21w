@@ -33,6 +33,9 @@
 #include	"sound/soundrom.h"
 #include	"vram/vram.h"
 #include	"wab/cirrus_vga_extern.h"
+#if defined(SUPPORT_WAB_NPDISP) && defined(SUPPORT_NPDISP_W2K)
+#include	"wab/npdisp_w2k.h"
+#endif
 
 #if defined(SUPPORT_IA32_HAXM)
 
@@ -309,6 +312,9 @@ void i386hax_resetVMMem(void) {
 	i386hax_vm_setmemoryarea(mem+0xE8000, 0xE8000, 0x8000);
 	i386hax_vm_setmemoryarea(mem+0xF0000, 0xF0000, 0x8000);
 	i386hax_vm_setmemoryarea(mem+0xF8000, 0xF8000, 0x8000);
+#if defined(SUPPORT_WAB_NPDISP) && defined(SUPPORT_NPDISP_W2K)
+	npdisp_w2k_haxSync();
+#endif
 	
 	//i386hax_vm_setmemoryarea(mem+0xA5000, 0xA5000, 0x3000);
 	//i386hax_vm_setmemoryarea(mem+0xA8000, 0xA8000, 0x8000);
@@ -1254,6 +1260,9 @@ void i386hax_vm_exec(void) {
 void i386hax_disposeVM(void) {
 	
 #if defined(_WIN32)
+#if defined(SUPPORT_WAB_NPDISP) && defined(SUPPORT_NPDISP_W2K)
+	npdisp_w2k_haxInvalidate();
+#endif
 	if(!np2hax.hDevice) return;
 	if(!np2hax.hVCPUDevice) return;
 	if(!np2hax.hVMDevice) return;
@@ -1381,6 +1390,9 @@ void i386hax_vm_setmemory(void) {
 	
 	TRACEOUT(("HAXM: HAX VM set memory."));
     //msgbox("HAXM VM", "HAX VM set memory.");
+#if defined(SUPPORT_WAB_NPDISP) && defined(SUPPORT_NPDISP_W2K)
+	npdisp_w2k_haxSync();
+#endif
 #endif
 }
 void i386hax_vm_setbankmemory() {

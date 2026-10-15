@@ -168,7 +168,10 @@ static REG8 sasibios_read(UINT type, SXSIDEV sxsi) {
 #ifdef SUPPORT_IDEIO
 	if((oldAL & 0xf0) == 0x80){
 #if defined(BIOS_IO_EMULATION) && defined(CPUCORE_IA32)
-		if (CPU_STAT_PM && CPU_STAT_VM86 && biosioemu.enable && biosioemu.active) {
+		if (biosioemu_iotrap8(0x644) || biosioemu_iotrap8(0x646) ||
+			biosioemu_iotrap8(0x64a) || biosioemu_iotrap8(0x648) ||
+			biosioemu_iotrap8(0x64e) || biosioemu_iotrap8(0x64c) ||
+			biosioemu_iotrap8(0x432) || biosioemu_iotrap8(0x430)) {
 #if defined(SUPPORT_IDEIO_48BIT)
 			if(sxsi->totals > 0xffffff){
 				// 大容量ディスク用
@@ -455,7 +458,7 @@ static const SXSIFUNC sasifunc[16] = {
 REG8 sasibios_operate(void) {
 
 	UINT	type;
-	SXSIDEV	sxsi;
+	SXSIDEV	sxsi = NULL;
 
 	if (pccore.hddif & PCHDD_IDE) {
 		type = SXSIBIOS_IDE;

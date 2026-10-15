@@ -440,7 +440,7 @@ const CRTDATA	*p;
 		}
 #if defined(BIOS_IO_EMULATION) && defined(CPUCORE_IA32)
 		// XXX: Windows3.1 DOSプロンプト用 無理やり
-		if (CPU_STAT_PM && CPU_STAT_VM86 && biosioemu.enable && biosioemu.active) {
+		if (biosioemu_iotrap8(0x6a)) {
 			biosioemu_enq8(0x6a, 0x68);
 		}else
 #endif	
@@ -491,7 +491,7 @@ const CRTDATA	*p;
 	if (slave & 1) {
 #if defined(BIOS_IO_EMULATION) && defined(CPUCORE_IA32)
 		// XXX: Windows3.1 DOSプロンプト用 無理やり
-		if (CPU_STAT_PM && CPU_STAT_VM86 && biosioemu.enable && biosioemu.active) {
+		if (biosioemu_iotrap8(0xa2) || biosioemu_iotrap8(0xa0)) {
 			biosioemu_enq8(0xa2, CMD_PITCH);
 			biosioemu_enq8(0xa0, 80);
 		}else
@@ -506,7 +506,7 @@ const CRTDATA	*p;
 	else {
 #if defined(BIOS_IO_EMULATION) && defined(CPUCORE_IA32)
 		// XXX: Windows3.1 DOSプロンプト用 無理やり
-		if (CPU_STAT_PM && CPU_STAT_VM86 && biosioemu.enable && biosioemu.active) {
+		if (biosioemu_iotrap8(0xa2) || biosioemu_iotrap8(0xa0)) {
 			biosioemu_enq8(0xa2, CMD_PITCH);
 			biosioemu_enq8(0xa0, 40);
 		}else
@@ -532,7 +532,7 @@ const CRTDATA	*p;
 
 #if defined(BIOS_IO_EMULATION) && defined(CPUCORE_IA32)
 	// XXX: Windows3.1 DOSプロンプト用 無理やり
-	if (CPU_STAT_PM && CPU_STAT_VM86 && biosioemu.enable && biosioemu.active) {
+	if (biosioemu_iotrap8(0x6a) || biosioemu_iotrap8(0x62)) {
 		biosioemu_enq8(0x6a, 0x40 | ((gdc.display & (1 << GDCDISP_PLAZMA)) ? 1 : 0)); // gdcs.textdisp |= GDCSCRN_EXT; の代わり・・・
 		biosioemu_enq8(0x6a, 0x82 | (gdc.clock & 1)); // gdcs.grphdisp |= GDCSCRN_EXT;
 		biosioemu_enq8(0x62, CMD_STOP); // gdcs.textdisp &= ~GDCSCRN_ENABLE; pcstat.screenupdate |= 2;
@@ -605,6 +605,146 @@ void bios0x18_41(void) {
 	mem[MEMB_PRXCRT] &= 0x7f;
 }
 
+#if defined(BIOS_IO_EMULATION) && defined(CPUCORE_IA32)
+static BOOL bios0x18_42_v86io(REG8 mode, UINT8 crtmode) {
+
+	const UINT8 *sync;
+	UINT8 pitch;
+	int slave;
+	UINT i;
+
+	/*
+	 * Virtualize this BIOS service when any GDC port it relies on is
+	 * actually trapped by the current VM86 monitor.  This mirrors a real BIOS:
+	 * trapped accesses go to the VDD while untrapped accesses pass through.
+	 */
+	if (!biosioemu_iotrap8(0x68) && !biosioemu_iotrap8(0x6a) &&
+		!biosioemu_iotrap8(0xa0) && !biosioemu_iotrap8(0xa2) &&
+		((crtmode == 3) || !biosioemu_iotrap8(0xa4))) {
+		return FALSE;
+	}
+
+	/*
+	 * Phase 1 is deliberately kept below BIOSIOEMU_DATA_MAX.  Phase 2 is
+	 * represented by a callback marker in the existing data[] array, so the
+	 * BIOSIOEMU structure (and therefore the state-save binary size) remains
+	 * unchanged.
+	 */
+	if (biosioemu.count > (BIOSIOEMU_DATA_MAX - 14)) {
+		return FALSE;
+	}
+
+	if (crtmode == 2) {                              /* ALL */
+		if ((mem[MEMB_PRXDUPD] & 0x24) == 0x20) {
+			mem[MEMB_PRXDUPD] ^= 4;
+			mem[MEMB_PRXDUPD] |= 0x08;
+		}
+	}
+	else {
+		if ((mem[MEMB_PRXDUPD] & 0x24) == 0x24) {
+			mem[MEMB_PRXDUPD] ^= 4;
+			mem[MEMB_PRXDUPD] |= 0x08;
+		}
+	}
+
+	/*
+	 * Windows 3.1 VDD initializes the per-VM GDC shadow as 5 MHz.  If we
+	 * publish the final clock unconditionally, SYNC and PITCH must be
+	 * published unconditionally as the matching set as well; otherwise the
+	 * VDD can restore a 2.5 MHz clock together with 5 MHz timing parameters.
+	 */
+	if (mem[MEMB_PRXDUPD] & 4) {
+		sync = gdcslavesync[3];
+		pitch = 80;
+		biosioemu_enq8(0x6a, 0x83);
+		biosioemu_enq8(0x6a, 0x85);
+	}
+	else {
+#if defined(SUPPORT_CRT31KHZ)
+		if (bios0x18_31al() & 4) {
+			slave = 4;
+		}
+		else
+#endif
+		{
+			slave = (mem[MEMB_PRXCRT] & 0x40) ? 2 : 0;
+		}
+		sync = gdcslavesync[slave];
+		pitch = 40;
+		biosioemu_enq8(0x6a, 0x82);
+		biosioemu_enq8(0x6a, 0x84);
+	}
+
+	biosioemu_enq8(0xa2, CMD_SYNC_OFF);
+	for (i = 0; i < 8; i++) {
+		biosioemu_enq8(0xa0, sync[i]);
+	}
+	biosioemu_enq8(0xa2, CMD_PITCH);
+	biosioemu_enq8(0xa0, pitch);
+
+#if defined(SUPPORT_CRT31KHZ)
+	mem[MEMB_CRT_BIOS] &= ~3;
+	mem[MEMB_CRT_BIOS] |= crtmode;
+#endif
+
+	/* Execute the remaining AH=42h I/O after phase 1 has drained. */
+	biosioemu_enq_callback(BIOSIOEMU_CALLBACK_INT18_42, mode);
+	return TRUE;
+}
+
+void bios0x18_42_continue(UINT32 data) {
+
+	REG8 mode = (REG8)data;
+	UINT8 crtmode = modenum[mode >> 6];
+	UINT8 scroll[4] = {0, 0, 0, 0};
+	UINT8 csrform0;
+
+	if ((crtmode != 2) && (crtmode & 1)) {            /* UPPER */
+		scroll[0] = (200 * 40) & 0xff;
+		scroll[1] = (200 * 40) >> 8;
+	}
+	if (mem[MEMB_PRXDUPD] & 4) {
+		scroll[3] = 0x40;
+	}
+
+	biosioemu_enq8(0xa2, CMD_SCROLL);
+	biosioemu_enq8(0xa0, scroll[0]);
+	biosioemu_enq8(0xa0, scroll[1]);
+	biosioemu_enq8(0xa0, scroll[2]);
+	biosioemu_enq8(0xa0, scroll[3]);
+
+	if ((crtmode == 2) || (!(mem[MEMB_PRXCRT] & 0x40))) {
+		biosioemu_enq8(0x68, 0x08);
+		csrform0 = 0;
+	}
+	else {
+		biosioemu_enq8(0x68, 0x09);
+		csrform0 = 1;
+	}
+	biosioemu_enq8(0xa2, CMD_CSRFORM);
+	biosioemu_enq8(0xa0, csrform0);
+	biosioemu_enq8(0xa0, gdc.s.para[GDC_CSRFORM + 1]);
+	biosioemu_enq8(0xa0, gdc.s.para[GDC_CSRFORM + 2]);
+
+	if (crtmode != 3) {
+		biosioemu_enq8(0xa4, (mode >> 4) & 1);
+	}
+
+	if (!(mode & 0x20)) {
+		biosioemu_enq8(0x68, 0x02);
+		biosioemu_enq8(0x6a, 0x04);
+	}
+	else {
+		biosioemu_enq8(0x68, 0x03);
+		biosioemu_enq8(0x6a, 0x05);
+	}
+}
+#else
+void bios0x18_42_continue(UINT32 data) {
+	(void)data;
+}
+#endif
+
 void bios0x18_42(REG8 mode) {
 
 	UINT8	crtmode;
@@ -614,10 +754,34 @@ void bios0x18_42(REG8 mode) {
 #endif
 	int		slave;
 
+	crtmode = modenum[mode >> 6];
+#if defined(SUPPORT_CRT31KHZ)
+#if defined(BIOS_IO_EMULATION) && defined(CPUCORE_IA32)
+	/*
+	 * The 31 kHz path has additional hardware-specific side effects and keeps
+	 * the legacy implementation for now.  Test this only for an actually
+	 * trapped VM86 access so non-VM86 execution retains the original order.
+	 */
+	if (biosioemu_iotrap8(0x68) &&
+		!((mem[MEMB_CRT_BIOS] & 0x80) &&
+		(((bios0x18_31bh() & 0x30) == 0x30) || (crtmode == 3)))) {
+		if (bios0x18_42_v86io(mode, crtmode)) {
+			return;
+		}
+	}
+#endif
+#else
+#if defined(BIOS_IO_EMULATION) && defined(CPUCORE_IA32)
+	if (bios0x18_42_v86io(mode, crtmode)) {
+		return;
+	}
+#endif
+#endif
+
+	/* Legacy/non-VM86/no-I/O-trap path: preserve the existing HLE behavior. */
 	gdc_forceready(GDCWORK_MASTER);
 	gdc_forceready(GDCWORK_SLAVE);
 
-	crtmode = modenum[mode >> 6];
 #if defined(SUPPORT_CRT31KHZ)
 	rate = bios0x18_31al();
 	scrn = bios0x18_31bh();
@@ -628,7 +792,7 @@ void bios0x18_42(REG8 mode) {
 	else {
 #endif
 		ZeroMemory(gdc.s.para + GDC_SCROLL, 4);
-		if (crtmode == 2) {							// ALL
+		if (crtmode == 2) {                          /* ALL */
 			crtmode = 2;
 			if ((mem[MEMB_PRXDUPD] & 0x24) == 0x20) {
 				mem[MEMB_PRXDUPD] ^= 4;
@@ -638,12 +802,6 @@ void bios0x18_42(REG8 mode) {
 				gdcs.grphdisp |= GDCSCRN_EXT;
 				mem[MEMB_PRXDUPD] |= 0x08;
 			}
-//#if defined(BIOS_IO_EMULATION) && defined(CPUCORE_IA32)
-//			if (CPU_STAT_PM && CPU_STAT_VM86 && biosioemu.enable && biosioemu.active) {
-//				biosioemu_enq8(0x6a, 0x83);
-//				biosioemu_enq8(0x6a, 0x85);
-//			}
-//#endif	
 		}
 		else {
 			if ((mem[MEMB_PRXDUPD] & 0x24) == 0x24) {
@@ -658,14 +816,8 @@ void bios0x18_42(REG8 mode) {
 				gdc.s.para[GDC_PITCH] = 40;
 				gdcs.grphdisp |= GDCSCRN_EXT;
 				mem[MEMB_PRXDUPD] |= 0x08;
-//#if defined(BIOS_IO_EMULATION) && defined(CPUCORE_IA32)
-//				if (CPU_STAT_PM && CPU_STAT_VM86 && biosioemu.enable && biosioemu.active) {
-//					biosioemu_enq8(0x6a, 0x82);
-//					biosioemu_enq8(0x6a, 0x84);
-//				}
-//#endif	
 			}
-			if (crtmode & 1) {				// UPPER
+			if (crtmode & 1) {                        /* UPPER */
 				gdc.s.para[GDC_SCROLL+0] = (200*40) & 0xff;
 				gdc.s.para[GDC_SCROLL+1] = (200*40) >> 8;
 			}
@@ -674,34 +826,12 @@ void bios0x18_42(REG8 mode) {
 			gdc.s.para[GDC_SCROLL+3] = 0x40;
 		}
 		if ((crtmode == 2) || (!(mem[MEMB_PRXCRT] & 0x40))) {
-#if defined(BIOS_IO_EMULATION) && defined(CPUCORE_IA32)
-			if (CPU_STAT_PM && CPU_STAT_VM86 && biosioemu.enable && biosioemu.active) {
-				biosioemu_enq8(0x68, 0x08);
-				biosioemu_enq8(0xa2, CMD_CSRFORM);
-				biosioemu_enq8(0xa0, 0x00);
-				biosioemu_enq8(0xa0, gdc.s.para[GDC_CSRFORM + 1]);
-				biosioemu_enq8(0xa0, gdc.s.para[GDC_CSRFORM + 2]);
-			}else
-#endif	
-			{
-				gdc.mode1 &= ~(0x10);
-				gdc.s.para[GDC_CSRFORM] = 0;
-			}
+			gdc.mode1 &= ~(0x10);
+			gdc.s.para[GDC_CSRFORM] = 0;
 		}
 		else {
-#if defined(BIOS_IO_EMULATION) && defined(CPUCORE_IA32)
-			if (CPU_STAT_PM && CPU_STAT_VM86 && biosioemu.enable && biosioemu.active) {
-				biosioemu_enq8(0x68, 0x09);
-				biosioemu_enq8(0xa2, CMD_CSRFORM);
-				biosioemu_enq8(0xa0, 0x01);
-				biosioemu_enq8(0xa0, gdc.s.para[GDC_CSRFORM + 1]);
-				biosioemu_enq8(0xa0, gdc.s.para[GDC_CSRFORM + 2]);
-			}else
-#endif	
-			{
-				gdc.mode1 |= 0x10;
-				gdc.s.para[GDC_CSRFORM] = 1;
-			}
+			gdc.mode1 |= 0x10;
+			gdc.s.para[GDC_CSRFORM] = 1;
 		}
 #if defined(SUPPORT_CRT31KHZ)
 		mem[MEMB_CRT_BIOS] &= ~3;
@@ -710,34 +840,14 @@ void bios0x18_42(REG8 mode) {
 #endif
 	if (crtmode != 3) {
 		gdcs.disp = (mode >> 4) & 1;
-//#if defined(BIOS_IO_EMULATION) && defined(CPUCORE_IA32)
-//		// np21w ver0.86 rev62 BIOS I/O emulation
-//		if (CPU_STAT_PM && CPU_STAT_VM86 && biosioemu.enable && biosioemu.active) {
-//			biosioemu_enq8(0xa4, (mode >> 4));
-//		}
-//#endif
 	}
 	if (!(mode & 0x20)) {
 		gdc.mode1 &= ~0x02;
 		gdc.mode2 &= ~0x04;
-#if defined(BIOS_IO_EMULATION) && defined(CPUCORE_IA32)
-		if (CPU_STAT_PM && CPU_STAT_VM86 && biosioemu.enable && biosioemu.active)
-		{
-			biosioemu_enq8(0x68, 0x02);
-			biosioemu_enq8(0x6a, 0x04);
-		}
-#endif
 	}
 	else {
 		gdc.mode1 |= 0x02;
 		gdc.mode2 |= 0x04;
-#if defined(BIOS_IO_EMULATION) && defined(CPUCORE_IA32)
-		if (CPU_STAT_PM && CPU_STAT_VM86 && biosioemu.enable && biosioemu.active)
-		{
-			biosioemu_enq8(0x68, 0x03);
-			biosioemu_enq8(0x6a, 0x05);
-		}
-#endif
 	}
 	gdcs.mode2 = gdc.mode2;
 	gdcs.grphdisp |= GDCSCRN_ALLDRAW2;
@@ -1089,7 +1199,7 @@ void bios0x18(void) {
 			//bios0x09_init();
 #if defined(BIOS_IO_EMULATION) && defined(CPUCORE_IA32)
 			// np21w ver0.86 rev47 BIOS I/O emulation
-			if (CPU_STAT_PM && CPU_STAT_VM86 && biosioemu.enable && biosioemu.active) {
+			if (biosioemu_iotrap8(0x43)) {
 				biosioemu_enq8(0x43, 0x3a);
 				biosioemu_enq8(0x43, 0x32);
 				biosioemu_enq8(0x43, 0x16);
@@ -1137,10 +1247,7 @@ void bios0x18(void) {
    		case 0x0c:						// テキスト画面の表示開始
 #if defined(BIOS_IO_EMULATION) && defined(CPUCORE_IA32)
 			// np21w ver0.86 rev47 BIOS I/O emulation
-			if (CPU_STAT_PM && CPU_STAT_VM86 && biosioemu.enable && biosioemu.active) {
-				if (!(gdcs.textdisp & GDCSCRN_ENABLE)) {
-					pcstat.screenupdate |= 2;
- 				}
+			if (biosioemu_iotrap8(0x62)) {
 				biosioemu_push8(0x62, CMD_START);
 			} else
 #endif
@@ -1152,10 +1259,7 @@ void bios0x18(void) {
    		case 0x0d:						// テキスト画面の表示終了
 #if defined(BIOS_IO_EMULATION) && defined(CPUCORE_IA32)
 			// np21w ver0.86 rev47 BIOS I/O emulation
-			if (CPU_STAT_PM && CPU_STAT_VM86 && biosioemu.enable && biosioemu.active) {
-				if (gdcs.textdisp & GDCSCRN_ENABLE) {
-					pcstat.screenupdate |= 2;
-				}
+			if (biosioemu_iotrap8(0x62)) {
 				biosioemu_push8(0x62, CMD_STOP);
 			} else
 #endif
@@ -1210,11 +1314,20 @@ void bios0x18(void) {
 			break;
 
    		case 0x13:						// カーソル位置の設定
-			gdc_forceready(GDCWORK_MASTER);
 			tmp.w = CPU_DX >> 1;
-			if (LOADINTELWORD(gdc.m.para + GDC_CSRW) != tmp.w) {
-				STOREINTELWORD(gdc.m.para + GDC_CSRW, tmp.w);
-				gdcs.textdisp |= GDCSCRN_EXT;
+#if defined(BIOS_IO_EMULATION) && defined(CPUCORE_IA32)
+			if (biosioemu_iotrap8(0x62) || biosioemu_iotrap8(0x60)) {
+				biosioemu_enq8(0x62, CMD_CSRW);
+				biosioemu_enq8(0x60, (UINT8)tmp.w);
+				biosioemu_enq8(0x60, (UINT8)(tmp.w >> 8));
+			} else
+#endif
+			{
+				gdc_forceready(GDCWORK_MASTER);
+				if (LOADINTELWORD(gdc.m.para + GDC_CSRW) != tmp.w) {
+					STOREINTELWORD(gdc.m.para + GDC_CSRW, tmp.w);
+					gdcs.textdisp |= GDCSCRN_EXT;
+				}
 			}
  			break;
 
@@ -1287,11 +1400,7 @@ void bios0x18(void) {
    		case 0x40:						// グラフィック画面の表示開始
 #if defined(BIOS_IO_EMULATION) && defined(CPUCORE_IA32)
 			// np21w ver0.86 rev47 BIOS I/O emulation
-			if (CPU_STAT_PM && CPU_STAT_VM86 && biosioemu.enable && biosioemu.active) {
-				gdc_forceready(GDCWORK_SLAVE);
-				if (!(gdcs.grphdisp & GDCSCRN_ENABLE)) {
-					pcstat.screenupdate |= 2;
-				}
+			if (biosioemu_iotrap8(0xa2)) {
 				biosioemu_push8(0xa2, CMD_START); 
 				mem[MEMB_PRXCRT] |= 0x80;
 			} else
@@ -1304,11 +1413,7 @@ void bios0x18(void) {
    		case 0x41:						// グラフィック画面の表示終了
 #if defined(BIOS_IO_EMULATION) && defined(CPUCORE_IA32)
 			// np21w ver0.86 rev47 BIOS I/O emulation
-			if (CPU_STAT_PM && CPU_STAT_VM86 && biosioemu.enable && biosioemu.active) {
-				gdc_forceready(GDCWORK_SLAVE);
-				if (gdcs.grphdisp & GDCSCRN_ENABLE) {
-					pcstat.screenupdate |= 2;
-				}
+			if (biosioemu_iotrap8(0xa2)) {
 				biosioemu_push8(0xa2, CMD_STOP);
 				mem[MEMB_PRXCRT] &= 0x7f;
 			} else

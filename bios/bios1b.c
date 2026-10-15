@@ -881,7 +881,7 @@ REG16 bootstrapload(void) {
 	//	fdmode = 0;
 	bootseg = 0;
 
-	// 猫エミュレーションBIOSはAH=0,AL=0でやってくる
+	// 猫エミュレーションBIOSはAH=0,AL=0でやってくる → ver0.86 rev106訂正 保証がなかったのでエミュレーションITFにパッチを実施
 	// そうでないなら別の場所からジャンプで来ているのでAH, ALの値に基づいてブート
 	if (CPU_AX != 0) {
 		// AL -> AHで探す

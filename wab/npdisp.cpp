@@ -969,6 +969,9 @@ static UINT32 npdisp_func_BitmapBits(UINT32 lpDeviceAddr, UINT32 fFlags, UINT32 
 static void npdisp_func_Disable(UINT32 lpDestDevAddr)
 {
 	if (lpDestDevAddr) {
+		if (!npdisp.isWin9x) {
+			iocore_out8(0x007c, 0x00);
+		}
 		npdisp.enabled = 0;
 		npdisp.active = 0;
 		np2wab.relaystateext = 0;

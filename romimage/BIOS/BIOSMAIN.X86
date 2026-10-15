@@ -44,9 +44,9 @@ nextparag1:		inc		bx
 				inc		byte [0x04af]
 				loop	diskbiosinit1
 
-				mov		word [0x04ac], 0x0f
+				mov		word [bx - 0x34], 0x0f		; bxÇÕ04D0h+10h=04E0hÇ»ÇÃÇ≈Ç±ÇÍÇ∆ìØÇ∂(1byteîPèo) Å® mov		word [0x04ac], 0x0f
 				call	diskbiosinit2
-				mov		word [0x04ac], 0x12
+				mov		word [bx - 0x34], 0x12		; bxÇÕ04D0h+10h=04E0hÇ»ÇÃÇ≈Ç±ÇÍÇ∆ìØÇ∂(1byteîPèo) Å® mov		word [0x04ac], 0x12
 				call	diskbiosinit2
 
 %if 0	; ide test
@@ -54,7 +54,8 @@ nextparag1:		inc		bx
 				mov		word [0x04ac], 0x15
 				call	diskbiosinit2
 %else
-				db		9ah					; call far
+				xor		ax, ax				; force set AX=0
+				db		9ah					; call far bootstrapload()
 				dw		027e8h
 				dw		0fd80h
 %endif

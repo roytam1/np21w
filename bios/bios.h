@@ -53,6 +53,11 @@ enum {
 	BIOSIOEMU_FLAG_NONE	= 0x0,
 	BIOSIOEMU_FLAG_MB	= 0x1, // ビットを立てるとDX, AX(16bit)またはDX, EAX(32bit)になる（立てなければ8bitアクセス）
 	BIOSIOEMU_FLAG_READ	= 0x2, // ビットを立てると空読みする
+	BIOSIOEMU_FLAG_CALLBACK = 0x4	// コールバックで続きの処理をする
+};
+
+enum {
+	BIOSIOEMU_CALLBACK_INT18_42 = 1
 };
 typedef struct {
 	UINT8	flag; // アクセスフラグ(現状ではBIOSIOEMU_FLAG_NONEのみ)
@@ -109,6 +114,7 @@ void bios0x18_16(REG8 chr, REG8 atr);
 void bios0x18_40(void);
 void bios0x18_41(void);
 void bios0x18_42(REG8 mode);
+void bios0x18_42_continue(UINT32 data);
 
 void bios0x19(void);
 
@@ -140,6 +146,8 @@ void biosioemu_enq8(UINT16 port, UINT8 data);
 void biosioemu_enq16(UINT16 port, UINT32 data);
 void biosioemu_enq8_read(UINT16 port);
 void biosioemu_enq16_read(UINT16 port);
+void biosioemu_enq_callback(UINT16 callback, UINT32 data);
+BOOL biosioemu_iotrap8(UINT16 port);
 #endif
 
 #ifdef __cplusplus

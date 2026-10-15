@@ -58,6 +58,7 @@ enum tagSoundId
 	SOUNDID_PC_9801_86_SB16		= 0x44,		/*!< PC-9801-86 + Sound Blaster 16 */
 	SOUNDID_PC_9801_118_SB16	= 0x45,		/*!< PC-9801-118 + Sound Blaster 16 */
 	SOUNDID_PC_9801_86_118_SB16 = 0x46,		/*!< PC-9801-86 + PC-9801-118(B460) + Sound Blaster 16 */
+	SOUNDID_PC_9801_26K_SB16	= 0x47,		/*!< PC-9801-26K + Sound Blaster 16 (YM2203 Upgrade Kit) */
 	SOUNDID_MATE_X_PCM			= 0x60,		/*!< Mate-X PCM */
 	SOUNDID_PC_9801_86_WSS		= 0x64,		/*!< PC-9801-86 + Mate-X PCM(B460) */
 	SOUNDID_PC_9801_86_118		= 0x68,		/*!< PC-9801-86 + PC-9801-118(B460) */

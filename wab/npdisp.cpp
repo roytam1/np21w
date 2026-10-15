@@ -194,9 +194,32 @@ static void trace_fmt_exOGL(const char* fmt, ...)
 
 static void npdisp_releaseScreen(bool resize = false);
 static void npdisp_createStockGdiObjects(void);
+static void npdisp_bitmap_gc_collect(void);
+static bool npdisp_brush_gc_collect(void);
 
 NPDISP npdisp = { 0 };
 NPDISP_WINDOWS npdispwin = { 0 };
+
+// GDIがブラシやビットマップを捨てないことがある。GC的な仕組みによって出来るだけ自動で捨てるようにする。
+static std::map<UINT32, UINT32> npdisp_bitmap_gc_entries; // bitmap key -> physical address
+static std::map<UINT32, UINT32> npdisp_brush_gc_entries;  // physical address -> brush key
+
+static void npdisp_gdi_gc_clear(void)
+{
+	npdisp_bitmap_gc_entries.clear();
+	npdisp_brush_gc_entries.clear();
+}
+
+static void npdisp_bitmap_gc_track(UINT32 key, UINT32 lpOutObjAddr)
+{
+	if (!key || !lpOutObjAddr) return;
+	npdisp_bitmap_gc_entries[key] = lpOutObjAddr;
+}
+
+static void npdisp_bitmap_gc_forget(UINT32 key)
+{
+	if (key) npdisp_bitmap_gc_entries.erase(key);
+}
 
 void npdisp_setDirty(int x1, int y1, int x2, int y2)
 {
@@ -358,6 +381,7 @@ void npdispcs_shutdown(void)
 static void npdisp_func_NP2Initialize(UINT16 dpiX, UINT16 dpiY, UINT16 width, UINT16 height, UINT16 bpp, UINT8 isWin9x, UINT16 vramSelector, UINT32 bmpinfoAddr, UINT32 beginAccessAddr, UINT32 endAccessAddr, UINT32 dcibufAddr, UINT32 dciBeginAccessAddr, UINT32 dciEndAccessAddr, UINT32 dciDestroySurfaceAddr, UINT32 vramLinearAddr, UINT32 vramPhysicalAddr, UINT32 ddCallbacksAddr, UINT32 ddSurfaceCallbacksAddr, UINT32 ddHalInfoAddr, UINT32 ddModeInfoAddr, UINT32 ddPaletteCallbacksAddr, UINT32 ddVidMemAddr, UINT32 ddBridgeInfoAddr, UINT32 d3dGlobalDriverDataAddr, UINT32 d3dHalCallbacksAddr)
 {
 	bool resize = npdisp.enabled && npdisp.active;
+	npdisp_gdi_gc_clear();
 
 	// 表示モード変更時はscanoutを固定GDI primaryへ戻す。
 	npdisp.mm_ddScanoutOffset = 0;
@@ -1144,30 +1168,91 @@ static UINT32 npdisp_func_RealizeObject_DeletePen(UINT32 lpInObjAddr)
 	// サイズを返す
 	return sizeof(NPDISP_PEN);
 }
+static void npdisp_releaseBrushKey(UINT32 key)
+{
+	if (!key) return;
+
+	auto it = npdispwin.brushes.find(key);
+	if (it == npdispwin.brushes.end() || it->second.refCount == UINT_MAX) return;
+
+	if (it->second.refCount > 0) it->second.refCount--;
+	if (it->second.refCount == 0) {
+		HBRUSH handle = it->second.brs;
+		npdispwin.brushes.erase(it);
+		if (handle) {
+			npdisp_deselectGdiObject(handle, OBJ_BRUSH, GetStockObject(NULL_BRUSH));
+			DeleteObject(handle);
+		}
+	}
+}
+
+static void npdisp_brush_gc_forget(UINT32 lpOutObjAddr)
+{
+	if (lpOutObjAddr) npdisp_brush_gc_entries.erase(lpOutObjAddr);
+}
+
+static bool npdisp_brush_gc_track(UINT32 lpOutObjAddr, UINT32 key)
+{
+	if (!lpOutObjAddr || !key) return false;
+
+	auto it = npdisp_brush_gc_entries.find(lpOutObjAddr);
+	if (it == npdisp_brush_gc_entries.end()) {
+		npdisp_brush_gc_entries[lpOutObjAddr] = key;
+		return false;
+	}
+
+	// 破棄せずに出力バッファを使い回しされたので、前のブラシは強制削除
+	npdisp_releaseBrushKey(it->second);
+	it->second = key;
+	return true;
+}
+
+static bool npdisp_brush_gc_collect(void)
+{
+	bool released = false;
+
+	for (auto it = npdisp_brush_gc_entries.begin(); it != npdisp_brush_gc_entries.end(); ) {
+		if (npdispwin.brushes.find(it->second) == npdispwin.brushes.end()) {
+			auto eraseIt = it;
+			++it;
+			npdisp_brush_gc_entries.erase(eraseIt);
+			continue;
+		}
+		if (npdisp_memory_isValidFarPointer(it->first, sizeof(NPDISP_BRUSH))) {
+			++it;
+			continue;
+		}
+
+		npdisp_releaseBrushKey(it->second);
+		released = true;
+
+		auto eraseIt = it;
+		++it;
+		npdisp_brush_gc_entries.erase(eraseIt);
+	}
+	return released;
+}
+
 static UINT32 npdisp_func_RealizeObject_DeleteBrush(UINT32 lpInObjAddr)
 {
 	if (lpInObjAddr) {
 		// 指定されたキーのブラシを削除
+		UINT32 trackedKey = 0;
+		auto gcIt = npdisp_brush_gc_entries.find(lpInObjAddr);
+		if (gcIt != npdisp_brush_gc_entries.end()) trackedKey = gcIt->second;
+
 		NPDISP_BRUSH brush = { {NPDISP_BRUSH_STYLE_SOLID, 15, NPDISP_BRUSH_HATCH_HORIZONTAL, 15} };
 		npdisp_readMemory(&brush, lpInObjAddr, sizeof(NPDISP_BRUSH));
-		if (brush.key != 0) {
-			auto it = npdispwin.brushes.find(brush.key);
-			if (it != npdispwin.brushes.end() && it->second.refCount != UINT_MAX) {
-				if (it->second.refCount > 0) it->second.refCount--;
-				if (it->second.refCount == 0) {
-					HBRUSH handle = it->second.brs;
-					npdispwin.brushes.erase(it);
-					if (handle) {
-						npdisp_deselectGdiObject(handle, OBJ_BRUSH, GetStockObject(NULL_BRUSH));
-						DeleteObject(handle);
-					}
-				}
-			}
-		}
+		UINT32 key = brush.key ? brush.key : trackedKey;
+		if (!trackedKey || trackedKey == key) npdisp_brush_gc_forget(lpInObjAddr);
+		npdisp_releaseBrushKey(key);
 		//memset(&brush, 0, sizeof(NPDISP_BRUSH));
 		//npdisp_writeMemory(&brush, lpOutObjAddr, sizeof(NPDISP_BRUSH));
 	}
 	TRACEOUT(("RealizeObject Release OBJ_BRUSH"));
+
+	npdisp_brush_gc_collect();
+	npdisp_bitmap_gc_collect();
 
 	// サイズを返す
 	return sizeof(NPDISP_BRUSH);
@@ -1177,6 +1262,41 @@ static void npdisp_freeHostBitmapStorage(NPDISP_HOSTBITMAP* hostbmp)
 	if (!hostbmp || !hostbmp->bmphdc.hBmp) return;
 	hostbmp->bmphdc.hdc = NULL;
 	npdisp_FreeBitmap(&hostbmp->bmphdc, true);
+}
+
+static void npdisp_bitmap_gc_collect(void)
+{
+	for (auto it = npdisp_bitmap_gc_entries.begin(); it != npdisp_bitmap_gc_entries.end(); ) {
+		const UINT32 key = it->first;
+		auto bmpIt = npdispwin.bitmaps.find(key);
+
+		if (bmpIt == npdispwin.bitmaps.end()) {
+			auto eraseIt = it;
+			++it;
+			npdisp_bitmap_gc_entries.erase(eraseIt);
+			continue;
+		}
+		if (npdisp_memory_isValidFarPointer(it->second, sizeof(NPDISP_PBITMAP_EXT))) {
+			++it;
+			continue;
+		}
+
+		NPDISP_HOSTBITMAP hostbmp = bmpIt->second;
+		npdispwin.bitmaps.erase(bmpIt);
+		npdisp_freeHostBitmapStorage(&hostbmp);
+
+		if (key + 1 == npdispwin.bitmapsIdx) {
+			npdispwin.bitmapsIdx--;
+			while (npdispwin.bitmapsIdx > 1 &&
+				npdispwin.bitmaps.find(npdispwin.bitmapsIdx - 1) == npdispwin.bitmaps.end()) {
+				npdispwin.bitmapsIdx--;
+			}
+		}
+
+		auto eraseIt = it;
+		++it;
+		npdisp_bitmap_gc_entries.erase(eraseIt);
+	}
 }
 
 static UINT32 npdisp_func_RealizeObject_DeleteBitmap(UINT32 lpInObjAddr)
@@ -1192,6 +1312,7 @@ static UINT32 npdisp_func_RealizeObject_DeleteBitmap(UINT32 lpInObjAddr)
 			objectSize += ddbSize;
 		}
 		if (ddbmp.bmType == NPDISP_DEVTYPE_DDB && ddbmp.ddbmpKey) {
+			npdisp_bitmap_gc_forget(ddbmp.ddbmpKey);
 			auto it = npdispwin.bitmaps.find(ddbmp.ddbmpKey);
 			if (it != npdispwin.bitmaps.end()) {
 				NPDISP_HOSTBITMAP value = it->second;
@@ -1208,6 +1329,9 @@ static UINT32 npdisp_func_RealizeObject_DeleteBitmap(UINT32 lpInObjAddr)
 		}
 	}
 	TRACEOUT(("RealizeObject Release OBJ_PBITMAP"));
+
+	npdisp_brush_gc_collect();
+	npdisp_bitmap_gc_collect();
 	return objectSize;
 }
 
@@ -1357,6 +1481,7 @@ static void npdisp_createBrush(NPDISP_HOSTBRUSH* lpHostBrush)
 static UINT32 npdisp_func_RealizeObject_CreateBrush(UINT32 lpInObjAddr, UINT32 lpOutObjAddr, UINT32 lpTextXFormAddr)
 {
 	NPDISP_POINT ptOrigin = { 0 };
+	bool brushGcReleased = npdisp_brush_gc_collect();
 	TRACEOUT(("RealizeObject Create OBJ_BRUSH"));
 	if (lpTextXFormAddr) {
 		ptOrigin.x = ((SINT16)(lpTextXFormAddr & 0xffff)) % 8;
@@ -1494,9 +1619,12 @@ static UINT32 npdisp_func_RealizeObject_CreateBrush(UINT32 lpInObjAddr, UINT32 l
 		}
 		// 書き込み
 		npdisp_writeMemory(&brush, lpOutObjAddr, sizeof(NPDISP_BRUSH));
+		if (npdisp_brush_gc_track(lpOutObjAddr, brush.key)) brushGcReleased = true;
+		if (brushGcReleased) npdisp_bitmap_gc_collect();
 		// 色に応じて返す？
 		return brush.lbrush.lbStyle == NPDISP_BRUSH_STYLE_SOLID ? 0x8002 : 0x8000;
 	}
+	if (brushGcReleased) npdisp_bitmap_gc_collect();
 	// サイズを返す
 	return sizeof(NPDISP_BRUSH);
 }
@@ -1529,6 +1657,8 @@ static UINT32 npdisp_func_RealizeObject_CreateBitmap(UINT32 lpInObjAddr, UINT32 
 	NPDISP_HOSTBITMAP hostbmp = { 0 };
 	UINT32 reuseKey = 0;
 	NPDISP_PBITMAP_EXT oldDdbmp = { 0 };
+	npdisp_brush_gc_collect();
+	npdisp_bitmap_gc_collect();
 	if (npdisp_readPBitmap(&oldDdbmp, lpOutObjAddr, false) && oldDdbmp.bmType == NPDISP_DEVTYPE_DDB && oldDdbmp.ddbmpKey && npdispwin.bitmaps.find(oldDdbmp.ddbmpKey) != npdispwin.bitmaps.end()) reuseKey = oldDdbmp.ddbmpKey;
 
 	// WORKAROUND: Win3.1ファイル選択ダイアログ特例　bmBitsAddrが0かつ異常なbppやplanesが指定されたとき、デバイスと同じbppで作成する
@@ -1611,6 +1741,7 @@ static UINT32 npdisp_func_RealizeObject_CreateBitmap(UINT32 lpInObjAddr, UINT32 
 			else {
 				npdisp_writePBitmap(&ddbmp, lpOutObjAddr);
 			}
+			npdisp_bitmap_gc_track(ddbmp.ddbmpKey, lpOutObjAddr);
 		}
 	}
 	return objectSize;
@@ -6405,6 +6536,7 @@ static void npdisp_releaseScreen(bool resize) {
 			}
 			npdispwin.bitmaps.clear();
 			npdispwin.bitmapsIdx = 1;
+			npdisp_gdi_gc_clear();
 
 			// DBCS用
 			for (int i = 0; i < NPDISP_FONT_CACHE_MAX; i++) {
@@ -7091,6 +7223,7 @@ int npdisp_sfsave(STFLAGH sfh, const SFENTRY* tbl)
 
 int npdisp_sfload(STFLAGH sfh, const SFENTRY* tbl)
 {
+	npdisp_gdi_gc_clear();
 	int	sfVersion = 0;
 	int statLen = 0;
 	int	ret = STATFLAG_SUCCESS;

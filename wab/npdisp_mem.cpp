@@ -283,6 +283,40 @@ int npdisp_memory_getLinearAddress(UINT32 lpAddr, UINT32 *linearAddr)
 	return selector_to_linear(selector, offset, linearAddr) ? 1 : 0;
 }
 
+// Win16 far pointerが有効か確認
+int npdisp_memory_isValidFarPointer(UINT32 lpAddr, int size)
+{
+	selector_t sel;
+	UINT16 selector;
+	UINT32 offset;
+	UINT32 endOffset;
+	UINT32 maxOffset;
+
+	if (!lpAddr || size <= 0) return 0;
+	selector = (UINT16)(lpAddr >> 16);
+	offset = lpAddr & 0xffff;
+	if (!selector) return 0;
+
+	memset(&sel, 0, sizeof(sel));
+	if (parse_selector(&sel, selector) != 0) return 0;
+	if (!SEG_IS_VALID(&sel.desc) || SEG_IS_SYSTEM(&sel.desc)) return 0;
+	if (!(SEG_IS_DATA(&sel.desc) || (SEG_IS_CODE(&sel.desc) && SEG_IS_READABLE_CODE(&sel.desc)))) return 0;
+
+	endOffset = offset + (UINT32)size - 1;
+	if (endOffset < offset) return 0;
+	maxOffset = SEG_IS_32BIT(&sel.desc) ? 0xffffffffUL : 0xffffUL;
+	if (endOffset > maxOffset) return 0;
+
+	if (SEG_IS_DATA(&sel.desc) && SEG_IS_EXPANDDOWN_DATA(&sel.desc)) {
+		if (offset <= sel.desc.u.seg.limit) return 0;
+	}
+	else {
+		if (endOffset > sel.desc.u.seg.limit) return 0;
+	}
+
+	return 1;
+}
+
 /// <summary>
 /// 指定したリニアアドレスを読み取って先読みバッファへ送る。先にページフォールトの発生を確認するために使用。
 /// </summary>

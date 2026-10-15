@@ -314,6 +314,10 @@ static void info_sound(OEMCHAR *str, int maxlen, const NP2INFOEX *ex)
 		case SOUNDID_PC_9801_86_SB16:
 			lpBoard = OEMTEXT("PC-9801-86 + Sound Blaster 16");
 			break;
+
+		case SOUNDID_PC_9801_26K_SB16:
+			lpBoard = OEMTEXT("PC-9801-26K + Sound Blaster 16");
+			break;
 			
 		case SOUNDID_WSS_SB16:
 			lpBoard = OEMTEXT("Mate-X PCM + Sound Blaster 16");

@@ -143,6 +143,9 @@ void maketext(int text_renewal) {
 	int		scrp;
 	UINT8	wait1;
 	UINT8	LRcnt;
+	UINT8	gdcphase;
+	BOOL	ssl_sad_carry_active;
+	UINT	sslcarry;
 	BOOL	reloadline;
 	int		new_flag;
 	int		cur_line;
@@ -191,6 +194,8 @@ void maketext(int text_renewal) {
 		TEXT_SUR = 32 - TEXT_SUR;
 	}
 
+	ssl_sad_carry_active = ((!TEXT_SUR) && crtc.reg.ssl);
+
 	pitch = gdc.m.para[GDC_PITCH] & 0xfe;
 	csrw = LOADINTELWORD(gdc.m.para + GDC_CSRW);
 	esi = LOW12(LOADINTELWORD(gdc.m.para + GDC_SCROLL));
@@ -200,6 +205,7 @@ void maketext(int text_renewal) {
 
 	wait1 = 0;
 	LRcnt = 0;
+	gdcphase = 0;
 	reloadline = FALSE;
 	new_flag = 0;
 	cur_line = -1;
@@ -325,6 +331,7 @@ void maketext(int text_renewal) {
 			nowline = topline;
 			TEXT_SDR--;
 			wait1 = crtc.reg.ssl;
+			ssl_sad_carry_active = FALSE;
 		}
 
 		if (!wait2) {
@@ -407,9 +414,23 @@ void maketext(int text_renewal) {
 				q += TEXTXMAX * 8;
 			}
 			y++;
+			if (gdcphase >= TEXT_LR) {
+				gdcphase = 0;
+			}
+			else {
+				gdcphase++;
+			}
 			if (!(--scroll)) {
 				scrp = (scrp + 4) & 0x0c;
 				esi = LOW12(LOADINTELWORD(gdc.m.para + GDC_SCROLL + scrp));
+				if (ssl_sad_carry_active) {
+					sslcarry = ((UINT)gdcphase + (UINT)crtc.reg.ssl) /
+								((UINT)TEXT_LR + 1);
+					while (sslcarry) {
+						esi = LOW12(esi + pitch);
+						sslcarry--;
+					}
+				}
 				scroll = LOADINTELWORD(gdc.m.para + GDC_SCROLL + scrp + 2);
 				scroll = LOW14(scroll) >> 4;
 				reloadline = TRUE;
@@ -452,6 +473,9 @@ void maketext40(int text_renewal) {
 	int		scrp;
 	UINT8	wait1;
 	UINT8	LRcnt;
+	UINT8	gdcphase;
+	BOOL	ssl_sad_carry_active;
+	UINT	sslcarry;
 	BOOL	reloadline;
 	int		new_flag;
 	int		cur_line;
@@ -499,6 +523,7 @@ void maketext40(int text_renewal) {
 	else {
 		TEXT_SUR = 32 - TEXT_SUR;
 	}
+	ssl_sad_carry_active = ((!TEXT_SUR) && crtc.reg.ssl);
 
 	pitch = gdc.m.para[GDC_PITCH] & 0xfe;
 	csrw = LOADINTELWORD(gdc.m.para + GDC_CSRW);
@@ -509,6 +534,7 @@ void maketext40(int text_renewal) {
 
 	wait1 = 0;
 	LRcnt = 0;
+	gdcphase = 0;
 	reloadline = FALSE;
 	new_flag = 0;
 	cur_line = -1;
@@ -634,6 +660,7 @@ void maketext40(int text_renewal) {
 			nowline = topline;
 			TEXT_SDR--;
 			wait1 = crtc.reg.ssl;
+			ssl_sad_carry_active = FALSE;
 		}
 
 		if (!wait2) {
@@ -730,9 +757,23 @@ void maketext40(int text_renewal) {
 				q += TEXTXMAX * 8;
 			}
 			y++;
+			if (gdcphase >= TEXT_LR) {
+				gdcphase = 0;
+			}
+			else {
+				gdcphase++;
+			}
 			if (!(--scroll)) {
 				scrp = (scrp + 4) & 0x0c;
 				esi = LOW12(LOADINTELWORD(gdc.m.para + GDC_SCROLL + scrp));
+				if (ssl_sad_carry_active) {
+					sslcarry = ((UINT)gdcphase + (UINT)crtc.reg.ssl) /
+								((UINT)TEXT_LR + 1);
+					while (sslcarry) {
+						esi = LOW12(esi + pitch);
+						sslcarry--;
+					}
+				}
 				scroll = LOADINTELWORD(gdc.m.para + GDC_SCROLL + scrp + 2);
 				scroll = LOW14(scroll) >> 4;
 				reloadline = TRUE;

@@ -46,6 +46,9 @@ void maketextgrph(int plane, int text_renewal, int grph_renewal) {
 	UINT8	*q;
 	UINT8	wait1;
 	UINT8	TEXT_LRcnt;
+	UINT8	gdcphase;
+	BOOL	ssl_sad_carry_active;
+	UINT	sslcarry;
 	BOOL	reloadline;
 	int		new_flag;
 	int		linecnt;
@@ -86,6 +89,8 @@ void maketextgrph(int plane, int text_renewal, int grph_renewal) {
 	else {
 		TEXT_SUR = 32 - TEXT_SUR;
 	}
+
+	ssl_sad_carry_active = ((!TEXT_SUR) && crtc.reg.ssl);
 
 	m_pitch = gdc.m.para[GDC_PITCH] & 0xfe;
 	esi = LOW12(LOADINTELWORD(gdc.m.para + GDC_SCROLL));
@@ -140,6 +145,7 @@ void maketextgrph(int plane, int text_renewal, int grph_renewal) {
 	q = np2_vram[plane] + dsync.textvad;
 	wait1 = 0;
 	TEXT_LRcnt = 0;
+	gdcphase = 0;
 	reloadline = FALSE;
 	new_flag = 0;
 	linecnt = 0;
@@ -178,6 +184,7 @@ void maketextgrph(int plane, int text_renewal, int grph_renewal) {
 			nowline = topline;
 			TEXT_SDR--;
 			wait1 = crtc.reg.ssl;
+			ssl_sad_carry_active = FALSE;
 		}
 
 		if (!wait2) {
@@ -227,10 +234,24 @@ void maketextgrph(int plane, int text_renewal, int grph_renewal) {
 				q += TEXTXMAX * 8;
 			}
 			y++;
+			if (gdcphase >= TEXT_LR) {
+				gdcphase = 0;
+			}
+			else {
+				gdcphase++;
+			}
 			m_scr--;
 			if (!m_scr) {
 				m_scrp = (m_scrp + 4) & 0x0c;
 				esi = LOW12(LOADINTELWORD(gdc.m.para + GDC_SCROLL + m_scrp));
+				if (ssl_sad_carry_active) {
+					sslcarry = ((UINT)gdcphase + (UINT)crtc.reg.ssl) /
+								((UINT)TEXT_LR + 1);
+					while (sslcarry) {
+						esi = LOW12(esi + m_pitch);
+						sslcarry--;
+					}
+				}
 				m_scr = LOADINTELWORD(gdc.m.para + GDC_SCROLL + m_scrp + 2);
 				m_scr = LOW14(m_scr) >> 4;
 				reloadline = TRUE;
@@ -304,6 +325,9 @@ void maketextgrph40(int plane, int text_renewal, int grph_renewal) {
 	UINT8	*q;
 	UINT8	wait1;
 	UINT8	TEXT_LRcnt;
+	UINT8	gdcphase;
+	BOOL	ssl_sad_carry_active;
+	UINT	sslcarry;
 	BOOL	reloadline;
 	int		new_flag;
 	int		linecnt;
@@ -344,6 +368,8 @@ void maketextgrph40(int plane, int text_renewal, int grph_renewal) {
 	else {
 		TEXT_SUR = 32 - TEXT_SUR;
 	}
+
+	ssl_sad_carry_active = ((!TEXT_SUR) && crtc.reg.ssl);
 
 	m_pitch = gdc.m.para[GDC_PITCH] & 0xfe;
 	esi = LOW12(LOADINTELWORD(gdc.m.para + GDC_SCROLL));
@@ -398,6 +424,7 @@ void maketextgrph40(int plane, int text_renewal, int grph_renewal) {
 	q = np2_vram[plane] + dsync.textvad;
 	wait1 = 0;
 	TEXT_LRcnt = 0;
+	gdcphase = 0;
 	reloadline = FALSE;
 	new_flag = 0;
 	linecnt = 0;
@@ -436,6 +463,7 @@ void maketextgrph40(int plane, int text_renewal, int grph_renewal) {
 			nowline = topline;
 			TEXT_SDR--;
 			wait1 = crtc.reg.ssl;
+			ssl_sad_carry_active = FALSE;
 		}
 
 		if (!wait2) {
@@ -485,10 +513,24 @@ void maketextgrph40(int plane, int text_renewal, int grph_renewal) {
 				q += TEXTXMAX * 8;
 			}
 			y++;
+			if (gdcphase >= TEXT_LR) {
+				gdcphase = 0;
+			}
+			else {
+				gdcphase++;
+			}
 			m_scr--;
 			if (!m_scr) {
 				m_scrp = (m_scrp + 4) & 0x0c;
 				esi = LOW12(LOADINTELWORD(gdc.m.para + GDC_SCROLL + m_scrp));
+				if (ssl_sad_carry_active) {
+					sslcarry = ((UINT)gdcphase + (UINT)crtc.reg.ssl) /
+								((UINT)TEXT_LR + 1);
+					while (sslcarry) {
+						esi = LOW12(esi + m_pitch);
+						sslcarry--;
+					}
+				}
 				m_scr = LOADINTELWORD(gdc.m.para + GDC_SCROLL + m_scrp + 2);
 				m_scr = LOW14(m_scr) >> 4;
 				reloadline = TRUE;

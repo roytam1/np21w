@@ -19,6 +19,7 @@ extern "C" {
 	int npdisp_memory_getTotalWriteSize();
 	UINT32 npdisp_memory_getLastEIP();
 	int npdisp_memory_getLinearAddress(UINT32 lpAddr, UINT32 *linearAddr);
+	int npdisp_memory_isValidFarPointer(UINT32 lpAddr, int size);
 
 	int npdisp_preloadAndReadMemoryWith32Offset(void* dst, UINT16 selector, UINT32 offset, int size);
 	int npdisp_preloadAndReadMemory(void* dst, UINT32 lpAddr, int size);

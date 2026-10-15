@@ -254,6 +254,15 @@ BRESULT S98_open(const OEMCHAR *filename) {
 			STOREINTELDWORD(hdr.device1clock, 14400000);
 			break;
 
+		case SOUNDID_PC_9801_26K_SB16:
+			hdr.formatversion = '3';
+			STOREINTELDWORD(hdr.devicecount, 2);
+			STOREINTELDWORD(hdr.device1type, 2);
+			STOREINTELDWORD(hdr.device2type, 9);
+			STOREINTELDWORD(hdr.device1clock, OPNA_CLOCK);
+			STOREINTELDWORD(hdr.device2clock, 14400000);
+			break;
+
 		case SOUNDID_PC_9801_86_SB16:
 		case SOUNDID_PC_9801_86_WSS_SB16:
 			hdr.formatversion = '3';

@@ -21,6 +21,94 @@
 static void writeRegister(POPNA opna, UINT nAddress, REG8 cData);
 static void writeExtendedRegister(POPNA opna, UINT nAddress, REG8 cData);
 
+#if defined(SUPPORT_FMGEN)
+static void writeFmgenRegister(POPNA opna, UINT nAddress, REG8 cData)
+{
+	const UINT8 cCaps = opna->s.cCaps;
+
+	if (nAddress < 0x100)
+	{
+		if (nAddress < 0x10)
+		{
+			if (!(cCaps & OPNA_HAS_PSG))
+			{
+				return;
+			}
+		}
+		else if (nAddress < 0x20)
+		{
+			if (!(cCaps & OPNA_HAS_RHYTHM))
+			{
+				return;
+			}
+		}
+		else
+		{
+			if (!(cCaps & OPNA_HAS_FM) || (nAddress >= 0xc0))
+			{
+				return;
+			}
+
+			// YM2203 has no LFO, status-mask register, or PAN/AMS/PMS.
+			if ((nAddress == 0x22) || (nAddress == 0x29) ||
+				(((nAddress & 0xfc) == 0xb4)))
+			{
+				if (!(cCaps & OPNA_HAS_EXTENDEDFM))
+				{
+					return;
+				}
+			}
+
+			// 0x28 can address channels 4-6 on OPNA/OPN2, but only 1-3 on OPN.
+			if (nAddress == 0x28)
+			{
+				const REG8 cChannel = cData & 0x0f;
+				if (cChannel >= 3)
+				{
+					if (!(cCaps & OPNA_HAS_EXTENDEDFM) ||
+						(cChannel < 4) || (cChannel >= 7))
+					{
+						return;
+					}
+				}
+			}
+
+			// FMGEN's OPNA accepts AM enable (bit 7) here; YM2203 ignores it.
+			if (!(cCaps & OPNA_HAS_EXTENDEDFM) &&
+				((nAddress & 0xf0) == 0x60))
+			{
+				cData &= 0x1f;
+			}
+		}
+	}
+	else
+	{
+		const UINT nExtendedAddress = nAddress & 0xff;
+
+		if (nExtendedAddress < 0x12)
+		{
+			if (!(cCaps & OPNA_HAS_ADPCM))
+			{
+				return;
+			}
+		}
+		else if (nExtendedAddress >= 0x30)
+		{
+			if (!(cCaps & OPNA_HAS_EXTENDEDFM))
+			{
+				return;
+			}
+		}
+		else
+		{
+			return;
+		}
+	}
+
+	OPNA_SetReg(opna->fmgen, nAddress, cData);
+}
+#endif	/* SUPPORT_FMGEN */
+
 // dB = 20 log10( (‰¹—Ê0`1) * (pow(10, Å‘ådB’l/20) - pow(10, Å¬dB’l/20)) + pow(10, Å¬dB’l/20) )
 //#define LINEAR2DB(a)	(20 * log10((a) * (pow(10.0, 20/20) - pow(10.0, -192/20)) + pow(10.0, -192/20)))
 #define LINEAR2DB(a)	(pow(a,0.12)*(20+192) - 192)	// XXX: fmgen‰¹—Ê‚Æ”L‰¹Œ¹‰¹—Ê‚ðˆê’v‚³‚¹‚é‚½‚ß‚ÌŽÀŒ±Ž®¥¥¥
@@ -262,15 +350,15 @@ static void restore(POPNA opna)
 	}
 #if defined(SUPPORT_FMGEN)
 	if(opna->usefmgen) {
-		OPNA_SetReg(opna->fmgen, 0x22, opna->s.reg[0x22]);
+		writeFmgenRegister(opna, 0x22, opna->s.reg[0x22]);
 		for (UINT i = 0x30; i < 0xa0; i++)
 		{
 			if ((i & 3) == 3)
 			{
 				continue;
 			}
-			OPNA_SetReg(opna->fmgen, i, opna->s.reg[i]);
-			OPNA_SetReg(opna->fmgen, i + 0x100, opna->s.reg[i + 0x100]);
+			writeFmgenRegister(opna, i, opna->s.reg[i]);
+			writeFmgenRegister(opna, i + 0x100, opna->s.reg[i + 0x100]);
 		}
 		for (UINT i = 0xb0; i < 0xb8; i++)
 		{
@@ -278,8 +366,8 @@ static void restore(POPNA opna)
 			{
 				continue;
 			}
-			OPNA_SetReg(opna->fmgen, i, opna->s.reg[i]);
-			OPNA_SetReg(opna->fmgen, i + 0x100, opna->s.reg[i + 0x100]);
+			writeFmgenRegister(opna, i, opna->s.reg[i]);
+			writeFmgenRegister(opna, i + 0x100, opna->s.reg[i + 0x100]);
 		}
 		for (UINT i = 0; i < 8; i++)
 		{
@@ -287,10 +375,10 @@ static void restore(POPNA opna)
 			{
 				continue;
 			}
-			OPNA_SetReg(opna->fmgen, i + 0xa4, opna->s.reg[i + 0xa4]);
-			OPNA_SetReg(opna->fmgen, i + 0xa0, opna->s.reg[i + 0xa0]);
-			OPNA_SetReg(opna->fmgen, i + 0x1a4, opna->s.reg[i + 0x1a4]);
-			OPNA_SetReg(opna->fmgen, i + 0x1a0, opna->s.reg[i + 0x1a0]);
+			writeFmgenRegister(opna, i + 0xa4, opna->s.reg[i + 0xa4]);
+			writeFmgenRegister(opna, i + 0xa0, opna->s.reg[i + 0xa0]);
+			writeFmgenRegister(opna, i + 0x1a4, opna->s.reg[i + 0x1a4]);
+			writeFmgenRegister(opna, i + 0x1a0, opna->s.reg[i + 0x1a0]);
 		}
 		for (UINT i = 0; i < 8; i++)
 		{
@@ -298,7 +386,7 @@ static void restore(POPNA opna)
 			{
 				continue;
 			}
-			OPNA_SetReg(opna->fmgen, 0x28, opna->s.keyreg[i]);
+			writeFmgenRegister(opna, 0x28, opna->s.keyreg[i]);
 		}
 	}
 #endif	/* SUPPORT_FMGEN */
@@ -312,7 +400,7 @@ static void restore(POPNA opna)
 	if(opna->usefmgen) {
 		for (UINT i = 0; i < 0x10; i++)
 		{
-			OPNA_SetReg(opna->fmgen, i, opna->s.reg[i]);
+			writeFmgenRegister(opna, i, opna->s.reg[i]);
 		}
 	}
 #endif	/* SUPPORT_FMGEN */
@@ -325,10 +413,10 @@ static void restore(POPNA opna)
 	}
 #if defined(SUPPORT_FMGEN)
 	if(opna->usefmgen) {
-		OPNA_SetReg(opna->fmgen, 0x11, opna->s.reg[0x11]);
+		writeFmgenRegister(opna, 0x11, opna->s.reg[0x11]);
 		for (UINT i = 0x18; i < 0x1e; i++)
 		{
-			OPNA_SetReg(opna->fmgen, i, opna->s.reg[i]);
+			writeFmgenRegister(opna, i, opna->s.reg[i]);
 		}
 	}
 #endif	/* SUPPORT_FMGEN */
@@ -510,7 +598,7 @@ void opna_writeRegister(POPNA opna, UINT nAddress, REG8 cData)
 	writeRegister(opna, nAddress, cData);
 #if defined(SUPPORT_FMGEN)
 	if(opna->usefmgen) {
-		OPNA_SetReg(opna->fmgen, nAddress, cData);
+		writeFmgenRegister(opna, nAddress, cData);
 	}
 #endif	/* SUPPORT_FMGEN */
 }
@@ -661,7 +749,7 @@ void opna_writeExtendedRegister(POPNA opna, UINT nAddress, REG8 cData)
 	writeExtendedRegister(opna, nAddress, cData);
 #if defined(SUPPORT_FMGEN)
 	if(opna->usefmgen) {
-		OPNA_SetReg(opna->fmgen, nAddress + 0x100, cData);
+		writeFmgenRegister(opna, nAddress + 0x100, cData);
 	}
 #endif	/* SUPPORT_FMGEN */
 }

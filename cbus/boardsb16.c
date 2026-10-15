@@ -53,7 +53,7 @@ static int forceopl3mode = 0;
 
 /* S98 v3 device slot for the SB16 OPL3 block.
  * - SB16/WSS+SB16:    device 0 (ports 0/1)
- * - 86+SB16:          device 1 (ports 2/3)
+ * - 86+SB16/26K+SB16: device 1 (ports 2/3)
  * - 118+SB16:         device 2 (ports 4/5)
  * - 86+118+SB16:      device 3 (ports 6/7)
  */
@@ -66,6 +66,7 @@ static int sb16_s98module(void)
 			return NORMAL2608;
 
 		case SOUNDID_PC_9801_86_SB16:
+		case SOUNDID_PC_9801_26K_SB16:
 		case SOUNDID_PC_9801_86_WSS_SB16:
 			return NORMAL2608_2;
 

@@ -326,7 +326,8 @@ static void np2sysp_getconfig(const void *arg1, long arg2) {
 			configvalue = 98; // サポート確認用　常時98を返す
 			break;
 		case NP21W_SWITCH_SETDEVICEIRQ_SND_26:
-			if (g_nSoundID == SOUNDID_PC_9801_26K) {
+			if (g_nSoundID == SOUNDID_PC_9801_26K ||
+				g_nSoundID == SOUNDID_PC_9801_26K_SB16) {
 				configvalue = g_opna[0].s.irq;
 			}
 			else if (g_nSoundID == SOUNDID_PC_9801_86_26K) {
@@ -371,6 +372,7 @@ static void np2sysp_getconfig(const void *arg1, long arg2) {
 #if defined(SUPPORT_SOUND_SB16)
 		case NP21W_SWITCH_SETDEVICEIRQ_SND_SB16:
 			if (g_nSoundID == SOUNDID_SB16 ||
+				g_nSoundID == SOUNDID_PC_9801_26K_SB16 ||
 				g_nSoundID == SOUNDID_WSS_SB16 ||
 				g_nSoundID == SOUNDID_PC_9801_86_SB16 ||
 				g_nSoundID == SOUNDID_PC_9801_86_WSS_SB16 ||
@@ -596,7 +598,8 @@ static void np2sysp_cngconfig(const void *arg1, long arg2) {
 			break;
 		case NP21W_SWITCH_SETDEVICEIRQ_SND_26:
 			if (irqvalue == 0x03 || irqvalue == 0x0d || irqvalue == 0x0a || irqvalue == 0x0c || irqvalue == 0xff) {
-				if (g_nSoundID == SOUNDID_PC_9801_26K) {
+				if (g_nSoundID == SOUNDID_PC_9801_26K ||
+					g_nSoundID == SOUNDID_PC_9801_26K_SB16) {
 					g_opna[0].s.irq = irqvalue;
 					retvalue = irqvalue; // 受付されたらその値を返す
 				}

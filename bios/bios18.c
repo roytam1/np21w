@@ -675,7 +675,8 @@ static BOOL bios0x18_42_v86io(REG8 mode, UINT8 crtmode) {
 		biosioemu_enq8(0x6a, 0x84);
 	}
 
-	biosioemu_enq8(0xa2, CMD_SYNC_OFF);
+	biosioemu_enq8(0xa2, (mem[MEMB_PRXCRT] & 0x80) ?
+								CMD_SYNC_ON : CMD_SYNC_OFF);
 	for (i = 0; i < 8; i++) {
 		biosioemu_enq8(0xa0, sync[i]);
 	}
@@ -696,7 +697,7 @@ void bios0x18_42_continue(UINT32 data) {
 
 	REG8 mode = (REG8)data;
 	UINT8 crtmode = modenum[mode >> 6];
-	UINT8 scroll[4] = {0, 0, 0, 0};
+	UINT8 scroll[4] = {0, 0, 0xf0, 0x3f};
 	UINT8 csrform0;
 
 	if ((crtmode != 2) && (crtmode & 1)) {            /* UPPER */
@@ -704,7 +705,7 @@ void bios0x18_42_continue(UINT32 data) {
 		scroll[1] = (200 * 40) >> 8;
 	}
 	if (mem[MEMB_PRXDUPD] & 4) {
-		scroll[3] = 0x40;
+		scroll[3] |= 0x40;
 	}
 
 	biosioemu_enq8(0xa2, CMD_SCROLL);
@@ -1320,6 +1321,7 @@ void bios0x18(void) {
 				biosioemu_enq8(0x62, CMD_CSRW);
 				biosioemu_enq8(0x60, (UINT8)tmp.w);
 				biosioemu_enq8(0x60, (UINT8)(tmp.w >> 8));
+				biosioemu_enq8(0x60, gdc.m.para[GDC_CSRW + 2]);
 			} else
 #endif
 			{

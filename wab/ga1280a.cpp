@@ -42,21 +42,6 @@ extern "C" {
 #include    "ga1280adef.h"
 #include    "ga1280a.h"
 
-#if 0
-#undef  TRACEOUT
-static void trace_fmt_ex(const char* fmt, ...)
-{
-    char stmp[2048];
-    va_list ap;
-    va_start(ap, fmt);
-    vsprintf(stmp, fmt, ap);
-    strcat(stmp, "\n");
-    va_end(ap);
-    OutputDebugStringA(stmp);
-}
-#define TRACEOUT(s) trace_fmt_ex s
-#endif
-
 #define GA1280A_MEMWAIT 16
 #define GA1280A_MEMWAIT_LINE 32
 
@@ -433,6 +418,7 @@ static GAWindowSize mapped_register_window_size(void)
 
 static bool window_offset(UINT32 address, UINT32* ret)
 {
+    if ((s_ga.mod2 & 0x80) == 0) return false;
     if (!s_mmio.host_window_enabled) return false;
     UINT32 offset = address - s_mmio.host_window_base;
     if (offset >= s_mmio.host_window_bytes) return false;
@@ -442,6 +428,7 @@ static bool window_offset(UINT32 address, UINT32* ret)
 
 static bool mapped_register_offset(UINT32 address, UINT32* ret)
 {
+    if ((s_ga.mod2 & 0x80) == 0) return false;
     UINT32 offset;
     if (window_offset(address, &offset)) {
         *ret = offset;
@@ -640,7 +627,8 @@ static UINT16 crtc_data_word(int index)
         UINT16 masked = (UINT16)(stored & ~CRTC_BIT_VSYNC_ACTIVE);
         return vsync ? (UINT16)(masked | CRTC_BIT_VSYNC_ACTIVE) : masked;
     }
-    if ((index & 0x7f) == CRTC_INDEX_GA1280_VSYNC_STATUS) {
+    if ((index & 0x7f) == CRTC_INDEX_GA1280_VSYNC_STATUS ||
+        (index & 0x7f) == CRTC_INDEX_GA1280_VSYNC_STATUS_ALT) {
         UINT16 masked = (UINT16)(stored & ~CRTC_BIT_GA1280_VSYNC_ACTIVE);
         return vsync ? (UINT16)(masked | CRTC_BIT_GA1280_VSYNC_ACTIVE) : masked;
     }
@@ -1067,14 +1055,6 @@ static bool write_byte(UINT8 selector, UINT8 offset, UINT8 value)
         if (is_high_byte_offset(offset)) previous = (UINT16)((previous & 0x00ff) | ((UINT16)value << 8));
         else previous = (UINT16)((previous & 0xff00) | value);
         return write_word(selector, base, previous);
-        //UINT8 base;
-        //UINT16 previous;
-        //if (!word_base_offset(offset, &base)) return false;
-        //if (!read_word(selector, base, &previous)) return false;
-        //if (!is_high_byte_offset(offset)) {
-        //    previous = (UINT16)((previous & 0xff00) | value);
-        //    return write_word(selector, base, previous);
-        //}
     }
     s_ga.register_write_count++;
     return true;
@@ -2243,7 +2223,6 @@ static void execute_rop_line(UINT8 direction)
 static void execute_host_color_expand(void)
 {
     execute_pattern_expand_rectangle(true);
-    //s_ga.stream.kind = STREAM_INACTIVE;
 }
 
 static void execute_image_restore(UINT8 direction)
@@ -2258,14 +2237,6 @@ static void execute_image_restore(UINT8 direction)
     st.direction = direction;
     st.has_rop = false;
     s_ga.stream.kind = STREAM_IMAGE_RESTORE;
-
-    //TRACEOUT(("IMGREST START dir=%u dst=(%u,%u) size=(%u,%u) "
-    //    "src=(%u,%u) plane=%d FMIX=%02X WPM=%04X WBM=%04X",
-    //    direction,
-    //    st.x, st.y, st.width, st.height,
-    //    s_ga.srcx, s_ga.srcy,
-    //    s_ga.plane_mode,
-    //    s_ga.fmix, s_ga.wpm, s_ga.wbm));
 }
 
 static void execute_rop_image_restore(UINT8 direction)
@@ -2283,13 +2254,13 @@ static void execute_rop_image_restore(UINT8 direction)
     s_ga.stream.kind = STREAM_IMAGE_RESTORE;
 }
 
-static bool image_restore_destination(ImageRestoreState& st, UINT32* x, UINT32* y)
+static bool image_restore_destination(ImageRestoreState& st, SINT32* x, SINT32* y)
 {
     if (st.pixel_index >= st.width * st.height) return false;
     UINT32 row = st.pixel_index / st.width;
     UINT32 col = st.pixel_index % st.width;
-    *x = directed_coordinate_u32(st.x, col, st.direction, true);
-    *y = directed_coordinate_u32(st.y, row, st.direction, false);
+    *x = directed_coordinate((UINT16)st.x, col, st.direction, true);
+    *y = directed_coordinate((UINT16)st.y, row, st.direction, false);
     return true;
 }
 
@@ -2304,8 +2275,6 @@ static void advance_image_restore_pixel(ImageRestoreState& st)
 {
     st.pixel_index++;
     if (st.pixel_index >= st.width * st.height) {
-        //TRACEOUT(("IMGREST END by pixel_count pix=%u size=(%u,%u) in=(%u,%u)",
-        //    st.pixel_index, st.width, st.height, st.input_column, st.input_row));
         finish_image_restore();
     }
 }
@@ -2314,15 +2283,11 @@ static void consume_image_restore_pixel(UINT32 color)
 {
     if (s_ga.stream.kind != STREAM_IMAGE_RESTORE) return;
     ImageRestoreState& st = s_ga.stream.image;
-    UINT32 x, y;
+    SINT32 x, y;
     if (!image_restore_destination(st, &x, &y)) { s_ga.stream.kind = STREAM_INACTIVE; return; }
-    if (st.has_rop) write_pixel_rop(x, y, color, st.rop);
-    else write_pixel_mixed(x, y, color, st.xor_pixels ? PIXEL_MIX_XOR : PIXEL_MIX_SOURCE);
+    if (st.has_rop) write_pixel_rop_signed(x, y, color, st.rop);
+    else write_pixel_mixed_signed(x, y, color, st.xor_pixels ? PIXEL_MIX_XOR : PIXEL_MIX_SOURCE);
     advance_image_restore_pixel(st);
-    //if (st.width > 512) {
-    //    st.width = st.width;
-    //    //TRACEOUT(("V:%04x", color));
-    //}
 }
 
 static void consume_image_restore_indexed_pixel(UINT32 color)
@@ -2362,7 +2327,6 @@ static void consume_image_restore_direct16_word(UINT16 value)
         st.input_column = 0;
         st.input_row++;
         if (st.input_row >= st.height) {
-            //TRACEOUT(("IMGREST END by padded_row size=(%u,%u)", st.width, st.height));
             finish_image_restore();
         }
     }
@@ -2418,7 +2382,6 @@ static void consume_image_restore_word(UINT16 value)
         consume_image_restore_indexed_pixel((value >> 8) & 0xff);
     }
     else if (s_ga.plane_mode == PLANE_DIRECTCOLOR16) {
-        //TRACEOUT(("X=%d, Y=%d, INDEX=%d", s_ga.stream.image.input_column, s_ga.stream.image.input_row, s_ga.stream.image.pixel_index));
         consume_image_restore_direct16_word(value);
     }
     else {
@@ -2469,6 +2432,11 @@ static void execute_pixel_read(void)
 
     if (s_ga.pop1 == POP1_SCANLINE_PIXEL_READ) {
         execute_scanline_pixel_read();
+        return;
+    }
+
+    if (s_ga.plane_mode == PLANE_INDEXED8 && (width > 1 || height > 1)) {
+        execute_rect_pixel_read();
         return;
     }
 
@@ -2545,11 +2513,29 @@ static UINT16 read_pixel_read_direct16_word(void)
     }
 
     s_ga.pdt = value;
-    //if (st.width > 512) {
-    //    st.width = st.width;
-    //    //TRACEOUT(("V:%04x", value));
-    //}
     advance_pixel_read_columns(st, 1, input_width);
+    return value;
+}
+
+static UINT16 read_pixel_read_indexed8_word(void)
+{
+    PixelReadState& st = s_ga.stream.pixel;
+    UINT32 input_width = align_up(st.width, INDEXED_IMAGE_RESTORE_ROW_ALIGNMENT);
+    if (input_width == 0 || st.row >= st.height) {
+        s_ga.stream.kind = STREAM_INACTIVE;
+        return s_ga.pdt;
+    }
+
+    UINT16 value = 0;
+    if (st.column < st.width) {
+        value = (UINT16)(read_pixel_color(st.x + st.column, st.y + st.row) & 0xffu);
+    }
+    if (st.column + 1 < st.width) {
+        value |= (UINT16)((read_pixel_color(st.x + st.column + 1, st.y + st.row) & 0xffu) << 8);
+    }
+
+    s_ga.pdt = value;
+    advance_pixel_read_columns(st, 2, input_width);
     return value;
 }
 
@@ -2559,6 +2545,9 @@ static UINT16 read_pixel_read_word(void)
 
     if (s_ga.plane_mode == PLANE_DIRECTCOLOR16) {
         return read_pixel_read_direct16_word();
+    }
+    if (s_ga.plane_mode == PLANE_INDEXED8 && s_ga.pop1 != POP1_SCANLINE_PIXEL_READ) {
+        return read_pixel_read_indexed8_word();
     }
 
     PixelReadState& st = s_ga.stream.pixel;
@@ -2650,7 +2639,6 @@ static void write_pdt_word(UINT16 value)
     s_ga.pdt_read_phase = 0;
 
     if (s_ga.stream.kind == STREAM_IMAGE_RESTORE) {
-        //TRACEOUT(("PDT IMGREST value=%04X plane=%d", value, s_ga.plane_mode));
         consume_image_restore_word(value);
     }
     else if (s_ga.stream.kind == STREAM_PIXEL_READ) {
@@ -2678,18 +2666,6 @@ static void warn_unknown_command(UINT16)
 
 static void execute_pop2(UINT16 opcode)
 {
-    TRACEOUT(("TEXT POP2=%04X src=(%u,%u) dst=(%u,%u) size=(%u,%u) "
-        "FCOL=%04X BCOL=%04X MIX=%02X/%02X MOD=%02X WPM=%04X WBM=%04X RPE=%02X%02X",
-        opcode,
-        s_ga.srcx, s_ga.srcy,
-        s_ga.dstx, s_ga.dsty,
-        (UINT32)s_ga.opd1 + 1,
-        (UINT32)s_ga.opd2 + 1,
-        s_ga.fcol, s_ga.bcol,
-        s_ga.fmix, s_ga.bmix,
-        s_ga.mod1,
-        s_ga.wpm, s_ga.wbm,
-        s_ga.rpe_high, s_ga.rpe));
     if (opcode == OPCODE_SOLID_RECTANGLE || opcode == OPCODE_SOLID_RECTANGLE_SOURCE || opcode == OPCODE_SOLID_RECTANGLE_ALTERNATE) {
         execute_solid_rectangle();
     }
@@ -2697,17 +2673,6 @@ static void execute_pop2(UINT16 opcode)
         execute_rop_solid_rectangle_foreground();
     }
     else if (opcode == OPCODE_ROP_RECTANGLE_FOREGROUND) {
-        //for (UINT32 r = 0; r < 8; r++) {
-        //    char buf[256];
-        //    char* p = buf;
-        //    p += sprintf(p, "PATTERN sampled row %u:", r);
-        //    for (UINT32 c = 0; c < 8; c++) {
-        //        bool bit = rop_pattern_bit((UINT32)s_ga.dstx + c, (UINT32)s_ga.dsty + r);
-        //        p += sprintf(p, " %d", bit ? 1 : 0);
-        //    }
-
-        //    TRACEOUT(("%s", buf));
-        //}
         execute_rop_rectangle_foreground();
     }
     else if (opcode == OPCODE_DSTPHASE_ROP_RECTANGLE_FOREGROUND) {
@@ -2717,32 +2682,13 @@ static void execute_pop2(UINT16 opcode)
         execute_host_color_expand();
     }
     else if (opcode == OPCODE_TILED_RECTANGLE) {
-        TRACEOUT(("TILE50E8 src=(%u,%u) dst=(%u,%u) size=(%u,%u)",
-            s_ga.srcx, s_ga.srcy, s_ga.dstx, s_ga.dsty,
-            (UINT32)s_ga.opd1 + 1, (UINT32)s_ga.opd2 + 1));
-        UINT32 source_x = s_ga.srcx;
-        UINT32 source_y = s_ga.srcy;
-        UINT32 tile_base_x = source_x & ~(TILE_WIDTH - 1);
-
-        for (UINT32 r = 0; r < 8; r++) {
-            char buf[256];
-            char* p = buf;
-            p += sprintf(p, "TILE sampled row %u:", r);
-
-            for (UINT32 c = 0; c < 8; c++) {
-                UINT32 sx = tile_base_x + r * 8 + ((source_x + c) & 7);
-                UINT32 v = read_packed_pixel(sx, source_y) & 0xff;
-                p += sprintf(p, " %02X", v);
-            }
-
-            TRACEOUT(("%s", buf));
-        }
         execute_tiled_rectangle();
     }
     else if (opcode == OPCODE_PATTERN_EXPAND_RECTANGLE) {
         execute_pattern_expand_rectangle(false);
     }
-    else if (opcode == OPCODE_OPAQUE_PATTERN_EXPAND_RECTANGLE) {
+    else if (opcode == OPCODE_OPAQUE_PATTERN_EXPAND_RECTANGLE ||
+             opcode == OPCODE_OPAQUE_PATTERN_EXPAND_RECTANGLE_ALTERNATE) {
         execute_pattern_expand_rectangle(true);
     }
     else if (opcode == OPCODE_PIXEL_READ) {
@@ -2750,6 +2696,9 @@ static void execute_pop2(UINT16 opcode)
     }
     else if ((opcode & ~0x0007) == OPCODE_IMAGE_RESTORE) {
         execute_image_restore((UINT8)(opcode & 7));
+    }
+    else if ((opcode & ~0x0007) == OPCODE_IMAGE_RESTORE_ALTERNATE) {
+        execute_rop_image_restore((UINT8)(opcode & 7));
     }
     else if ((opcode & ~0x0007) == OPCODE_HGA_ROP_IMAGE_RESTORE) {
         execute_rop_image_restore((UINT8)(opcode & 7));
@@ -3013,7 +2962,7 @@ int ga1280a_drawGraphic(void)
     size_t pixels = (size_t)width * (size_t)height;
     if (s_framebuf.size() < pixels) s_framebuf.resize(pixels);
 
-    UINT64 start = (UINT64)display_start() * display_pixels_per_crtc_unit();// +1024 * 16; // DEBUG
+    UINT64 start = (UINT64)display_start() * display_pixels_per_crtc_unit();
     UINT32 pmw = pixel_map_width();
     UINT32 pmh = pixel_map_height();
     UINT64 map_pixels = (UINT64)pmw * (UINT64)pmh;

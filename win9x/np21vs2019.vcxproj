@@ -925,9 +925,7 @@
     <ClCompile Include="..\i386whpx\whpxfunc.c">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'!='ReleaseWHPX|x64'">true</ExcludedFromBuild>
     </ClCompile>
-    <ClCompile Include="..\io\artic.c">
-      <Optimization Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Disabled</Optimization>
-    </ClCompile>
+    <ClCompile Include="..\io\artic.c" />
     <ClCompile Include="..\io\cgrom.c" />
     <ClCompile Include="..\io\cpuio.c" />
     <ClCompile Include="..\io\crtc.c" />

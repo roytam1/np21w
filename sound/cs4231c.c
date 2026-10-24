@@ -33,7 +33,8 @@ static void trace_fmt_ex(const char* fmt, ...)
 
 	int cs4231_bufdelaycounter = 0;
 
-	static int playcountsmp_Ictl = CS4231_BUFREADSMP; // 積分制御で無理やり一定サンプルずつ読むようにする･･･
+	static UINT cs4231_dma_eventframes = CS4231_BUFREADSMP;
+	static UINT32 cs4231_dma_clockfraction = 0;
 	
 // 1サンプルあたりのバイト数（モノラル, ステレオの順）
 static const SINT32 cs4231_playcountshift[16] = {
@@ -107,6 +108,34 @@ static const UINT8 cs4231cnt64[8] = {
 				2560/64};	//  9600/ 6620
 
 //    640:441
+
+static UINT cs4231_dma_nextframes(void) {
+	UINT framebytes;
+	UINT32 playbytes;
+	UINT32 remain;
+
+	framebytes = (UINT)cs4231_playcountshift[cs4231.reg.datafmt >> 4];
+	playbytes = ((((UINT32)cs4231.reg.playcount[0] << 8) |
+					(UINT32)cs4231.reg.playcount[1]) + 1) * framebytes;
+	remain = (cs4231.totalsample >= 0 && (UINT32)cs4231.totalsample < playbytes) ?
+			playbytes - (UINT32)cs4231.totalsample : playbytes;
+	return min((UINT)CS4231_BUFREADSMP,
+				(UINT)((remain + framebytes - 1) / framebytes));
+}
+
+static SINT32 cs4231_dma_frameclock(UINT frames) {
+	UINT32 xtal;
+	UINT32 divisor;
+	UINT64 clocks;
+	SINT32 interval;
+
+	xtal = cs4231xtal64[cs4231.reg.datafmt & 1];
+	divisor = cs4231cnt64[(cs4231.reg.datafmt >> 1) & 7];
+	clocks = (UINT64)pccore.realclock * frames * divisor + cs4231_dma_clockfraction;
+	interval = (SINT32)(clocks / xtal);
+	cs4231_dma_clockfraction = (UINT32)(clocks % xtal);
+	return max(interval, 1);
+}
 
 #if defined(SUPPORT_MULTITHREAD)
 static int cs4231_cs_initialized = 0;
@@ -198,6 +227,8 @@ void cs4231_dma(NEVENTITEM item) {
 					rem = min(cs4231.bufsize - 4 - cs4231.bufdatas, CS4231_MAXDMAREADBYTES);
 					pos = cs4231.bufwpos & CS4231_BUFMASK;
 					size = min(rem, (UINT)dmach->startcount + 1);
+					size = min(size, cs4231_dma_eventframes *
+						(UINT)cs4231_playcountshift[cs4231.reg.datafmt >> 4]);
 					r = dmac_getdata_(dmach, cs4231.buffer, pos, size);
 					cs4231.bufwpos = (cs4231.bufwpos + r) & CS4231_BUFMASK;
 					cs4231.bufdatas += r;
@@ -207,7 +238,8 @@ void cs4231_dma(NEVENTITEM item) {
 #endif
 			}
 			else if (capture_dma) {
-				size = min((UINT)dmach->startcount + 1, (UINT)CS4231_MAXDMAREADBYTES);
+				size = min((UINT)dmach->startcount + 1,
+					CS4231_BUFREADSMP * cs4231_playcountshift[cs4231.reg.cap_datafmt >> 4]);
 				r = dmac_putcapture_(dmach, size);
 			}
 
@@ -215,12 +247,15 @@ void cs4231_dma(NEVENTITEM item) {
 			if (cs4231cfg.rate &&
 				!(dmac.mask & (1 << cs4231.dmach)) && dmach->ready &&
 				(playback_dma || capture_dma)) {
-				playcountsmp_Ictl += ((CS4231_BUFREADSMP - (int)r) / cs4231_playcountshift[cs4231.reg.datafmt >> 4])/2;
-				if(playcountsmp_Ictl < 1)
-					playcountsmp_Ictl = 1;
-				if(playcountsmp_Ictl > CS4231_MAXDMAREADBYTES)
-					playcountsmp_Ictl = CS4231_MAXDMAREADBYTES;
-				nevent_set(NEVENT_CS4231, pccore.realclock / cs4231cfg.rate * playcountsmp_Ictl, cs4231_dma, NEVENT_RELATIVE);
+				if (playback_dma) {
+					cs4231_dma_eventframes = cs4231_dma_nextframes();
+					nevent_set(NEVENT_CS4231, cs4231_dma_frameclock(cs4231_dma_eventframes),
+						cs4231_dma, NEVENT_RELATIVE);
+				}
+				else {
+					nevent_set(NEVENT_CS4231, cs4231_dma_frameclock(CS4231_BUFREADSMP),
+						cs4231_dma, NEVENT_RELATIVE);
+				}
 			}
 		}
 	}
@@ -318,9 +353,10 @@ REG8 DMACCALL cs4231dmafunc(REG8 func) {
 				cs4231cs_leave_criticalsection();
 #endif
 				// DMA読み取り処理開始(NEVENTセット)
-				playcountsmp_Ictl = CS4231_BUFREADSMP;
-				cnt = (pccore.realclock / cs4231cfg.rate * playcountsmp_Ictl) / 2;
-				if (cnt < 1) cnt = 1;
+				cs4231_dma_clockfraction = 0;
+				cs4231_dma_eventframes = ((cs4231.reg.iface & (PEN | PPIO)) == PEN) ?
+					cs4231_dma_nextframes() : CS4231_BUFREADSMP;
+				cnt = cs4231_dma_frameclock(cs4231_dma_eventframes);
 				nevent_set(NEVENT_CS4231, cnt, cs4231_dma, NEVENT_ABSOLUTE);
 			}
 			break;
@@ -477,7 +513,7 @@ UINT dmac_getdata_(DMACH dmach, UINT8 *buf, UINT offset, UINT size) {
 		remain = (UINT)dmach->leng.w + 1;
 		leng = min(remain, size);
 		if (leng) {
-			int playcount = ((cs4231.reg.playcount[1]|(cs4231.reg.playcount[0] << 8))) * cs4231_playcountshift[cs4231.reg.datafmt >> 4]+4; // PI割り込みを発生させるサンプル数(Playback Base register) * サンプルあたりのバイト数
+			int playcount = ((cs4231.reg.playcount[1]|(cs4231.reg.playcount[0] << 8)) + 1) * cs4231_playcountshift[cs4231.reg.datafmt >> 4]; // PI割り込みを発生させるサンプル数(Playback Base register + 1) * サンプルあたりのバイト数
 			if(cs4231.totalsample + (SINT32)leng > playcount){
 				// DMA再生サンプル数カウンタ(Playback DMA count register)がPI割り込みを発生させるサンプル数(Playback Base register)を超えないように調整
 				leng = playcount - cs4231.totalsample;

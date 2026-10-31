@@ -80,6 +80,9 @@ void npdisp_dd_vsync(void);
 #endif
 #if defined(CPUCORE_IA32)
 #include	"ia32/cpu.h"
+#if defined(SUPPORT_MOVSP_IRQ_DELAY)
+#include	"ia32/inst_table.h"
+#endif
 #include	"ia32/instructions/fpu/fp.h"
 #else
 #define	CPU_VENDOR		"GenuineIntel"
@@ -220,7 +223,10 @@ const OEMCHAR np2version[] = OEMTEXT(NP2VER_CORE);
 #endif
 				100,
 				TEXT(""),
-				0, 1
+				0, 1,
+#if defined(SUPPORT_MOVSP_IRQ_DELAY)
+				0
+#endif
 	};
 
 	PCCORE	pccore = {	PCBASECLOCK25, PCBASEMULTIPLE,
@@ -483,6 +489,11 @@ void pccore_init(void) {
 #endif
 
 	CPU_INITIALIZE();
+#if defined(SUPPORT_MOVSP_IRQ_DELAY)
+#if defined(CPUCORE_IA32)
+	insttable_set_movsp_irq_delay(np2cfg.movspirqdelay);
+#endif
+#endif
 	
 	pic_initialize();
 
@@ -1147,12 +1158,79 @@ static void drawscreen(void) {
 	}
 }
 
+#ifndef GDC_VSYNC_IRQ_ON_FALL
+#define GDC_VSYNC_IRQ_ON_FALL 0
+#endif
+
+static void gdc_raise_vsync_irq(void) {
+	if (gdc.vsyncint) {
+		gdc.vsyncint = 0;
+		pic_setirq(2);
+	}
+}
+
+//   screenvsync             screendisp
+//       ↓                       ↓   
+// |||||||__VFP___         ___VBP___|||||||||･･･
+//                |_VSync_|
+//               ↑　　   ↑               
+//   screenvsyncrise     screenvsyncfall     
+
+void screenvsync(NEVENTITEM item) {
+
+	UINT32 vfp, vsync, vbp;
+
+	MEMWAIT_TRAM = np2cfg.wait[1];
+	MEMWAIT_VRAM = np2cfg.wait[3];
+	MEMWAIT_GRCG = np2cfg.wait[5];
+	gdc.vblank = 0x20;
+#if defined(SUPPORT_WAB_NPDISP)
+	npdisp_dd_vsync();
+#endif
+	gdc_getvsyncclocks(&vfp, &vsync, &vbp);
+	nevent_set(NEVENT_FLAMES, vfp, screenvsyncrise, NEVENT_RELATIVE);
+
+	// drawscreenで pccore.vsyncclockが変更される可能性があります
+	if (np2cfg.DISPSYNC) {
+		drawscreen();
+	}
+	(void)item;
+}
+
+void screenvsyncrise(NEVENTITEM item) {
+
+	UINT32 vfp, vsync, vbp;
+
+	gdc.vsync = 0x20;
+#if !GDC_VSYNC_IRQ_ON_FALL
+	gdc_raise_vsync_irq();
+#endif
+	gdc_getvsyncclocks(&vfp, &vsync, &vbp);
+	nevent_set(NEVENT_FLAMES, vsync, screenvsyncfall, NEVENT_RELATIVE);
+	(void)item;
+}
+
+void screenvsyncfall(NEVENTITEM item) {
+
+	UINT32 vfp, vsync, vbp;
+
+	gdc_work(GDCWORK_MASTER);
+	gdc.vsync = 0;
+#if GDC_VSYNC_IRQ_ON_FALL
+	gdc_raise_vsync_irq();
+#endif
+	gdc_getvsyncclocks(&vfp, &vsync, &vbp);
+	nevent_set(NEVENT_FLAMES, vbp, screendisp, NEVENT_RELATIVE);
+	(void)item;
+}
+
 void screendisp(NEVENTITEM item) {
 
 	PICITEM		pi;
 
 	gdc_work(GDCWORK_SLAVE);
 	gdc.vsync = 0;
+	gdc.vblank = 0;
 	pcstat.screendispflag = 0;
 #if !defined(SUPPORT_IA32_HAXM) && !defined(SUPPORT_IA32_WHPX)
 	if (!np2cfg.DISPSYNC) {
@@ -1163,29 +1241,6 @@ void screendisp(NEVENTITEM item) {
 	if (pi->irr & PIC_CRTV) {
 		pi->irr &= ~PIC_CRTV;
 		gdc.vsyncint = 1;
-	}
-	(void)item;
-}
-
-void screenvsync(NEVENTITEM item) {
-
-	MEMWAIT_TRAM = np2cfg.wait[1];
-	MEMWAIT_VRAM = np2cfg.wait[3];
-	MEMWAIT_GRCG = np2cfg.wait[5];
-	gdc_work(GDCWORK_MASTER);
-	gdc.vsync = 0x20;
-#if defined(SUPPORT_WAB_NPDISP)
-	npdisp_dd_vsync();
-#endif
-	if (gdc.vsyncint) {
-		gdc.vsyncint = 0;
-		pic_setirq(2);
-	}
-	nevent_set(NEVENT_FLAMES, gdc.vsyncclock, screendisp, NEVENT_RELATIVE);
-
-	// drawscreenで pccore.vsyncclockが変更される可能性があります
-	if (np2cfg.DISPSYNC) {
-		drawscreen();
 	}
 	(void)item;
 }
@@ -1421,6 +1476,7 @@ void pccore_exec(BOOL draw) {
 #endif
 
 	gdc.vsync = 0;
+	gdc.vblank = 0;
 	pcstat.screendispflag = 1;
 	MEMWAIT_TRAM = np2cfg.wait[0];
 	MEMWAIT_VRAM = np2cfg.wait[2];

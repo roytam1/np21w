@@ -718,6 +718,9 @@ static const PFTBL s_IniItems[] =
 	PFVAL("ANLG_JOY", PFTYPE_BOOL,		&np2cfg.analogjoy),
 #endif
 	PFVAL("USEMOVCS", PFRO_BOOL,		&np2cfg.allowMOVCS),
+#if defined(SUPPORT_MOVSP_IRQ_DELAY)
+	PFVAL("MOVSPIDLY", PFRO_BOOL,		&np2cfg.movspirqdelay),
+#endif
 	PFVAL("USETHOOK", PFRO_BOOL,		&np2cfg.usetexthook),
 	PFVAL("RASCSI92", PFRO_BOOL,		&np2cfg.rascsi92),
 	PFVAL("NBEEPOFS", PFTYPE_BOOL,		&np2cfg.nbeepofs),

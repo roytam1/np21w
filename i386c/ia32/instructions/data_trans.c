@@ -353,6 +353,90 @@ void MOV_EBPId(void) { CPU_WORKCLOCK(2); GET_PCDWORD(CPU_EBP); }
 void MOV_ESIId(void) { CPU_WORKCLOCK(2); GET_PCDWORD(CPU_ESI); }
 void MOV_EDIId(void) { CPU_WORKCLOCK(2); GET_PCDWORD(CPU_EDI); }
 
+#if defined(SUPPORT_MOVSP_IRQ_DELAY)
+/* Optional one-instruction interrupt delay after a 16-bit MOV SP. */
+void
+MOV_EwGw_irqdelay(void)
+{
+	UINT32 op, src, madr;
+
+	PREPART_EA_REG16(op, src);
+	if (op >= 0xc0) {
+		CPU_WORKCLOCK(2);
+		*(CPU_REG16_B20(op)) = (UINT16)src;
+		if ((op & 7) == 4) {
+			if (CPU_REMCLOCK <= 0) CPU_REMCLOCK = 1;
+		}
+	} else {
+		CPU_WORKCLOCK(3);
+		madr = calc_ea_dst(op);
+		cpu_vmemorywrite_w(CPU_INST_SEGREG_INDEX, madr, (UINT16)src);
+	}
+}
+
+void
+MOV_GwEw_irqdelay(void)
+{
+	UINT16 *out;
+	UINT32 op, src;
+
+	PREPART_REG16_EA(op, src, out, 2, 5);
+	*out = (UINT16)src;
+	if ((op & 0x38) == 0x20) {
+		if (CPU_REMCLOCK <= 0) CPU_REMCLOCK = 1;
+	}
+}
+
+void
+MOV_EwSw_irqdelay(void)
+{
+	UINT32 op, src, madr;
+	UINT8 idx;
+
+	GET_MODRM_PCBYTE(op);
+	idx = (UINT8)((op >> 3) & 7);
+	if (idx < CPU_SEGREG_NUM) {
+		src = CPU_REGS_SREG(idx);
+		if (op >= 0xc0) {
+			CPU_WORKCLOCK(2);
+			*(CPU_REG16_B20(op)) = (UINT16)src;
+			if ((op & 7) == 4) {
+				if (CPU_REMCLOCK <= 0) CPU_REMCLOCK = 1;
+			}
+		} else {
+			CPU_WORKCLOCK(3);
+			madr = calc_ea_dst(op);
+			cpu_vmemorywrite_w(CPU_INST_SEGREG_INDEX, madr, (UINT16)src);
+		}
+		return;
+	}
+	EXCEPTION(UD_EXCEPTION, 0);
+}
+
+void
+MOV_EwIw_irqdelay(void)
+{
+	UINT32 op, src, res, madr;
+
+	PREPART_EA_REG16(op, src);
+	if (op >= 0xc0) {
+		CPU_WORKCLOCK(2);
+		GET_PCWORD(res);
+		*(CPU_REG16_B20(op)) = (UINT16)res;
+		if ((op & 7) == 4) {
+			if (CPU_REMCLOCK <= 0) CPU_REMCLOCK = 1;
+		}
+	} else {
+		CPU_WORKCLOCK(7);
+		madr = calc_ea_dst(op);
+		GET_PCWORD(res);
+		cpu_vmemorywrite_w(CPU_INST_SEGREG_INDEX, madr, (UINT16)res);
+	}
+}
+
+void MOV_SPIw_irqdelay(void) { CPU_WORKCLOCK(2); GET_PCWORD(CPU_SP); if (CPU_REMCLOCK <= 0) CPU_REMCLOCK = 1; }
+#endif
+
 /*
  * CMOVcc
  */

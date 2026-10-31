@@ -1521,7 +1521,7 @@ static bool npdisp_ddraw_calcSurfaceAllocation(UINT32 width, UINT32 height, UINT
 
 static bool npdisp_ddraw_getRasterState(UINT32* scanLine, bool* inVBlank)
 {
-	const bool vblank = (gdc.vsync & 0x20) != 0;
+	const bool vblank = (gdc.vblank & 0x20) != 0;
 	SINT32 remain;
 	UINT32 elapsed;
 	UINT32 line;
@@ -4000,7 +4000,7 @@ static UINT32 npdisp_func_DD_Flip(UINT32 lpDataAddr, bool flatAddress)
 
 	npdisp.mm_ddPendingFlipOffset = targetView.apertureOffset;
 	npdisp.mm_ddFlipPending = 1;
-	if (gdc.vsync & 0x20) {
+	if (gdc.vblank & 0x20) {
 		// A request issued after VBlank has already begun can safely take effect
 		// in the current blanking interval instead of waiting one extra frame.
 		npdisp_ddraw_commitPendingFlip();

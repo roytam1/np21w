@@ -62,11 +62,9 @@ static UINT8 rasterdraw(SDRAWFN sdrawfn, SDRAW sdraw, int maxy) {
 
 	//TRACEOUT(("rasterdraw: maxy = %d", maxy));
 	CopyMemory(pal, palevent.pal, sizeof(pal));
-	clk = maxy;
-	clk += 2;
+	clk = maxy - 2;
 	clk += np2cfg.realpal;
 	clk -= 32;
-	clk += (gdc.m.para[GDC_SYNC + 5] >> 2) & 0x3f;
 	clk *= gdc.rasterclock;
 	event = palevent.event;
 	eventterm = event + palevent.events;

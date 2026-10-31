@@ -68,6 +68,16 @@ static int nvidia_fixflag = 0;
 static int devicelostflag = 0;
 static int req_enter_criticalsection = 0;
 
+static void d3d_disable_swap_effect_upgrade(void) {
+	HMODULE hModule = GetModuleHandle(_T("d3d9.dll"));
+	if (hModule) {
+		FARPROC proc = GetProcAddress(hModule, MAKEINTRESOURCEA(18));
+		if (proc) {
+			((void (WINAPI*)(int))proc)(0);
+		}
+	}
+}
+
 extern bool scrnmng_create_pending; // グラフィックレンダラ生成保留中
 extern bool scrnmng_restore_pending;
 
@@ -560,6 +570,7 @@ void scrnmngD3D_restoresurfaces() {
 				d3d_leave_criticalsection();
 				scrnmngD3D_updatefsres();
 				scrndraw_updateallline();
+				pcstat.screenupdate |= 1;
 			}else{
 				devicelostflag = 3;
 			}
@@ -628,6 +639,7 @@ void scrnmngD3D_restoresurfaces() {
 			d3d_leave_criticalsection();
 			scrnmngD3D_updatefsres();
 			scrndraw_updateallline();
+			pcstat.screenupdate |= 1;
 		}else{
 			devicelostflag = 2;
 			d3d_leave_criticalsection();
@@ -804,6 +816,9 @@ BRESULT scrnmngD3D_create(UINT8 scrnmode) {
 	int				bufwidth, bufheight;
 	int				k = 0;
 
+	if ((scrnmode & SCRNMODE_FULLSCREEN) && np2oscfg.d3d_exclusive) {
+		d3d_disable_swap_effect_upgrade();
+	}
 	//np2oscfg.d3d_exclusive = 0;// 排他モードは廃止
 
 	if(devicelostflag) return(FAILURE);

@@ -27,7 +27,7 @@ typedef struct {
 	UINT8		display;
 	UINT8		bitac;
 	UINT8		ff2;
-	UINT8		reserved;
+	UINT8		vblank;
 	int			analog;
 	int			palnum;
 	UINT8		degpal[4];
@@ -99,6 +99,7 @@ void gdc_setdegitalpal(int color, REG8 value);
 void gdc_setdegpalpack(int color, REG8 value);
 void gdc_setanalogpal(int color, int rgb, REG8 value);
 void gdc_setanalogpalall(const UINT16 *paltbl);
+void gdc_getvsyncclocks(UINT32 *vfp, UINT32 *vsync, UINT32 *vbp);
 
 #if defined(SUPPORT_PC9821)
 void gdc_analogext(BOOL extend);

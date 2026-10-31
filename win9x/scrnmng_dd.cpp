@@ -517,6 +517,7 @@ void scrnmngDD_restoresurfaces() {
 	}
 #endif
 	scrndraw_updateallline();
+	pcstat.screenupdate |= 1;
 	dd_leave_criticalsection();
 }
 

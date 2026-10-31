@@ -369,6 +369,9 @@ struct tagNP2Config
 
 	UINT8	slowmous; // 4ビット切り捨ての低速マウスを使う
 	UINT8	gdcwovrg; // 98標準グラフィックで画面幅80桁超えを認める
+#if defined(SUPPORT_MOVSP_IRQ_DELAY)
+	UINT8	movspirqdelay; // MOV SP命令直後の割り込みを抑制する
+#endif
 };
 typedef struct tagNP2Config  NP2CFG;		/*!< The define of config */
 
@@ -445,6 +448,8 @@ extern	ASYNCCPUSTAT	pccore_asynccpustat;
 void getbiospath(OEMCHAR *path, const OEMCHAR *fname, int maxlen);
 void screendisp(NEVENTITEM item);
 void screenvsync(NEVENTITEM item);
+void screenvsyncrise(NEVENTITEM item);
+void screenvsyncfall(NEVENTITEM item);
 
 
 void pccore_cfgupdate(void);

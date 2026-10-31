@@ -162,6 +162,7 @@ typedef	signed __int64		SINT64;
 #define	CPUCORE_IA32
 #define	IA32_PAGING_EACHSIZE
 #define	IA32_REBOOT_ON_PANIC
+#define	SUPPORT_MOVSP_IRQ_DELAY
 #define	SUPPORT_CRT31KHZ
 #define	SUPPORT_PC9801_119
 #endif

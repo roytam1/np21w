@@ -353,7 +353,7 @@ BOOL ScrOptTimingPage::OnInitDialog()
 
 	m_raster.SubclassDlgItem(IDC_REALPAL, this);
 	m_raster.SetStaticId(IDC_REALPALSTR);
-	m_raster.SetRange(-32, 32);
+	m_raster.SetRange(-32, 32, TRUE);
 	m_raster.SetPos(np2cfg.realpal - 32);
 
 	return TRUE;

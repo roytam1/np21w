@@ -210,8 +210,11 @@ CMNVRAM* DD2Surface::Lock()
 	HRESULT r = m_pBackSurface->Lock(NULL, &surface, DDLOCK_WAIT, NULL);
 	if (r == DDERR_SURFACELOST)
 	{
-		m_pBackSurface->Restore();
-		r = m_pBackSurface->Lock(NULL, &surface, DDLOCK_WAIT, NULL);
+		if (m_pBackSurface->Restore() == DD_OK)
+		{
+			::InvalidateRect(m_hWnd, NULL, FALSE);
+			r = m_pBackSurface->Lock(NULL, &surface, DDLOCK_WAIT, NULL);
+		}
 	}
 	if (r != DD_OK)
 	{
@@ -260,8 +263,11 @@ void DD2Surface::Blt(const POINT* pt, const RECT* lpRect)
 		scrn.bottom = clipt.y + lpRect->bottom - lpRect->top;
 		if (m_pPrimarySurface->Blt(&scrn, m_pBackSurface, const_cast<LPRECT>(lpRect), DDBLT_WAIT, NULL) == DDERR_SURFACELOST)
 		{
-			m_pBackSurface->Restore();
-			m_pPrimarySurface->Restore();
+			HRESULT r = m_pBackSurface->Restore();
+			if (m_pPrimarySurface->Restore() == DD_OK && r == DD_OK)
+			{
+				::InvalidateRect(m_hWnd, NULL, FALSE);
+			}
 		}
 	}
 }
@@ -293,8 +299,11 @@ void DD2Surface::Blt(const POINT* pt, const RECT* lpDstRect, const RECT* lpSrcRe
 		scrn.bottom = scrn.top + lpDstRect->bottom - lpDstRect->top;
 		if (m_pPrimarySurface->Blt(&scrn, m_pBackSurface, const_cast<LPRECT>(lpSrcRect), DDBLT_WAIT, NULL) == DDERR_SURFACELOST)
 		{
-			m_pBackSurface->Restore();
-			m_pPrimarySurface->Restore();
+			HRESULT r = m_pBackSurface->Restore();
+			if (m_pPrimarySurface->Restore() == DD_OK && r == DD_OK)
+			{
+				::InvalidateRect(m_hWnd, NULL, FALSE);
+			}
 		}
 	}
 }

@@ -76,6 +76,14 @@ void MOV_EBPId(void);
 void MOV_ESIId(void);
 void MOV_EDIId(void);
 
+#if defined(SUPPORT_MOVSP_IRQ_DELAY)
+void MOV_EwGw_irqdelay(void);
+void MOV_GwEw_irqdelay(void);
+void MOV_EwSw_irqdelay(void);
+void MOV_EwIw_irqdelay(void);
+void MOV_SPIw_irqdelay(void);
+#endif
+
 /*
  * CMOVcc
  */

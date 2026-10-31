@@ -102,7 +102,7 @@ void gdc_setanalogpal(int color, int rgb, REG8 value) {
 	if (((*ptr) ^ value) & 0x0f) {
 		gdcs.palchange = GDCSCRN_REDRAW;
 		if (palevent.events < PALEVENTMAX) {
-			if (!gdc.vsync) {
+			if (!gdc.vblank) {
 				event = palevent.event + palevent.events;
 				event->clock = g_nevent.item[NEVENT_FLAMES].clock -
 											(CPU_BASECLOCK - CPU_REMCLOCK);
@@ -452,6 +452,48 @@ const GDCCLK	*clk;
 	timing_setrate(y, hclock);
 }
 
+void gdc_getvsyncclocks(UINT32 *vfp, UINT32 *vsync, UINT32 *vbp) {
+
+	UINT32	fp;
+	UINT32	vs;
+	UINT32	bp;
+	UINT32	total;
+	UINT32	endfp;
+	UINT32	endvs;
+
+	fp = gdc.m.para[GDC_SYNC + 5] & 0x3f;
+	vs = (LOADINTELWORD(gdc.m.para + GDC_SYNC + 2) >> 5) & 0x1f;
+	bp = LOADINTELWORD(gdc.m.para + GDC_SYNC + 6) >> 10;
+	total = fp + vs + bp;
+	if (!total) {
+		*vfp = 0;
+		*vsync = gdc.vsyncclock;
+		*vbp = 0;
+		return;
+	}
+	endfp = (UINT32)(((UINT64)gdc.vsyncclock * fp) / total);
+	endvs = (UINT32)(((UINT64)gdc.vsyncclock * (fp + vs)) / total);
+	*vfp = endfp;
+	*vsync = endvs - endfp;
+	*vbp = gdc.vsyncclock - endvs;
+}
+
+static REG8 gdc_getvsyncstatus(void) {
+
+	REG8 ret = gdc.vsync;
+#ifdef TURE_SYNC
+	if (g_nevent.item[NEVENT_FLAMES].clock < (CPU_BASECLOCK - CPU_REMCLOCK)) {
+		if (g_nevent.item[NEVENT_FLAMES].proc == screenvsyncrise) {
+			ret = 0x20;
+		}
+		else if (g_nevent.item[NEVENT_FLAMES].proc == screenvsyncfall) {
+			ret = 0;
+		}
+	}
+#endif
+	return ret;
+}
+
 void gdc_restorekacmode(void) {
 
 	UINT8	bit;
@@ -637,7 +679,7 @@ static REG8 IOINPCALL gdc_i60(UINT port) {
 	REG8	ret;
 	SINT32	remain;
 
-	ret = 0x80 | gdc.vsync;		// | m_drawing;
+	ret = 0x80 | gdc_getvsyncstatus();		// | m_drawing;
 	remain = nevent_getremain(NEVENT_FLAMES);
 	if (remain >= 0) {
 		if ((remain % gdc.rasterclock) < gdc.hsyncclock) {
@@ -672,21 +714,16 @@ static REG8 IOINPCALL gdc_i60(UINT port) {
 		if ((memv == 0x20a8) || (memv == 0x2024)) {
 			memv = MEML_READ16(addr + 2);
 			if (memv == jadr) {					// je
-				if (!gdc.vsync) {
+				if (!(ret & 0x20)) {
 					CPU_REMCLOCK = -1;
 				}
 			}
 			else if (memv == (jadr + 1)) {		// jne
-				if (gdc.vsync) {
+				if (ret & 0x20) {
 					CPU_REMCLOCK = -1;
 				}
 			}
 		}
-	}
-#endif
-#ifdef TURE_SYNC				// クロックイベントの誤差修正
-	if (g_nevent.item[NEVENT_FLAMES].clock < (CPU_BASECLOCK - CPU_REMCLOCK)) {
-		ret ^= 0x20;
 	}
 #endif
 	(void)port;
@@ -766,7 +803,7 @@ static REG8 IOINPCALL gdc_ia0(UINT port) {
 	REG8	ret;
 	SINT32	remain;
 
-	ret = 0x80 | gdc.vsync | gdc.s_drawing;
+	ret = 0x80 | gdc_getvsyncstatus() | gdc.s_drawing;
 	remain = nevent_getremain(NEVENT_FLAMES);
 	if (remain >= 0) {
 		if ((remain % gdc.rasterclock) < (gdc.hsyncclock)) {
@@ -801,21 +838,16 @@ static REG8 IOINPCALL gdc_ia0(UINT port) {
 		if ((memv == 0x20a8) || (memv == 0x2024)) {
 			memv = MEML_READ16(addr + 2);
 			if (memv == jadr) {					// je
-				if (!gdc.vsync) {
+				if (!(ret & 0x20)) {
 					CPU_REMCLOCK = -1;
 				}
 			}
 			else if (memv == (jadr + 1)) {		// jne
-				if (gdc.vsync) {
+				if (ret & 0x20) {
 					CPU_REMCLOCK = -1;
 				}
 			}
 		}
-	}
-#endif
-#ifdef TURE_SYNC				// クロックイベントの誤差修正
-	if (g_nevent.item[NEVENT_FLAMES].clock < (CPU_BASECLOCK - CPU_REMCLOCK)) {
-		ret ^= 0x20;
 	}
 #endif
 	(void)port;

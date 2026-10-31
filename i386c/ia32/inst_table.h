@@ -49,6 +49,10 @@ extern void (*insttable_3byte660F3A_32[256])(void);
 extern void (*insttable_3byteF20F38_32[256])(void);
 extern void (*insttable_3byteF20F38_16[256])(void);
 
+#if defined(SUPPORT_MOVSP_IRQ_DELAY)
+void insttable_set_movsp_irq_delay(UINT8 enable);
+#endif
+
 /*
  * for group
  */

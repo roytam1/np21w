@@ -4380,6 +4380,18 @@ void (*insttable_3byteF20F38_16[256])(void) = {
 };
 
 
+#if defined(SUPPORT_MOVSP_IRQ_DELAY)
+void
+insttable_set_movsp_irq_delay(UINT8 enable)
+{
+	insttable_1byte[0][0x89] = enable ? MOV_EwGw_irqdelay : MOV_EwGw;
+	insttable_1byte[0][0x8b] = enable ? MOV_GwEw_irqdelay : MOV_GwEw;
+	insttable_1byte[0][0x8c] = enable ? MOV_EwSw_irqdelay : MOV_EwSw;
+	insttable_1byte[0][0xc7] = enable ? MOV_EwIw_irqdelay : MOV_EwIw;
+	insttable_1byte[0][0xbc] = enable ? MOV_SPIw_irqdelay : MOV_SPIw;
+}
+#endif
+
 
 /*
  * for group

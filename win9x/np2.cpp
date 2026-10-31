@@ -255,6 +255,10 @@ static  UINT		lateframecount; // フレーム遅れ数
 static  int			mousecapturemode = 0;
 static  int			screenChanging = 0;
 
+#if defined(SUPPORT_SCRN_DIRECT3D)
+static UINT wmD3DMenuRecalc = 0;
+#endif
+
 static void np2_SetUserPause(UINT8 pause){
 	if(np2userpause && !pause){
 		CSoundMng::GetInstance()->Enable(SNDPROC_USER);
@@ -2352,6 +2356,24 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 	static int lastmx = -1;
 	static int lastmy = -1;
 	static int lastbtn = -1;
+
+#if defined(SUPPORT_SCRN_DIRECT3D)
+	if (wmD3DMenuRecalc && msg == wmD3DMenuRecalc) {
+		if (hWnd == g_hWndMain && !screenChanging && scrnmng_isfullscreen() &&
+			scrnmng_current_drawtype == DRAWTYPE_DIRECT3D && np2oscfg.d3d_exclusive && GetMenu(hWnd)) {
+			RECT wr;
+			POINT origin = {0};
+			if (GetWindowRect(hWnd, &wr) && ClientToScreen(hWnd, &origin) && origin.y == wr.top) {
+				SetWindowPos(hWnd, NULL, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+			}
+		}
+		return 0;
+	}
+	if (wmD3DMenuRecalc && msg == WM_ACTIVATEAPP && wParam && hWnd == g_hWndMain && !screenChanging && scrnmng_isfullscreen() &&
+		scrnmng_current_drawtype == DRAWTYPE_DIRECT3D && np2oscfg.d3d_exclusive && GetMenu(hWnd)) {
+		PostMessage(hWnd, wmD3DMenuRecalc, 0, 0);
+	}
+#endif
 
 	switch (msg) {
 		//	イメージファイルのＤ＆Ｄに対応(Kai1)
@@ -4513,6 +4535,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInst,
 	
 	winx = np2oscfg.winx;
 	winy = np2oscfg.winy;
+#if defined(SUPPORT_SCRN_DIRECT3D)
+	wmD3DMenuRecalc = RegisterWindowMessage(_T("NP21W_D3D_MENU_RECALC"));
+#endif
 	hWnd = CreateWindowEx(0, szClassName, np2oscfg.titles, style,
 						winx, winy, 640, 400,
 						NULL, NULL, hInstance, NULL);

@@ -9,6 +9,8 @@ static const NP2FHDR np2flagdef = {
 static const PROCTBL evtproc[] = {
 			{PROCID('e','s','c','0'), screendisp},
 			{PROCID('e','s','c','1'), screenvsync},
+			{PROCID('e','s','c','2'), screenvsyncrise},
+			{PROCID('e','s','c','3'), screenvsyncfall},
 			{PROCID('e','p','i','t'), systimer},
 			{PROCID('e','b','e','p'), beeponeshot},
 			{PROCID('e','r','s','1'), rs232ctimer},
